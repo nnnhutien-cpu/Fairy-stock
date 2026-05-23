@@ -1,20 +1,21 @@
+# FORCE UPDATE YFINANCE - XÓA BỎ BỘ NHỚ ĐỆM CŨ (VERSION 2.0)
 import os
 import json
 import time
-from datetime import datetime, timedelta
-import gspread
 import pandas as pd
+import gspread
 import yfinance as yf
 from google.oauth2.service_account import Credentials
 
-# 1. KẾT NỐI GOOGLE SHEETS
+# 1. KẾT NỐI GOOGLE SHEETS BẰNG CHÌA KHÓA
 creds_json = os.environ.get('GCP_CREDENTIALS')
+if not creds_json:
+    raise ValueError("LỖI CHÍ MẠNG: Không tìm thấy chìa khóa GCP_CREDENTIALS. Hãy kiểm tra lại Settings > Secrets!")
+
 creds_dict = json.loads(creds_json)
 scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 client = gspread.authorize(creds)
-
-# Kết nối thẳng tới file Google Sheet của bạn
 sheet = client.open('Chứng khoán').sheet1
 
 # 2. XỬ LÝ DỮ LIỆU BẰNG YFINANCE
@@ -24,11 +25,7 @@ data_rows = []
 
 for sym in symbols:
     try:
-        # Thêm hậu tố .VN cho mã chứng khoán Việt Nam trên Yahoo Finance
-        yf_sym = f"{sym}.VN"
-        ticker = yf.Ticker(yf_sym)
-        
-        # Lấy lịch sử 2 tháng để đảm bảo tính đủ số phiên
+        ticker = yf.Ticker(f"{sym}.VN")
         df_hist = ticker.history(period="2mo")
         if df_hist.empty or len(df_hist) < 20: 
             continue
@@ -38,47 +35,31 @@ for sym in symbols:
         close_kvnd = close_price_vnd / 1000
         avg_vol_20 = df_hist['Volume'].mean()
         
-        # Tính GTGD và Lọc > 20 Tỷ
         gtgd = (close_price_vnd * avg_vol_20) / 1000000000
         if gtgd <= 20: 
             continue
 
-        # Lấy thông tin cơ bản an toàn (tránh lỗi nếu Yahoo thiếu thông tin mã đó)
         try:
             info = ticker.info
             market_cap_raw = info.get('marketCap', 0)
             market_cap = (market_cap_raw / 1000000000) if market_cap_raw else "N/A"
             pe = info.get('trailingPE', "N/A")
         except Exception:
-            market_cap = "N/A"
-            pe = "N/A"
+            market_cap, pe = "N/A", "N/A"
         
-        # Tính toán xu hướng dựa trên đường MA20
         ma20 = df_hist['Close'].mean()
         trend = "KHẢ QUAN" if close_price_vnd > ma20 else "TRUNG TÍNH"
         tech_score = 5 if close_price_vnd > ma20 else 2
             
-        data_rows.append([
-            sym, 
-            round(close_kvnd, 2), 
-            int(avg_vol_20), 
-            tech_score, 
-            trend,
-            round(market_cap, 0) if isinstance(market_cap, (int, float)) else market_cap,
-            round(pe, 1) if isinstance(pe, (int, float)) else pe, 
-            round(gtgd, 1)
-        ])
-        time.sleep(0.5) # Tránh bị Yahoo chặn IP khi gửi yêu cầu liên tục
+        data_rows.append([sym, round(close_kvnd, 2), int(avg_vol_20), tech_score, trend, round(market_cap, 0) if isinstance(market_cap, float) else market_cap, round(pe, 1) if isinstance(pe, float) else pe, round(gtgd, 1)])
+        time.sleep(0.5)
     except Exception:
         continue
 
-# 3. ĐẨY DỮ LIỆU MỚI LÊN GOOGLE SHEET
+# 3. ĐẨY LÊN SHEET
 columns = ['Mã (đơn vị)', 'Đóng cửa (kvnd)', 'KLTB 20N', 'Điểm kỹ thuật (*)', 'Xu hướng SMG ngắn hạn', 'Vốn hóa (tỷ đồng)', 'P/E (lần)', 'GTGD (tỷ đồng)']
-
 if data_rows:
     df = pd.DataFrame(data_rows, columns=columns).sort_values(by=['GTGD (tỷ đồng)'], ascending=False)
     sheet.clear()
     sheet.update([df.columns.values.tolist()] + df.values.tolist())
-    print("Đã cập nhật dữ liệu thành công.")
-else:
-    print("Không có dữ liệu nào thỏa mãn điều kiện lọc.")
+    print("THÀNH CÔNG: Dữ liệu đã được cập nhật. Không còn bóng dáng vnstock.")
