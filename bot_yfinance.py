@@ -15,8 +15,8 @@ if not creds_json:
 creds_dict = json.loads(creds_json)
 scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-client = gspread.authorize(creds)
-sheet = client.open('Chứng khoán').sheet1
+client = gspread.authorize(creds) 
+sheet = client.open('Chứng khoán Cô Tiên').sheet1
 
 # 2. TỰ ĐỘNG LẤY DANH SÁCH ~1600 MÃ TỪ 3 SÀN (HOSE, HNX, UPCoM)
 print("Đang tải danh sách toàn bộ mã chứng khoán từ 3 sàn...")
