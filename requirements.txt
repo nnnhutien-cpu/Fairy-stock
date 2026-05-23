@@ -2,5 +2,4 @@ gspread
 google-auth
 pandas
 requests
-beautifulsoup4
-vnstock==0.2.9.2
+yfinance
