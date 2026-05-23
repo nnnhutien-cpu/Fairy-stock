@@ -15,7 +15,11 @@ if not creds_json:
 creds_dict = json.loads(creds_json)
 scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-# ĐIỀN ID GOOGLE SHEET CỦA BẠN VÀO ĐÂY (Đảm bảo đã Share quyền Editor cho email Service Account)
+
+# Đây là dòng bị vô tình xóa mất lúc nãy, nay đã được thêm lại:
+client = gspread.authorize(creds)
+
+# Kết nối thẳng bằng mã ID
 sheet_id = '1glhyGPKRsBwU0OXHB4gvr0dnntWn_dcw2VzI3_Z1fQc' 
 sheet = client.open_by_key(sheet_id).sheet1
 
