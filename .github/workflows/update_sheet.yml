@@ -16,6 +16,15 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: BẮT QUẢ TANG MÁY CHỦ (DEBUG)
+        run: |
+          echo "=== DANH SÁCH CÁC FILE ĐANG CÓ ==="
+          ls -la
+          echo "=== NỘI DUNG FILE MAIN.PY ==="
+          cat main.py
+          echo "=== NỘI DUNG FILE REQUIREMENTS.TXT ==="
+          cat requirements.txt
+
       - name: Install dependencies
         run: pip install -r requirements.txt
 
