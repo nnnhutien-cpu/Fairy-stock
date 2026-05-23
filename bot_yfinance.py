@@ -1,4 +1,4 @@
-# FORCE UPDATE - VERSION 9.1: THUẦN YFINANCE + TỰ ĐỘNG ĐỔI ĐUÔI SÀN
+# FORCE UPDATE - VERSION 9.2: THUẦN YFINANCE + HẠ NGƯỠNG LỌC 5 TỶ
 import os
 import json
 import time
@@ -34,7 +34,7 @@ for s in upcom_symbols: exchange_map[s] = 'UPCOM'
 
 symbols = list(exchange_map.keys())
 
-# KIM BÀI MIỄN TỬ (Cứu các siêu cổ phiếu UPCoM/HNX khi Yahoo mất Volume)
+# KIM BÀI MIỄN TỬ 
 vip_symbols = ['VGI', 'ACV', 'VEA', 'MCH', 'BSR', 'FOX', 'VTP', 'IDC', 'PVS', 'SHS', 'MBS']
 
 # 3. QUÉT DỮ LIỆU THUẦN TÚY BẰNG YFINANCE
@@ -45,11 +45,11 @@ for sym in symbols:
     try:
         exchange = exchange_map.get(sym, 'HOSE')
         
-        # --- SỬA LỖI CHÍ MẠNG: Tự động đổi đuôi mã cho đúng chuẩn Yahoo ---
+        # Tự động đổi đuôi mã cho đúng chuẩn Yahoo
         if exchange == 'HNX':
             y_sym = f"{sym}.HN"
         else:
-            y_sym = f"{sym}.VN" # HOSE và UPCoM đa số dùng đuôi .VN
+            y_sym = f"{sym}.VN"
             
         ticker = yf.Ticker(y_sym)
         df_hist = ticker.history(period="2mo")
@@ -60,7 +60,6 @@ for sym in symbols:
             ticker = yf.Ticker(y_sym)
             df_hist = ticker.history(period="2mo")
 
-        # Nới lỏng số ngày tối thiểu xuống 10 ngày (Phòng khi Yahoo thiếu dữ liệu)
         if df_hist.empty or len(df_hist) < 10:
             continue
 
@@ -70,8 +69,8 @@ for sym in symbols:
         avg_vol_20 = df_hist['Volume'].mean()
         gtgd = (close_price_vnd * avg_vol_20) / 1000000000
         
-        # BỘ LỌC THANH KHOẢN > 20 TỶ 
-        if gtgd <= 20 and sym not in vip_symbols:
+        # --- BỘ LỌC THANH KHOẢN ĐÃ HẠ XUỐNG 5 TỶ ---
+        if gtgd <= 5 and sym not in vip_symbols:
             continue
 
         ma20 = df_hist['Close'].mean()
@@ -93,18 +92,4 @@ for sym in symbols:
         data_rows.append([
             sym, exchange, round(close_kvnd, 2), int(avg_vol_20), tech_score, trend,
             round(market_cap, 0) if isinstance(market_cap, float) else market_cap,
-            round(pe, 1) if isinstance(pe, float) else pe, round(gtgd, 1)
-        ])
-        time.sleep(0.1)  
-    except Exception:
-        continue
-
-# 4. ĐẨY LÊN GOOGLE SHEET
-columns = ['Mã (đơn vị)', 'Sàn', 'Đóng cửa (kvnd)', 'KLTB 20N', 'Điểm kỹ thuật (*)', 'Xu hướng SMG ngắn hạn', 'Vốn hóa (tỷ đồng)', 'P/E (lần)', 'GTGD (tỷ đồng)']
-if data_rows:
-    df = pd.DataFrame(data_rows, columns=columns).sort_values(by=['GTGD (tỷ đồng)'], ascending=False)
-    sheet.clear()
-    sheet.update([df.columns.values.tolist()] + df.values.tolist())
-    print(f"THÀNH CÔNG: Đã đồng bộ {len(data_rows)} mã toàn thị trường bằng YFinance lên Sheet!")
-else:
-    print("CẢNH BÁO: Không tìm thấy dữ liệu!")
+            round(pe, 1) if isinstance(pe, float) else pe, round(gtgd,
