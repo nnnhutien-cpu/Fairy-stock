@@ -1,4 +1,4 @@
-# FORCE UPDATE - VERSION 9.0: CHỈ DÙNG YFINANCE + 350 MÃ OFFLINE
+# FORCE UPDATE - VERSION 9.1: THUẦN YFINANCE + TỰ ĐỘNG ĐỔI ĐUÔI SÀN
 import os
 import json
 import time
@@ -20,7 +20,7 @@ client = gspread.authorize(creds)
 sheet_id = '1glhyGPKRsBwU0OXHB4gvr0dnntWn_dcw2VzI3_Z1fQc' 
 sheet = client.open_by_key(sheet_id).sheet1
 
-# 2. SIÊU CƠ SỞ DỮ LIỆU OFFLINE (KHÔNG GỌI API CÔNG TY CHỨNG KHOÁN)
+# 2. SIÊU CƠ SỞ DỮ LIỆU OFFLINE 350+ MÃ
 print("Đang nạp Siêu danh sách 350+ mã chứng khoán 3 sàn...")
 
 hose_symbols = ['SSI','VHM','VIC','HPG','VNM','VCB','BID','CTG','TCB','VPB','MBB','STB','ACB','SHB','VIB','HDB','LPB','TPB','MSB','OCB','SSB','EIB','NAB','NVL','PDR','DIG','DXG','NLG','KDH','KBC','VGC','SZC','HDG','BCG','FCN','CTD','VND','VCI','HCM','VIX','FTS','BSI','CTS','AGR','ORS','VDS','TVS','HSG','NKG','SMC','TLH','DGC','DPM','DCM','CSV','PHR','GVR','DPR','TRC','GMD','HAH','VOS','VHC','ANV','IDI','FMC','DBC','BAF','HAG','PAN','SBT','FRT','DGW','PET','MWG','PNJ','MSN','SAB','VJC','HVN','FPT','PLX','GAS','POW','NT2','GEG','REE','PC1','ASM','CII','HBC','VCG','HHV','LCG','HDC','IJC','SCR','CRE','KHG','DXS','PTB','GIL','TCM','TNG','VSH','SJD','SBA','TDM','BWE','VPD','VPI','QCG','TCH','HHS','HAX','CMX','DAT','EVF','FIT','HQC','ITA','OGC','HNG','TTF','AAA','APH','NHH','BMP','NTP','DRC','CSM','SRC','VTO','VIP','PVT']
@@ -34,18 +34,34 @@ for s in upcom_symbols: exchange_map[s] = 'UPCOM'
 
 symbols = list(exchange_map.keys())
 
-# KIM BÀI MIỄN TỬ (Mã VIP luôn được giữ lại dù Yahoo Finance có thiếu Volume)
+# KIM BÀI MIỄN TỬ (Cứu các siêu cổ phiếu UPCoM/HNX khi Yahoo mất Volume)
 vip_symbols = ['VGI', 'ACV', 'VEA', 'MCH', 'BSR', 'FOX', 'VTP', 'IDC', 'PVS', 'SHS', 'MBS']
 
-# 3. QUÉT DỮ LIỆU 100% BẰNG YFINANCE
+# 3. QUÉT DỮ LIỆU THUẦN TÚY BẰNG YFINANCE
 data_rows = []
 print(f"Bắt đầu quét {len(symbols)} mã bằng YFINANCE...")
 
 for sym in symbols:
     try:
-        ticker = yf.Ticker(f"{sym}.VN")
+        exchange = exchange_map.get(sym, 'HOSE')
+        
+        # --- SỬA LỖI CHÍ MẠNG: Tự động đổi đuôi mã cho đúng chuẩn Yahoo ---
+        if exchange == 'HNX':
+            y_sym = f"{sym}.HN"
+        else:
+            y_sym = f"{sym}.VN" # HOSE và UPCoM đa số dùng đuôi .VN
+            
+        ticker = yf.Ticker(y_sym)
         df_hist = ticker.history(period="2mo")
-        if df_hist.empty or len(df_hist) < 20:
+        
+        # Nếu UPCoM tìm .VN không ra, tự động lật sang tìm đuôi .HN
+        if df_hist.empty and exchange == 'UPCOM':
+            y_sym = f"{sym}.HN"
+            ticker = yf.Ticker(y_sym)
+            df_hist = ticker.history(period="2mo")
+
+        # Nới lỏng số ngày tối thiểu xuống 10 ngày (Phòng khi Yahoo thiếu dữ liệu)
+        if df_hist.empty or len(df_hist) < 10:
             continue
 
         df_hist = df_hist.tail(20) 
@@ -58,9 +74,7 @@ for sym in symbols:
         if gtgd <= 20 and sym not in vip_symbols:
             continue
 
-        exchange = exchange_map.get(sym, 'HOSE')
         ma20 = df_hist['Close'].mean()
-        
         if close_price_vnd > ma20 * 1.01:
             trend, tech_score = "KHẢ QUAN", 5
         elif close_price_vnd < ma20 * 0.99:
@@ -68,7 +82,6 @@ for sym in symbols:
         else:
             trend, tech_score = "TRUNG TÍNH", 3
 
-        # Lấy Market Cap và PE thuần túy từ Yahoo
         try:
             info = ticker.info
             market_cap_raw = info.get('marketCap', 0)
@@ -82,7 +95,7 @@ for sym in symbols:
             round(market_cap, 0) if isinstance(market_cap, float) else market_cap,
             round(pe, 1) if isinstance(pe, float) else pe, round(gtgd, 1)
         ])
-        time.sleep(0.1)  # Giãn cách nhẹ để Yahoo không chặn
+        time.sleep(0.1)  
     except Exception:
         continue
 
