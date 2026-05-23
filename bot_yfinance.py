@@ -64,4 +64,34 @@ for sym in symbols:
         if close_price_vnd > ma20 * 1.01:
             trend, tech_score = "KHẢ QUAN", 5
         elif close_price_vnd < ma20 * 0.99:
-            trend, tech_score =
+            trend, tech_score = "TIÊU CỰC", 1
+        else:
+            trend, tech_score = "TRUNG TÍNH", 3
+
+        # Lấy Market Cap và PE thuần túy từ Yahoo
+        try:
+            info = ticker.info
+            market_cap_raw = info.get('marketCap', 0)
+            market_cap = (market_cap_raw / 1000000000) if market_cap_raw else "N/A"
+            pe = info.get('trailingPE', "N/A")
+        except Exception:
+            market_cap, pe = "N/A", "N/A"
+
+        data_rows.append([
+            sym, exchange, round(close_kvnd, 2), int(avg_vol_20), tech_score, trend,
+            round(market_cap, 0) if isinstance(market_cap, float) else market_cap,
+            round(pe, 1) if isinstance(pe, float) else pe, round(gtgd, 1)
+        ])
+        time.sleep(0.1)  # Giãn cách nhẹ để Yahoo không chặn
+    except Exception:
+        continue
+
+# 4. ĐẨY LÊN GOOGLE SHEET
+columns = ['Mã (đơn vị)', 'Sàn', 'Đóng cửa (kvnd)', 'KLTB 20N', 'Điểm kỹ thuật (*)', 'Xu hướng SMG ngắn hạn', 'Vốn hóa (tỷ đồng)', 'P/E (lần)', 'GTGD (tỷ đồng)']
+if data_rows:
+    df = pd.DataFrame(data_rows, columns=columns).sort_values(by=['GTGD (tỷ đồng)'], ascending=False)
+    sheet.clear()
+    sheet.update([df.columns.values.tolist()] + df.values.tolist())
+    print(f"THÀNH CÔNG: Đã đồng bộ {len(data_rows)} mã toàn thị trường bằng YFinance lên Sheet!")
+else:
+    print("CẢNH BÁO: Không tìm thấy dữ liệu!")
