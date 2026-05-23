@@ -2,5 +2,5 @@ gspread
 google-auth
 pandas
 requests
-bs4
+beautifulsoup4
 vnstock==0.2.9.2
