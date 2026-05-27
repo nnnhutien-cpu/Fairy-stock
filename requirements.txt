@@ -1,5 +1,8 @@
-vnstock>=4.0.0
-pandas>=2.1.4
-gspread
-google-auth
-pandas_ta
+gspread==6.1.2
+google-auth==2.32.0
+pandas==2.2.2
+requests==2.32.3
+beautifulsoup4==4.12.3
+packaging
+ipython
+vnstock>=3.2.1
