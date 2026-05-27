@@ -1,6 +1,4 @@
-vnstock3
-squarify
-wordcloud
+vnstock>=4.0.0
 pandas>=2.1.4
 gspread
 google-auth
