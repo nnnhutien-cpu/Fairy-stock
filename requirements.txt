@@ -1,4 +1,4 @@
-vnstock>=3.2.1
+vnstock3
 pandas>=2.1.4
 gspread
 google-auth
