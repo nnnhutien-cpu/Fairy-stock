@@ -1,5 +1,5 @@
 vnstock>=3.2.1
 pandas>=2.1.4
-git+https://github.com/twopirllc/pandas-ta.git
+https://github.com/twopirllc/pandas-ta/archive/main.zip
 gspread
 google-auth
