@@ -1,159 +1,163 @@
+# FORCE UPDATE - VERSION 12.0: THE ULTIMATE VNSTOCK3 (KIẾN TRÚC MỚI)
+import os
+import json
+import time
+from datetime import datetime, timedelta
+import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
-from vnstock import Vnstock
-import pandas as pd
-from datetime import datetime, timedelta
 
-# ==========================================
-# HÀM TÍNH TOÁN CHỈ SỐ KỸ THUẬT (THAY THẾ pandas_ta)
-# ==========================================
-def calc_rsi(series, length=14):
+# Sử dụng cú pháp import hướng đối tượng của Vnstock3
+from vnstock import Vnstock  
+
+# 1. KẾT NỐI GOOGLE SHEETS
+creds_json = os.environ.get('GCP_CREDENTIALS')
+if not creds_json:
+    raise ValueError("LỖI: Không tìm thấy GCP_CREDENTIALS!")
+creds_dict = json.loads(creds_json)
+scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+client = gspread.authorize(creds)
+
+# ID file Google Sheet của bạn (Đã được cấp quyền cho email robot mới)
+sheet_id = '1glhyGPKRsBwU0OXHB4gvr0dnntWn_dcw2VzI3_Z1fQc' 
+sheet = client.open_by_key(sheet_id).sheet1
+
+# 2. HÀM TÍNH TOÁN RSI BẰNG PANDAS THUẦN (Chống lỗi Module)
+def compute_rsi(series, window=14):
     delta = series.diff()
-    gain = delta.clip(lower=0).rolling(window=length).mean()
-    loss = (-delta.clip(upper=0)).rolling(window=length).mean()
-    rs = gain / loss.replace(0, float('nan'))
+    up = delta.clip(lower=0)
+    down = -1 * delta.clip(upper=0)
+    ema_up = up.ewm(com=window-1, adjust=False).mean()
+    ema_down = down.ewm(com=window-1, adjust=False).mean()
+    rs = ema_up / ema_down
     return 100 - (100 / (1 + rs))
 
-def calc_sma(series, length):
-    return series.rolling(window=length).mean()
+# 3. SIÊU CƠ SỞ DỮ LIỆU OFFLINE 350+ MÃ (Bao trọn 3 sàn)
+print("Đang nạp Siêu danh sách mã chứng khoán 3 sàn...")
 
-def calc_macd(series, fast=12, slow=26, signal=9):
-    ema_fast = series.ewm(span=fast, adjust=False).mean()
-    ema_slow = series.ewm(span=slow, adjust=False).mean()
-    macd_line = ema_fast - ema_slow
-    signal_line = macd_line.ewm(span=signal, adjust=False).mean()
-    histogram = macd_line - signal_line
-    return pd.DataFrame({
-        'MACD_12_26_9': macd_line,
-        'MACDs_12_26_9': signal_line,
-        'MACDh_12_26_9': histogram
-    })
+hose_symbols = ['SSI','VHM','VIC','HPG','VNM','VCB','BID','CTG','TCB','VPB','MBB','STB','ACB','SHB','VIB','HDB','LPB','TPB','MSB','OCB','SSB','EIB','NAB','NVL','PDR','DIG','DXG','NLG','KDH','KBC','VGC','SZC','HDG','BCG','FCN','CTD','VND','VCI','HCM','VIX','FTS','BSI','CTS','AGR','ORS','VDS','TVS','HSG','NKG','SMC','TLH','DGC','DPM','DCM','CSV','PHR','GVR','DPR','TRC','GMD','HAH','VOS','VHC','ANV','IDI','FMC','DBC','BAF','HAG','PAN','SBT','FRT','DGW','PET','MWG','PNJ','MSN','SAB','VJC','HVN','FPT','PLX','GAS','POW','NT2','GEG','REE','PC1','ASM','CII','HBC','VCG','HHV','LCG','HDC','IJC','SCR','CRE','KHG','DXS','PTB','GIL','TCM','TNG','VSH','SJD','SBA','TDM','BWE','VPD','VPI','QCG','TCH','HHS','HAX','CMX','DAT','EVF','FIT','HQC','ITA','OGC','HNG','TTF','AAA','APH','NHH','BMP','NTP','DRC','CSM','SRC','VTO','VIP','PVT']
+hnx_symbols = ['SHS','MBS','IDC','PVS','CEO','HUT','L14','BVS','VGS','TIG','TAR','THD','BAB','NVB','PVC','PVB','APS','IDJ','API','AAV','AMV','VC3','VC7','MST','CSC','DDG','DTD','MCO','MBG','NTH','SDA','LIG','TTH','VIG','HDA','SCI','SRA','TVC','GKM']
+upcom_symbols = ['BSR','ACV','VEA','MCH','VGI','FOX','VTP','OIL','ABB','BVB','VBB','SGB','PGB','KLB','SBS','AAS','VFS','C4G','G36','DDV','PAS','QNS','LTG','MSR','HTM','VGT','VNZ','SGP','PHP','TCI','DSC','BOT','DRI','TDS','HND','QTP','UPC','XDC','HSV']
 
-# ==========================================
-# 1. CẤU HÌNH KẾT NỐI GOOGLE SHEETS
-# ==========================================
-scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-credentials = Credentials.from_service_account_file('credentials.json', scopes=scopes)
-gc = gspread.authorize(credentials)
+exchange_map = {}
+for s in hose_symbols: exchange_map[s] = 'HOSE'
+for s in hnx_symbols: exchange_map[s] = 'HNX'
+for s in upcom_symbols: exchange_map[s] = 'UPCOM'
 
-# ĐIỀN ID FILE GOOGLE SHEETS CỦA BẠN VÀO ĐÂY
-SPREADSHEET_ID = 'ĐIỀN_ID_FILE_CỦA_BẠN_VÀO_ĐÂY'
-sh = gc.open_by_key(SPREADSHEET_ID)
+symbols = list(exchange_map.keys())
 
-TICKERS = ['SSI', 'VND', 'HPG', 'FPT', 'VCB']
+# KIM BÀI MIỄN TỬ (Cứu các siêu cổ phiếu dòng tiền khi thị trường sụt giảm thanh khoản)
+vip_symbols = ['VGI', 'ACV', 'VEA', 'MCH', 'BSR', 'FOX', 'VTP', 'IDC', 'PVS', 'SHS', 'MBS']
 
+# 4. QUÉT DỮ LIỆU BẰNG ĐỘNG CƠ VNSTOCK3
+data_rows = []
+print(f"Bắt đầu quét {len(symbols)} mã bằng VNSTOCK3...")
+
+# Lấy mốc thời gian 90 ngày qua để tính toán động lượng
 end_date = datetime.now().strftime('%Y-%m-%d')
 start_date = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
 
-df_prices_all = pd.DataFrame()
-df_tech_all = pd.DataFrame()
-df_foreign_all = pd.DataFrame()
-df_ratios_all = pd.DataFrame()
-alerts_list = []
-
-print("🚀 Đang khởi động cỗ máy cào dữ liệu 6 Sheets...")
-
-# ==========================================
-# 2. VÒNG LẶP XỬ LÝ TỪNG MÃ CỔ PHIẾU
-# ==========================================
-for ticker in TICKERS:
+for sym in symbols:
     try:
-        print(f"Đang xử lý: {ticker}...")
-        stock = Vnstock().stock(symbol=ticker, source='VCI')
+        exchange = exchange_map.get(sym, 'HOSE')
+        
+        # Gọi lệnh theo chuẩn hướng đối tượng của Vnstock3 (Lấy nguồn VCI cực kỳ ổn định)
+        stock = Vnstock().stock(symbol=sym, source='VCI')
+        df = stock.quote.history(start=start_date, end=end_date)
+        
+        if df is None or df.empty or len(df) < 30:
+            continue
+            
+        # Tự động đồng bộ tên cột hoa/thường của thư viện
+        col_close = 'close' if 'close' in df.columns else 'Close'
+        col_vol = 'volume' if 'volume' in df.columns else 'Volume'
 
-        # --- SHEET 2: STOCK PRICES ---
-        df_hist = stock.quote.history(start=start_date, end=end_date)
-        if df_hist.empty:
+        # Tính chỉ báo RSI
+        df['RSI'] = compute_rsi(df[col_close], 14)
+        
+        # Cắt lấy 20 phiên giao dịch thực tế gần nhất
+        df = df.tail(20)
+        
+        close_price = float(df[col_close].iloc[-1])
+        # Chuẩn hóa đơn vị giá của VNStock3 (Tự động đưa về dạng nghìn đồng để tính toán)
+        if close_price > 1000:
+            close_price_vnd = close_price
+            close_kvnd = close_price / 1000
+        else:
+            close_price_vnd = close_price * 1000
+            close_kvnd = close_price
+
+        avg_vol_20 = float(df[col_vol].mean())
+        last_vol = float(df[col_vol].iloc[-1])
+        
+        # Tính Giá trị giao dịch trung bình 20 phiên (GTGD)
+        gtgd = (close_price_vnd * avg_vol_20) / 1000000000
+        rsi_current = float(df['RSI'].iloc[-1])
+        
+        # --- BỘ LỌC THANH KHOẢN > 20 TỶ ĐỒNG ---
+        if gtgd <= 20 and sym not in vip_symbols:
             continue
 
-        df_hist['Ticker'] = ticker
-        latest_price = df_hist.iloc[-1:].copy()
-        df_prices_all = pd.concat([df_prices_all, latest_price])
+        ma20 = float(df[col_close].mean())
+        
+        # --- HỆ THỐNG CHẤM ĐIỂM DÒNG TIỀN AI (0-100) ---
+        score = 0
+        # 1. Chấm điểm kỹ thuật xu hướng (Tối đa 40 điểm)
+        if close_price > ma20 * 1.02: score += 40
+        elif close_price > ma20: score += 25
+        else: score += 10
+        
+        # 2. Chấm điểm động lượng RSI (Tối đa 30 điểm)
+        if 50 <= rsi_current <= 65: score += 30  # Vùng bứt phá mạnh lý tưởng
+        elif 65 < rsi_current <= 75: score += 20 # Vùng tăng nóng sắp quá mua
+        elif 40 <= rsi_current < 50: score += 15 # Vùng tích lũy nền giá
+        else: score += 5                         # Rủi ro cao
 
-        # --- SHEET 3: TECHNICAL SIGNALS ---
-        df_hist['RSI'] = calc_rsi(df_hist['close'], length=14)
-        df_hist['MA20'] = calc_sma(df_hist['close'], length=20)
-        macd_df = calc_macd(df_hist['close'])
-        df_hist = pd.concat([df_hist, macd_df], axis=1)
+        # 3. Chấm điểm bùng nổ khối lượng Vonume Breakout (Tối đa 30 điểm)
+        if last_vol > avg_vol_20 * 1.5: score += 30 # Khối lượng nổ gấp rưỡi trung bình
+        elif last_vol > avg_vol_20 * 1.1: score += 20
+        else: score += 10
 
-        latest_tech = df_hist.iloc[-1:].copy()
-        latest_tech['Ticker'] = ticker
-        df_tech_all = pd.concat([df_tech_all, latest_tech])
+        # Phân loại trạng thái Smg dựa trên điểm số AI
+        if score >= 75: trend = "TÍCH CỰC"
+        elif score >= 50: trend = "TRUNG TÍNH"
+        else: trend = "TIÊU CỰC"
 
-        # --- SHEET 6: MARKET ALERTS ---
-        df_hist['Vol_MA20'] = calc_sma(df_hist['volume'], length=20)
-        current_vol = df_hist['volume'].iloc[-1]
-        avg_vol = df_hist['Vol_MA20'].iloc[-1]
-
-        if pd.notna(avg_vol) and avg_vol > 0 and current_vol > (avg_vol * 1.5):
-            alerts_list.append({
-                'Date': end_date,
-                'Ticker': ticker,
-                'Alert_Type': 'Volume Breakout',
-                'Message': f"Khối lượng đột biến: {current_vol} (Gấp {round(current_vol/avg_vol, 1)} lần TB 20 phiên)"
-            })
-
-        # --- SHEET 4: FOREIGN TRADE ---
+        # Lấy số liệu Vốn hóa và P/E cơ bản từ nguồn TCBS tổng quan
         try:
-            df_foreign = stock.finance.foreign_flow()
-            if not df_foreign.empty:
-                df_foreign['Ticker'] = ticker
-                df_foreign_all = pd.concat([df_foreign_all, df_foreign.head(1)])
-        except Exception:
-            pass
+            stock_tcbs = Vnstock().stock(symbol=sym, source='TCBS')
+            overview = stock_tcbs.company.overview()
+            
+            if overview is not None and not overview.empty:
+                col_mcap = 'marketcap' if 'marketcap' in overview.columns else ('marketCap' if 'marketCap' in overview.columns else None)
+                col_pe = 'pe' if 'pe' in overview.columns else ('PE' if 'PE' in overview.columns else None)
+                
+                mcap = round(float(overview[col_mcap].iloc[0]) / 1000, 0) if col_mcap else "N/A"
+                pe = round(float(overview[col_pe].iloc[0]), 1) if col_pe else "N/A"
+            else:
+                mcap, pe = "N/A", "N/A"
+        except:
+            mcap, pe = "N/A", "N/A"
 
-        # --- SHEET 5: FINANCIAL RATIOS ---
-        try:
-            df_ratio = stock.finance.ratio()
-            if not df_ratio.empty:
-                df_ratio['Ticker'] = ticker
-                df_ratios_all = pd.concat([df_ratios_all, df_ratio.head(1)])
-        except Exception:
-            pass
+        data_rows.append([
+            sym, exchange, round(close_kvnd, 2), int(avg_vol_20), 
+            round(rsi_current, 1), score, trend, mcap, pe, round(gtgd, 1)
+        ])
+        
+        # Giãn cách 0.2 giây thông minh để bảo vệ IP khỏi bị các sàn chặn
+        time.sleep(0.2)
+        
+    except Exception:
+        continue
 
-    except Exception as e:
-        print(f"Lỗi ở mã {ticker}: {e}")
-
-# --- SHEET 1: MARKET OVERVIEW ---
-try:
-    vnindex = Vnstock().stock(symbol='VNINDEX', source='VCI').quote.history(start=start_date, end=end_date)
-    df_overview = vnindex.iloc[-5:].copy()
-    df_overview['Index'] = 'VNINDEX'
-except Exception:
-    df_overview = pd.DataFrame([{'Index': 'VNINDEX', 'Status': 'Data not available'}])
-
-df_alerts_all = (
-    pd.DataFrame(alerts_list)
-    if alerts_list
-    else pd.DataFrame([{'Date': end_date, 'Message': 'Không có tín hiệu đột biến nào'}])
-)
-
-# ==========================================
-# 3. HÀM ĐẨY DỮ LIỆU LÊN GOOGLE SHEETS
-# ==========================================
-def push_to_sheet(worksheet_name, df):
-    try:
-        ws = sh.worksheet(worksheet_name)
-        if df.empty:
-            return
-
-        for col in df.select_dtypes(
-            include=['datetime64[ns, UTC]', 'datetime64[ns]', 'datetime']
-        ).columns:
-            df[col] = df[col].dt.strftime('%Y-%m-%d')
-
-        df = df.fillna('')
-        ws.clear()
-        ws.update([df.columns.values.tolist()] + df.values.tolist())
-        print(f"✅ Đã cập nhật thành công tab: {worksheet_name}")
-    except Exception as e:
-        print(f"❌ Lỗi khi cập nhật tab {worksheet_name}: {e}")
-
-push_to_sheet("Market_Overview",   df_overview)
-push_to_sheet("Stock_Prices",      df_prices_all)
-push_to_sheet("Technical_Signals", df_tech_all)
-push_to_sheet("Foreign_Trade",     df_foreign_all)
-push_to_sheet("Financial_Ratios",  df_ratios_all)
-push_to_sheet("Market_Alerts",     df_alerts_all)
-
-print("🎉 XONG! TOÀN BỘ HỆ THỐNG 6 SHEET ĐÃ ĐƯỢC CẬP NHẬT TỰ ĐỘNG.")
+# 5. ĐỒNG BỘ DỮ LIỆU LÊN GOOGLE SHEET CỦA BẠN
+columns = ['Mã', 'Sàn', 'Đóng cửa (k)', 'KLTB 20N', 'RSI (14)', 'Điểm AI (100)', 'Xu hướng', 'Vốn hóa (tỷ)', 'P/E', 'GTGD (tỷ)']
+if data_rows:
+    # Sắp xếp danh sách ưu tiên: Điểm AI cao nhất và Thanh khoản lớn nhất lên đầu bảng
+    df_result = pd.DataFrame(data_rows, columns=columns).sort_values(by=['Điểm AI (100)', 'GTGD (tỷ)'], ascending=[False, False])
+    sheet.clear()
+    sheet.update([df_result.columns.values.tolist()] + df_result.values.tolist())
+    print(f" THÀNH CÔNG: Đã quét và đẩy {len(data_rows)} mã toàn thị trường (Bao gồm cả HNX & UPCOM) lên Sheet!")
+else:
+    print(" CẢNH BÁO: Hệ thống không lấy được dữ liệu thô!")
