@@ -2,3 +2,4 @@ vnstock>=4.0.0
 pandas>=2.1.4
 gspread
 google-auth
+pandas_ta
