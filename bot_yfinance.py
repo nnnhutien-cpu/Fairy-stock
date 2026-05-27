@@ -1,6 +1,6 @@
 import gspread
 from google.oauth2.service_account import Credentials
-from vnstock3 import Vnstock
+from vnstock import Vnstock
 import pandas as pd
 import pandas_ta as ta
 from datetime import datetime, timedelta
