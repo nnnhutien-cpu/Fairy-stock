@@ -1,4 +1,4 @@
-# FORCE UPDATE - VERSION 13.0: VNSTOCK API 4.0.1 (NEW ARCHITECTURE)
+# FORCE UPDATE - VERSION 13.1: VNSTOCK API 4.0.1 (LÁCH RATE LIMIT THÔNG MINH)
 import os
 import json
 import time
@@ -7,7 +7,7 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 
-# --- SỬ DỤNG KIẾN TRÚC MỚI NHẤT CỦA VNSTOCK 4.0.1 ---
+# Sử dụng kiến trúc mới nhất của Vnstock 4.0.1
 from vnstock.api.quote import Quote
 from vnstock.api.company import Company
 
@@ -48,9 +48,9 @@ for s in upcom_symbols: exchange_map[s] = 'UPCOM'
 symbols = list(exchange_map.keys())
 vip_symbols = ['VGI', 'ACV', 'VEA', 'MCH', 'BSR', 'FOX', 'VTP', 'IDC', 'PVS', 'SHS', 'MBS']
 
-# 4. QUÉT DỮ LIỆU BẰNG KIẾN TRÚC MỚI VÀ LÁCH TƯỜNG LỬA
+# 4. QUÉT DỮ LIỆU & LÁCH LUẬT BẰNG CHIẾN THUẬT BATCHING
 data_rows = []
-print(f"Bắt đầu quét {len(symbols)} mã bằng VNSTOCK 4.0.1 (Sẽ mất khoảng 10-12 phút để lách Rate Limit)...")
+print(f"Bắt đầu quét {len(symbols)} mã (Sẽ mất khoảng 25 phút để lách Rate Limit an toàn)...")
 
 end_date = datetime.now().strftime('%Y-%m-%d')
 start_date = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
@@ -59,87 +59,90 @@ for idx, sym in enumerate(symbols):
     try:
         exchange = exchange_map.get(sym, 'HOSE')
         
-        # --- Cú pháp MỚI: Dùng Quote thay cho Vnstock().stock ---
+        # 1. Gọi API Lịch sử giá (Request 1)
         q = Quote(symbol=sym, source='VCI')
         df = q.history(start=start_date, end=end_date)
         
         if df is None or df.empty or len(df) < 30:
-            time.sleep(3.1) # Vẫn giữ nhịp nghỉ 3.1s để không bị khóa API
-            continue
-            
-        col_close = 'close' if 'close' in df.columns else 'Close'
-        col_vol = 'volume' if 'volume' in df.columns else 'Volume'
-
-        df['RSI'] = compute_rsi(df[col_close], 14)
-        df = df.tail(20)
-        
-        close_price = float(df[col_close].iloc[-1])
-        if close_price > 1000:
-            close_price_vnd = close_price
-            close_kvnd = close_price / 1000
+            pass # Vẫn đi tiếp để kiểm tra khối ngắt nhịp
         else:
-            close_price_vnd = close_price * 1000
-            close_kvnd = close_price
+            col_close = 'close' if 'close' in df.columns else 'Close'
+            col_vol = 'volume' if 'volume' in df.columns else 'Volume'
 
-        avg_vol_20 = float(df[col_vol].mean())
-        last_vol = float(df[col_vol].iloc[-1])
-        gtgd = (close_price_vnd * avg_vol_20) / 1000000000
-        rsi_current = float(df['RSI'].iloc[-1])
-        
-        # Bộ lọc thanh khoản
-        if gtgd <= 20 and sym not in vip_symbols:
-            time.sleep(3.1) 
-            continue
-
-        ma20 = float(df[col_close].mean())
-        
-        # Chấm điểm AI
-        score = 0
-        if close_price > ma20 * 1.02: score += 40
-        elif close_price > ma20: score += 25
-        else: score += 10
-        
-        if 50 <= rsi_current <= 65: score += 30  
-        elif 65 < rsi_current <= 75: score += 20 
-        elif 40 <= rsi_current < 50: score += 15 
-        else: score += 5                         
-
-        if last_vol > avg_vol_20 * 1.5: score += 30 
-        elif last_vol > avg_vol_20 * 1.1: score += 20
-        else: score += 10
-
-        if score >= 75: trend = "TÍCH CỰC"
-        elif score >= 50: trend = "TRUNG TÍNH"
-        else: trend = "TIÊU CỰC"
-
-        # --- Lấy Vốn hóa, P/E bằng Company API mới (Dùng VCI thay vì TCBS bị cấm) ---
-        try:
-            comp = Company(symbol=sym, source='VCI')
-            overview = comp.overview()
+            df['RSI'] = compute_rsi(df[col_close], 14)
+            df = df.tail(20)
             
-            if overview is not None and not overview.empty:
-                col_mcap = 'marketcap' if 'marketcap' in overview.columns else ('marketCap' if 'marketCap' in overview.columns else None)
-                col_pe = 'pe' if 'pe' in overview.columns else ('PE' if 'PE' in overview.columns else None)
-                
-                mcap = round(float(overview[col_mcap].iloc[0]) / 1000, 0) if col_mcap else "N/A"
-                pe = round(float(overview[col_pe].iloc[0]), 1) if col_pe else "N/A"
+            close_price = float(df[col_close].iloc[-1])
+            if close_price > 1000:
+                close_price_vnd = close_price
+                close_kvnd = close_price / 1000
             else:
-                mcap, pe = "N/A", "N/A"
-        except:
-            mcap, pe = "N/A", "N/A"
+                close_price_vnd = close_price * 1000
+                close_kvnd = close_price
 
-        data_rows.append([
-            sym, exchange, round(close_kvnd, 2), int(avg_vol_20), 
-            round(rsi_current, 1), score, trend, mcap, pe, round(gtgd, 1)
-        ])
-        
-        # Nghỉ chuẩn 3.1 giây để vượt tường lửa Rate Limit
-        time.sleep(3.1) 
-        if (idx+1) % 10 == 0:
-            print(f" Đã xử lý {idx+1}/{len(symbols)} mã...")
+            avg_vol_20 = float(df[col_vol].mean())
+            last_vol = float(df[col_vol].iloc[-1])
+            gtgd = (close_price_vnd * avg_vol_20) / 1000000000
+            rsi_current = float(df['RSI'].iloc[-1])
+            
+            # Bộ lọc thanh khoản > 20 Tỷ
+            if gtgd > 20 or sym in vip_symbols:
+                ma20 = float(df[col_close].mean())
+                
+                # Chấm điểm AI
+                score = 0
+                if close_price > ma20 * 1.02: score += 40
+                elif close_price > ma20: score += 25
+                else: score += 10
+                
+                if 50 <= rsi_current <= 65: score += 30  
+                elif 65 < rsi_current <= 75: score += 20 
+                elif 40 <= rsi_current < 50: score += 15 
+                else: score += 5                         
+
+                if last_vol > avg_vol_20 * 1.5: score += 30 
+                elif last_vol > avg_vol_20 * 1.1: score += 20
+                else: score += 10
+
+                if score >= 75: trend = "TÍCH CỰC"
+                elif score >= 50: trend = "TRUNG TÍNH"
+                else: trend = "TIÊU CỰC"
+
+                # 2. Gọi API Tổng quan (Request 2)
+                try:
+                    comp = Company(symbol=sym, source='VCI')
+                    overview = comp.overview()
+                    if overview is not None and not overview.empty:
+                        col_mcap = 'marketcap' if 'marketcap' in overview.columns else ('marketCap' if 'marketCap' in overview.columns else None)
+                        col_pe = 'pe' if 'pe' in overview.columns else ('PE' if 'PE' in overview.columns else None)
+                        
+                        mcap = round(float(overview[col_mcap].iloc[0]) / 1000, 0) if col_mcap else "N/A"
+                        pe = round(float(overview[col_pe].iloc[0]), 1) if col_pe else "N/A"
+                    else:
+                        mcap, pe = "N/A", "N/A"
+                except:
+                    mcap, pe = "N/A", "N/A"
+
+                data_rows.append([
+                    sym, exchange, round(close_kvnd, 2), int(avg_vol_20), 
+                    round(rsi_current, 1), score, trend, mcap, pe, round(gtgd, 1)
+                ])
+
+        # --- KIỂM SOÁT NHỊP ĐỘ (CHỐNG SẬP RATE LIMIT) ---
+        # Mỗi mã tốn tối đa 2 requests. 9 mã = 18 requests (Vẫn an toàn dưới 20).
+        if (idx + 1) % 9 == 0:
+            print(f" Đã quét {idx + 1}/{len(symbols)} mã. Tạm ngủ 65 giây để xả Rate Limit Vnstock...")
+            time.sleep(65)
+        else:
+            time.sleep(1) # Nghỉ nhẹ giữa các mã trong cùng 1 cụm
             
     except Exception as e:
-        time.sleep(3.1)
+        # Nếu lỡ bị lỗi, vẫn phải đếm nhịp để ngủ
+        if (idx + 1) % 9 == 0:
+            print(f" Đã quét {idx + 1}/{len(symbols)} mã. Tạm ngủ 65 giây...")
+            time.sleep(65)
+        else:
+            time.sleep(1)
         continue
 
 # 5. ĐỒNG BỘ DỮ LIỆU LÊN GOOGLE SHEET
@@ -150,4 +153,4 @@ if data_rows:
     sheet.update([df_result.columns.values.tolist()] + df_result.values.tolist())
     print(f" THÀNH CÔNG: Đã quét và đẩy {len(data_rows)} mã toàn thị trường lên Sheet!")
 else:
-    print(" CẢNH BÁO: Không lấy được dữ liệu thô. Có thể do Rate Limit mạng.")
+    print(" CẢNH BÁO: Không lấy được dữ liệu thô. Vui lòng kiểm tra lại.")
