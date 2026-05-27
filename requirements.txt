@@ -1,4 +1,5 @@
 vnstock3
+squarify
 pandas>=2.1.4
 gspread
 google-auth
