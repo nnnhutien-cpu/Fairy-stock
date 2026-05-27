@@ -1,4 +1,4 @@
-# FORCE UPDATE - VERSION 12.1: VNSTOCK3 (LÁCH RATE LIMIT BẰNG CÁCH RU NGỦ)
+# FORCE UPDATE - VERSION 13.0: VNSTOCK API 4.0.1 (NEW ARCHITECTURE)
 import os
 import json
 import time
@@ -7,8 +7,9 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 
-# --- Đổi sang cú pháp import của Vnstock3 ---
-from vnstock import Vnstock  
+# --- SỬ DỤNG KIẾN TRÚC MỚI NHẤT CỦA VNSTOCK 4.0.1 ---
+from vnstock.api.quote import Quote
+from vnstock.api.company import Company
 
 # 1. KẾT NỐI GOOGLE SHEETS
 creds_json = os.environ.get('GCP_CREDENTIALS')
@@ -22,7 +23,7 @@ client = gspread.authorize(creds)
 sheet_id = '1glhyGPKRsBwU0OXHB4gvr0dnntWn_dcw2VzI3_Z1fQc' 
 sheet = client.open_by_key(sheet_id).sheet1
 
-# 2. HÀM TÍNH TOÁN RSI BẰNG PANDAS THUẦN
+# 2. HÀM TÍNH TOÁN RSI
 def compute_rsi(series, window=14):
     delta = series.diff()
     up = delta.clip(lower=0)
@@ -47,27 +48,23 @@ for s in upcom_symbols: exchange_map[s] = 'UPCOM'
 symbols = list(exchange_map.keys())
 vip_symbols = ['VGI', 'ACV', 'VEA', 'MCH', 'BSR', 'FOX', 'VTP', 'IDC', 'PVS', 'SHS', 'MBS']
 
-# 4. QUÉT DỮ LIỆU BẰNG ĐỘNG CƠ VNSTOCK3 VỚI CHIẾN THUẬT "RU NGỦ"
+# 4. QUÉT DỮ LIỆU BẰNG KIẾN TRÚC MỚI VÀ LÁCH TƯỜNG LỬA
 data_rows = []
-print(f"Bắt đầu quét {len(symbols)} mã bằng VNSTOCK3 (Sẽ mất khoảng 10 phút để vượt Rate Limit)...")
+print(f"Bắt đầu quét {len(symbols)} mã bằng VNSTOCK 4.0.1 (Sẽ mất khoảng 10-12 phút để lách Rate Limit)...")
 
 end_date = datetime.now().strftime('%Y-%m-%d')
 start_date = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
-
-# Khởi tạo sắn 2 object stock nguồn để tái sử dụng (giảm bớt việc gọi hàm khởi tạo)
-stock_vci = Vnstock().stock(symbol="SSI", source='VCI') 
-stock_tcbs = Vnstock().stock(symbol="SSI", source='TCBS')
 
 for idx, sym in enumerate(symbols):
     try:
         exchange = exchange_map.get(sym, 'HOSE')
         
-        # Gán lại mã vào các object đã tạo (Cách này nhanh hơn theo chuẩn vnstock3)
-        stock_vci.symbol = sym
-        df = stock_vci.quote.history(start=start_date, end=end_date)
+        # --- Cú pháp MỚI: Dùng Quote thay cho Vnstock().stock ---
+        q = Quote(symbol=sym, source='VCI')
+        df = q.history(start=start_date, end=end_date)
         
         if df is None or df.empty or len(df) < 30:
-            time.sleep(3.1) # Nghỉ ngơi dù lỗi để không tích lũy request
+            time.sleep(3.1) # Vẫn giữ nhịp nghỉ 3.1s để không bị khóa API
             continue
             
         col_close = 'close' if 'close' in df.columns else 'Close'
@@ -89,14 +86,14 @@ for idx, sym in enumerate(symbols):
         gtgd = (close_price_vnd * avg_vol_20) / 1000000000
         rsi_current = float(df['RSI'].iloc[-1])
         
-        # --- BỘ LỌC THANH KHOẢN > 20 TỶ ĐỒNG ---
+        # Bộ lọc thanh khoản
         if gtgd <= 20 and sym not in vip_symbols:
-            time.sleep(3.1) # Nghỉ ngơi khi bị loại
+            time.sleep(3.1) 
             continue
 
         ma20 = float(df[col_close].mean())
         
-        # CHẤM ĐIỂM DÒNG TIỀN AI (0-100)
+        # Chấm điểm AI
         score = 0
         if close_price > ma20 * 1.02: score += 40
         elif close_price > ma20: score += 25
@@ -115,13 +112,15 @@ for idx, sym in enumerate(symbols):
         elif score >= 50: trend = "TRUNG TÍNH"
         else: trend = "TIÊU CỰC"
 
-        # Lấy MarketCap, PE
+        # --- Lấy Vốn hóa, P/E bằng Company API mới (Dùng VCI thay vì TCBS bị cấm) ---
         try:
-            stock_tcbs.symbol = sym
-            overview = stock_tcbs.company.overview()
+            comp = Company(symbol=sym, source='VCI')
+            overview = comp.overview()
+            
             if overview is not None and not overview.empty:
                 col_mcap = 'marketcap' if 'marketcap' in overview.columns else ('marketCap' if 'marketCap' in overview.columns else None)
                 col_pe = 'pe' if 'pe' in overview.columns else ('PE' if 'PE' in overview.columns else None)
+                
                 mcap = round(float(overview[col_mcap].iloc[0]) / 1000, 0) if col_mcap else "N/A"
                 pe = round(float(overview[col_pe].iloc[0]), 1) if col_pe else "N/A"
             else:
@@ -134,12 +133,12 @@ for idx, sym in enumerate(symbols):
             round(rsi_current, 1), score, trend, mcap, pe, round(gtgd, 1)
         ])
         
-        # LÁCH TƯỜNG LỬA: Nghỉ chính xác 3.1 giây mỗi vòng để không vượt quá 20 request/phút.
+        # Nghỉ chuẩn 3.1 giây để vượt tường lửa Rate Limit
         time.sleep(3.1) 
         if (idx+1) % 10 == 0:
-            print(f" Đã quét được {idx+1}/{len(symbols)} mã...")
+            print(f" Đã xử lý {idx+1}/{len(symbols)} mã...")
             
-    except Exception:
+    except Exception as e:
         time.sleep(3.1)
         continue
 
@@ -151,4 +150,4 @@ if data_rows:
     sheet.update([df_result.columns.values.tolist()] + df_result.values.tolist())
     print(f" THÀNH CÔNG: Đã quét và đẩy {len(data_rows)} mã toàn thị trường lên Sheet!")
 else:
-    print(" CẢNH BÁO: Hệ thống không lấy được dữ liệu thô!")
+    print(" CẢNH BÁO: Không lấy được dữ liệu thô. Có thể do Rate Limit mạng.")
