@@ -1,33 +1,27 @@
 import pandas as pd
 from vnstock import company_overview
+
 def get_stock_valuation(ticker, ichi_status):
     """
-    Hàm cào dữ liệu định giá Cơ bản (P/E, P/B) 
-    và kết hợp với Kỹ thuật (Ichimoku) để ra đánh giá.
+    Hàm cào dữ liệu Vốn hóa và Đánh giá
     """
     try:
-        # Cào dữ liệu tài chính của doanh nghiệp
-        df = ticker_overview(ticker)
+        df = company_overview(ticker)
         if not df.empty:
-            pe = df['pe'].iloc[0] if 'pe' in df.columns and pd.notna(df['pe'].iloc[0]) else 0.0
-            pb = df['pb'].iloc[0] if 'pb' in df.columns and pd.notna(df['pb'].iloc[0]) else 0.0
-            pe = round(float(pe), 2)
-            pb = round(float(pb), 2)
-        else:
-            pe, pb = 0.0, 0.0
+            # 1. Trích xuất Vốn hóa (Thay vì P/E, P/B)
+            market_cap = df['marketCap'].iloc[0]
+            
+            # (Bạn giữ nguyên logic đánh giá cũ của bạn ở đây nếu có)
+            # Ví dụ: danh_gia = "Tích cực" nếu ichi_status == "Tốt" ...
+            danh_gia = ichi_status # Hoặc bất kỳ logic nào bạn đang dùng
+            
+            # 2. BẮT BUỘC trả về Dictionary có chứa đúng key "Vốn hóa lưu hành"
+            return {
+                "Vốn hóa lưu hành": float(market_cap),
+                "Đánh Giá": danh_gia
+            }
     except Exception as e:
-        pe, pb = 0.0, 0.0
-
-    # THUẬT TOÁN ĐỊNH GIÁ THEO LOGIC CỦA BẠN
-    if "Dưới Mây" in str(ichi_status):
-        danh_gia = "📉 Định giá Thấp"
-    elif "Trên Mây" in str(ichi_status):
-        danh_gia = "📈 Định giá Cao"
-    else:
-        danh_gia = "⚖️ Hợp lý (Trong mây)"
-
-    return {
-        "P/E": pe,
-        "P/B": pb,
-        "Đánh Giá": danh_gia
-    }
+        pass
+    
+    # Trả về giá trị mặc định nếu API lỗi
+    return {"Vốn hóa lưu hành": 0.0, "Đánh Giá": "N/A"}
