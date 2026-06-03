@@ -6,6 +6,7 @@ def render_sidebar():
         st.title("🧚‍♀️ CÔ TIÊN STOCK")
         st.caption("Hệ thống phân tích thông minh")
         st.divider()
+        
         st.header("⚙️ CẤU HÌNH BỘ LỌC")
         exchange_choice = st.selectbox("Chọn sàn giao dịch:", ["HOSE", "HNX", "UPCOM", "Tất cả 3 sàn"])
         signal_filter = st.radio("Bộ lọc tín hiệu kỹ thuật:", ["Tất cả", "🟢 Tích cực", "🔴 Tiêu cực"])
@@ -19,6 +20,12 @@ def render_sidebar():
             p_kijun = st.number_input("Kijun-sen", value=26, step=1)
             p_senkou_b = st.number_input("Senkou B", value=52, step=1)
             p_shift = st.number_input("Shift", value=26, step=1)
+            
+        st.divider()
+        # [MỚI] NÚT CẬP NHẬT ĐÃ ĐƯỢC ĐẶT ĐÚNG CHỖ TRONG SIDEBAR
+        if st.button("🔄 Lấy dữ liệu mới nhất", use_container_width=True, type="primary"):
+            st.cache_data.clear() # Xóa cache để cào lại dữ liệu
+            st.rerun() # Ép tải lại trang ngay lập tức
             
     return exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
 
