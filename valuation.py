@@ -1,6 +1,5 @@
 import pandas as pd
-from vnstock import ticker_overview
-
+from vnstock.stock import ticker_overview
 def get_stock_valuation(ticker, ichi_status):
     """
     Hàm cào dữ liệu định giá Cơ bản (P/E, P/B) 
