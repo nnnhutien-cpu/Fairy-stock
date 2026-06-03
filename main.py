@@ -1,29 +1,62 @@
 import streamlit as st
-# Nhúng 2 file vệ tinh mà bạn vừa tạo vào hệ thống
-from data_loader import get_stock_data
-from charts import draw_closing_price_chart
+import pandas as pd
+from data_loader import get_stock_data, get_vnindex_data
+from indicators import calculate_technical_signals
 
-# Cấu hình giao diện tổng
-st.set_page_config(page_title="Cổ Tiên Stock Dashboard", layout="wide")
-st.title("📈 Dashboard Phân Tích Cổ Phiếu - Cổ Tiên Stock")
+# Cấu hình trang rộng
+st.set_page_config(page_title="Cô Tiên Stock", layout="wide")
+st.title("🧚‍♀️ Hệ Thống Phân Tích - Cô Tiên Stock")
 
-# Nhập mã cổ phiếu
-symbol = st.text_input("Nhập mã cổ phiếu (Ví dụ: HPG, SSI, FPT):", "HPG").upper()
+# --- PHẦN 1: THỐNG KÊ VN-INDEX ---
+st.header("1. Thị Trường Chung (VN-INDEX)")
+vnindex_df = get_vnindex_data()
 
-if st.button("Lấy dữ liệu"):
-    with st.spinner('Đang tải dữ liệu từ Vnstock...'):
+if vnindex_df is not None and len(vnindex_df) >= 2:
+    # Lấy dữ liệu 2 ngày gần nhất
+    today_data = vnindex_df.iloc[-1]
+    yesterday_data = vnindex_df.iloc[-2]
+    
+    # Tính toán chênh lệch
+    price_diff = today_data['close'] - yesterday_data['close']
+    vol_diff = today_data['volume'] - yesterday_data['volume']
+    
+    # Hiển thị bằng Widget Metric của Streamlit
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(label=f"Điểm VN-INDEX ({today_data['time']})", 
+                  value=today_data['close'], 
+                  delta=f"{round(price_diff, 2)} điểm")
+    with col2:
+        st.metric(label="Thanh Khoản (Volume)", 
+                  value=f"{int(today_data['volume']):,}", 
+                  delta=f"{int(vol_diff):,} cổ phiếu")
+else:
+    st.warning("Đang tải dữ liệu VN-INDEX hoặc ngoài giờ giao dịch...")
+
+st.divider() # Đường kẻ ngang
+
+# --- PHẦN 2: LỌC TÍN HIỆU CỔ PHIẾU ---
+st.header("2. Lọc Tín Hiệu Kỹ Thuật (Screener)")
+st.write("Đang quét dữ liệu kỹ thuật mới nhất. Chờ một chút nhé...")
+
+# Danh sách mã bạn muốn theo dõi (Bạn có thể thêm bớt tùy ý)
+watch_list = ["HPG", "SSI", "FPT", "VND", "TCB", "MBB"]
+
+if st.button("Cập nhật tín hiệu ngay"):
+    with st.spinner("Cô Tiên đang quét bảng điện..."):
+        results = []
+        for ticker in watch_list:
+            df = get_stock_data(ticker)
+            signal_data = calculate_technical_signals(df, ticker)
+            if signal_data:
+                results.append(signal_data)
         
-        # 1. Gọi file data_loader đi lấy dữ liệu
-        df = get_stock_data(symbol, "2023-01-01", "2024-06-01")
-        
-        if df is not None:
-            st.success(f"Đã cào thành công dữ liệu mã {symbol}")
+        if results:
+            # Biến List thành Bảng DataFrame để hiển thị cho đẹp
+            results_df = pd.DataFrame(results)
             
-            # 2. Gọi file charts ra vẽ biểu đồ
-            draw_closing_price_chart(df, symbol)
-            
-            # 3. Hiển thị bảng số liệu
-            st.subheader("Bảng Số Liệu Chi Tiết")
-            st.dataframe(df, use_container_width=True)
+            # Đặt Ticker làm cột đầu tiên
+            st.dataframe(results_df, use_container_width=True, hide_index=True)
+            st.success("Đã phân tích xong!")
         else:
-            st.error(f"Lỗi: Không thể lấy dữ liệu mã {symbol}. Vui lòng kiểm tra lại.")
+            st.error("Không lấy được dữ liệu, vui lòng thử lại sau.")
