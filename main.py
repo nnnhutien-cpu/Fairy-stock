@@ -6,46 +6,56 @@ from ui_layout import render_sidebar, render_market_tab, render_screener_results
 
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
+# [MỚI] Khởi tạo bộ nhớ tạm để ghim dữ liệu không bị mất khi bấm bộ lọc
+if 'scan_results' not in st.session_state:
+    st.session_state['scan_results'] = []
+
 # 1. Gọi thanh điều khiển cấu hình bộ lọc từ file UI
 exchange_choice, signal_filter, max_scan = render_sidebar()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền")
 
-# 2. Phân tách Tab giao diện rõ ràng giúp luồng xử lý mượt mà
+# 2. Phân tách Tab giao diện rõ ràng
 tab_market, tab_screener = st.tabs(["📊 TỔNG QUAN VN-INDEX", "🚀 BỘ LỌC CỔ PHIẾU"])
 
 # ==========================================
-# XỬ LÝ TAB 1: BIỂU ĐỒ THANH KHOẢN HÌNH 2
+# XỬ LÝ TAB 1: BIỂU ĐỒ THANH KHOẢN
 # ==========================================
 with tab_market:
     intraday_df = get_intraday_vnindex()
     chart_df, df_today = None, None
 
     if intraday_df is not None and not intraday_df.empty:
-        intraday_df['time'] = pd.to_datetime(intraday_df['time'])
-        intraday_df['date'] = intraday_df['time'].dt.date
-        intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
-        
-        dates = intraday_df['date'].unique()
-        if len(dates) >= 2:
-            today_date = dates[-1]
-            yest_date = dates[-2]
+        # [MỚI] Chuẩn hóa tên cột để chống lỗi KeyError: 'close'
+        intraday_df.columns = [str(c).lower() for c in intraday_df.columns]
+        if 'close' not in intraday_df.columns and 'price' in intraday_df.columns:
+            intraday_df['close'] = intraday_df['price']
             
-            df_today = intraday_df[intraday_df['date'] == today_date].copy()
-            df_yest = intraday_df[intraday_df['date'] == yest_date].copy()
+        if 'time' in intraday_df.columns:
+            intraday_df['time'] = pd.to_datetime(intraday_df['time'])
+            intraday_df['date'] = intraday_df['time'].dt.date
+            intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
             
-            df_today['Vol_Hôm_Nay'] = df_today['volume'].cumsum()
-            df_yest['Vol_Hôm_Qua'] = df_yest['volume'].cumsum()
-            
-            chart_df = pd.merge(df_yest[['hour_min', 'Vol_Hôm_Qua']], 
-                                df_today[['hour_min', 'Vol_Hôm_Nay']], 
-                                on='hour_min', how='outer').sort_values('hour_min')
-            chart_df.set_index('hour_min', inplace=True)
+            dates = intraday_df['date'].unique()
+            if len(dates) >= 2:
+                today_date = dates[-1]
+                yest_date = dates[-2]
+                
+                df_today = intraday_df[intraday_df['date'] == today_date].copy()
+                df_yest = intraday_df[intraday_df['date'] == yest_date].copy()
+                
+                df_today['Vol_Hôm_Nay'] = df_today['volume'].cumsum()
+                df_yest['Vol_Hôm_Qua'] = df_yest['volume'].cumsum()
+                
+                chart_df = pd.merge(df_yest[['hour_min', 'Vol_Hôm_Qua']], 
+                                    df_today[['hour_min', 'Vol_Hôm_Nay']], 
+                                    on='hour_min', how='outer').sort_values('hour_min')
+                chart_df.set_index('hour_min', inplace=True)
             
     render_market_tab(chart_df, df_today)
 
 # ==========================================
-# XỬ LÝ TAB 2: LỌC TOÀN DIỆN TIÊU CỰC VÀ TÍCH CỰC
+# XỬ LÝ TAB 2: LỌC TOÀN DIỆN & LƯU BỘ NHỚ TẠM
 # ==========================================
 with tab_screener:
     st.subheader(f"Danh Sách Quét Sàn {exchange_choice} (>20 Tỷ VNĐ)")
@@ -72,7 +82,11 @@ with tab_screener:
                 
             status.update(label=f"✅ Đã quét xong! Tiến hành hiển thị dữ liệu nhóm: {signal_filter}", state="complete", expanded=False)
         
-        # Đẩy dữ liệu ra bảng kèm bộ lọc động
-        render_screener_results(results, signal_filter)
+        # [MỚI] Lưu dữ liệu vừa quét vào bộ nhớ tạm
+        st.session_state['scan_results'] = results
+    
+    # Hiển thị dữ liệu từ bộ nhớ tạm (Giúp bộ lọc Radio Button hoạt động trơn tru)
+    if st.session_state['scan_results']:
+        render_screener_results(st.session_state['scan_results'], signal_filter)
     else:
         st.caption(f"Hãy cấu hình thông số ở Sidebar trái và bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' để bắt đầu.")
