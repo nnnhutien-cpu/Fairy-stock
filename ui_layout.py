@@ -62,4 +62,15 @@ def render_screener_results(results, signal_filter):
                     "KL TB 20 Phiên": st.column_config.NumberColumn(format="%d"),
                     "Giá": st.column_config.NumberColumn(format="%.2f"),
                     "GTGD (Tỷ)": st.column_config.NumberColumn(format="%.2f"),
-                    "Tenkan": st.column_config.NumberColumn(format="%.2
+                    "Tenkan": st.column_config.NumberColumn(format="%.2f"),
+                    "Kijun": st.column_config.NumberColumn(format="%.2f"),
+                    "Senkou A": st.column_config.NumberColumn(format="%.2f"),
+                    "Senkou B": st.column_config.NumberColumn(format="%.2f"),
+                    "Chikou": st.column_config.NumberColumn(format="%.2f")
+                }
+            )
+            st.toast("Đã hiển thị danh sách siêu lọc dòng tiền thành công!", icon="🧚‍♀️")
+        else:
+            st.info(f"Không có mã nào thuộc nhóm '{signal_filter}' đạt điều kiện.")
+    else:
+        st.info("Chưa tìm thấy mã nào đạt điều kiện thanh khoản.")
