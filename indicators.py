@@ -2,15 +2,14 @@ import pandas as pd
 import numpy as np
 
 def calculate_technical_signals(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=52, p_shift=26):
-    """Tính toán Ichimoku 5 đường chuẩn Fireant & Khối lượng TB 20 phiên"""
+    """Tính toán Ichimoku 5 đường và tự động đánh giá định giá theo Mây"""
     if df is None or len(df) < max(p_senkou_b, 60):
         return None
     
     df.columns = [str(c).lower().strip() for c in df.columns]
     
-    # 1. TÍNH TOÁN RSI, MA Giá & MA KHỐI LƯỢNG
+    # 1. TÍNH TOÁN RSI & MA
     df['MA20'] = df['close'].rolling(window=20).mean()
-    # [MỚI] Tính Khối lượng trung bình 20 phiên
     df['Vol_MA20'] = df['volume'].rolling(window=20).mean() 
     
     delta = df['close'].diff()
@@ -31,7 +30,7 @@ def calculate_technical_signals(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=5
     senkou_b = (period_high_s + period_low_s) / 2
     df['Senkou_B_Current'] = senkou_b.shift(p_shift)
 
-    # Chikou Span (Đường trễ)
+    # Chikou Span
     df['Chikou'] = df['close']
 
     # 3. LẤY DỮ LIỆU PHIÊN CUỐI CÙNG
@@ -52,12 +51,16 @@ def calculate_technical_signals(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=5
     cloud_top = max(senkou_a_val, senkou_b_val)
     cloud_bottom = min(senkou_a_val, senkou_b_val)
 
+    # THUẬT TOÁN ĐỊNH GIÁ THEO LOGIC MÂY ICHIMOKU CỦA BẠN
     if price_val > cloud_top:
         ichi_status = "☁️ Trên Mây"
+        danh_gia_val = "📈 Định giá Cao"
     elif price_val < cloud_bottom:
         ichi_status = "🌧️ Dưới Mây"
+        danh_gia_val = "📉 Định giá Thấp"
     else:
         ichi_status = "🌫️ Trong Mây"
+        danh_gia_val = "⚖️ Hợp lý"
 
     if latest['close'] > latest['MA20'] and latest['RSI14'] > 50 and price_val > cloud_top:
         status_signal = "🟢 Tích cực"
@@ -70,6 +73,7 @@ def calculate_technical_signals(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=5
         "GTGD (Tỷ)": round(gtgd_ty, 2),
         "Khối Lượng": int(latest['volume']),
         "KL TB 20 Phiên": int(latest['Vol_MA20']) if pd.notna(latest['Vol_MA20']) else 0,
+        "Đánh Giá": danh_gia_val, # Thêm cột đánh giá động
         "Tenkan": round(latest['Tenkan'], 2),
         "Kijun": round(latest['Kijun'], 2),
         "Senkou A": round(senkou_a_val, 2),
