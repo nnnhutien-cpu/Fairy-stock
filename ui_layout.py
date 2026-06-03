@@ -12,9 +12,7 @@ def render_sidebar():
         exchange_choice = st.selectbox("Chọn sàn giao dịch:", ["HOSE", "HNX", "UPCOM", "Tất cả 3 sàn"])
         max_scan = st.slider("Số lượng mã quét tối đa:", 10, 300, 80)
         
-        st.divider()
-        scan_button = st.button("🚀 KÍCH HOẠT LỌC NGAY", use_container_width=True, type="primary")
-    return scan_button, exchange_choice, max_scan
+    return exchange_choice, max_scan
 
 def render_market_tab(chart_df, df_today):
     """Vẽ Tab thị trường chung"""
@@ -62,4 +60,4 @@ def render_screener_results(results):
         )
         st.toast("Phân tích hoàn tất! Chúc Cô Tiên giao dịch thành công 🚀", icon="🧚‍♀️")
     else:
-        st.info("Hiện tại không có mã nào vượt qua được bộ lọc khắt khe của bạn.")
+        st.info("⚠️ Hiện tại không có mã nào vượt qua được bộ lọc khắt khe (GTGD > 20 Tỷ & Tín hiệu Tích cực) của bạn.")
