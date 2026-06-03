@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 def calculate_technical_signals(df, ticker):
-    """Tính toán chỉ báo kỹ thuật bao gồm Ichimoku Cloud"""
+    """Tính toán chỉ báo kỹ thuật bao gồm Ichimoku Cloud hoàn chỉnh"""
     # Cần ít nhất 60 phiên để Mây Ichimoku hình thành chuẩn xác
     if df is None or len(df) < 60:
         return None
@@ -29,14 +29,16 @@ def calculate_technical_signals(df, ticker):
     period26_low = df['low'].rolling(window=26).min()
     df['Kijun'] = (period26_high + period26_low) / 2
 
-    # Mây Kumo hiện tại (Đẩy Senkou A và B lùi về 26 phiên trước để so với giá hiện tại)
+    # Senkou Span A (Đẩy về phía trước 26 phiên - Tương lai)
+    # Nhưng để lấy giá trị mây của ngày HÔM NAY, ta lùi lại 26 phiên
     senkou_a = (df['Tenkan'] + df['Kijun']) / 2
-    df['Cloud_A_Current'] = senkou_a.shift(26)
+    df['Senkou_A_Current'] = senkou_a.shift(26)
 
+    # Senkou Span B (52 phiên, lùi 26)
     period52_high = df['high'].rolling(window=52).max()
     period52_low = df['low'].rolling(window=52).min()
     senkou_b = (period52_high + period52_low) / 2
-    df['Cloud_B_Current'] = senkou_b.shift(26)
+    df['Senkou_B_Current'] = senkou_b.shift(26)
 
     # 3. LẤY DỮ LIỆU PHIÊN CUỐI CÙNG
     latest = df.iloc[-1]
@@ -51,16 +53,20 @@ def calculate_technical_signals(df, ticker):
     if gtgd_ty < 20: # Lọc bỏ cổ phiếu rác dưới 20 tỷ
         return None
 
+    # Lấy thông số Mây Kumo hiện tại
+    senkou_a_val = latest['Senkou_A_Current']
+    senkou_b_val = latest['Senkou_B_Current']
+    
     # Xét vị trí Giá so với Mây Ichimoku
-    cloud_top = max(latest['Cloud_A_Current'], latest['Cloud_B_Current'])
-    cloud_bottom = min(latest['Cloud_A_Current'], latest['Cloud_B_Current'])
+    cloud_top = max(senkou_a_val, senkou_b_val)
+    cloud_bottom = min(senkou_a_val, senkou_b_val)
 
     if price_val > cloud_top:
-        ichi_status = "☁️ Trền Mây (Khỏe)"
+        ichi_status = "☁️ Trên Mây"
     elif price_val < cloud_bottom:
-        ichi_status = "🌧️ Dưới Mây (Yếu)"
+        ichi_status = "🌧️ Dưới Mây"
     else:
-        ichi_status = "🌫️ Trong Mây (Giằng co)"
+        ichi_status = "🌫️ Trong Mây"
 
     # ĐỊNH NGHĨA SIÊU CỔ PHIẾU TÍCH CỰC: Giá > MA20 & RSI > 50 & Đã Vượt Mây
     if latest['close'] > latest['MA20'] and latest['RSI14'] > 50 and price_val > cloud_top:
@@ -73,8 +79,10 @@ def calculate_technical_signals(df, ticker):
         "Giá": price_val,
         "GTGD (Tỷ)": round(gtgd_ty, 2),
         "Khối Lượng": int(latest['volume']),
-        "Tenkan": round(latest['Tenkan'], 2),
-        "Kijun": round(latest['Kijun'], 2),
-        "Mây Ichimoku": ichi_status,
+        "Ichimoku_Tenkan": round(latest['Tenkan'], 2),
+        "Ichimoku_Kijun": round(latest['Kijun'], 2),
+        "Senkou A": round(senkou_a_val, 2),
+        "Senkou B": round(senkou_b_val, 2),
+        "Ichimoku_Cloud": ichi_status,
         "Trạng thái": status_signal
     }
