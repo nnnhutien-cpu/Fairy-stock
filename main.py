@@ -2,24 +2,19 @@ import streamlit as st
 import pandas as pd
 from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex
 from indicators import calculate_technical_signals
-# Nạp các hàm vẽ giao diện từ file riêng biệt
 from ui_layout import render_sidebar, render_market_tab, render_screener_results
 
-# Cấu hình trang rộng & Bật sẵn Sidebar
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
-# 1. Gọi thanh điều khiển Sidebar từ file ui_layout
+# 1. Gọi thanh điều khiển Sidebar
 scan_button, exchange_choice, max_scan = render_sidebar()
 
-# 2. Tiêu đề chính của Web
 st.title("📈 Dashboard Phân Tích Dòng Tiền")
 
-# Tạo 2 phân trang (Tabs)
+# 2. Tạo 2 Tabs
 tab_market, tab_screener = st.tabs(["📊 TỔNG QUAN VN-INDEX", "🚀 LỌC SIÊU CỔ PHIẾU"])
 
-# ------------------------------------------
-# XỬ LÝ TAB 1: THỊ TRƯỜNG CHUNG
-# ------------------------------------------
+# --- TAB 1 ---
 with tab_market:
     intraday_df = get_intraday_vnindex()
     chart_df, df_today = None, None
@@ -45,12 +40,9 @@ with tab_market:
                                 on='hour_min', how='outer').sort_values('hour_min')
             chart_df.set_index('hour_min', inplace=True)
             
-    # Đẩy dữ liệu đã tính toán sang file ui_layout để nó tự vẽ đồ thị và khung LED
     render_market_tab(chart_df, df_today)
 
-# ------------------------------------------
-# XỬ LÝ TAB 2: BỘ LỌC CỔ PHIẾU DÒNG TIỀN
-# ------------------------------------------
+# --- TAB 2 ---
 with tab_screener:
     st.subheader(f"Kết Quả Lọc Sàn {exchange_choice}")
     
@@ -75,7 +67,6 @@ with tab_screener:
                 
             status.update(label=f"✅ Quét xong! Bắt được {len(results)} siêu cổ phiếu.", state="complete", expanded=False)
         
-        # Đẩy danh sách siêu cổ phiếu quét được sang file ui_layout để hiển thị bảng dữ liệu
         render_screener_results(results)
     else:
         st.caption("👈 Hãy thiết lập thông số ở thanh công cụ bên trái và bấm 'KÍCH HOẠT LỌC NGAY' để truy tìm siêu cổ phiếu.")
