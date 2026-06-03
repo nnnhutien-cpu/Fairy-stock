@@ -55,15 +55,15 @@ def render_screener_results(results, signal_filter):
             results_df = results_df[results_df['Trạng thái'] == signal_filter]
         
         if not results_df.empty:
-            # 1. KHÔI PHỤC CỘT "Đánh Giá"
+            # [MỚI] Sắp xếp cột chứa thêm cột "Dòng Tiền" nằm ngay sau cột Đánh Giá
             cols_order = [
-                "Mã", "Giá", "GTGD (Tỷ)", "Khối Lượng", "KL TB 20 Phiên", "Đánh Giá",
+                "Mã", "Giá", "GTGD (Tỷ)", "Khối Lượng", "KL TB 20 Phiên", "Đánh Giá", "Dòng Tiền",
                 "Tenkan", "Kijun", "Senkou A", "Senkou B", "Chikou", 
                 "Ichimoku_Cloud", "Trạng thái"
             ]
             results_df = results_df[[c for c in cols_order if c in results_df.columns]]
             
-            # 2. XỬ LÝ DẤU PHẨY ĐÚNG CHUẨN (Giúp hệ thống không báo lỗi và vẫn xếp hạng được)
+            # Xử lý format dấu phẩy hàng nghìn bằng Pandas Style mượt mà
             format_dict = {
                 "Giá": "{:,.0f}",
                 "Khối Lượng": "{:,.0f}",
@@ -75,7 +75,6 @@ def render_screener_results(results, signal_filter):
                 "Senkou B": "{:,.0f}",
                 "Chikou": "{:,.0f}"
             }
-            # Lọc các cột có tồn tại để áp dụng định dạng
             valid_format_dict = {k: v for k, v in format_dict.items() if k in results_df.columns}
             styled_df = results_df.style.format(valid_format_dict)
             
