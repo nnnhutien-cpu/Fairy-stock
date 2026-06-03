@@ -9,7 +9,7 @@ def get_vn_time():
     return datetime.now(ZoneInfo('Asia/Ho_Chi_Minh'))
 
 def get_stock_data(symbol, days_back=365):
-    """Cào dữ liệu lịch sử cổ phiếu"""
+    """Cào dữ liệu lịch sử cổ phiếu (Lấy 1 năm để đủ vẽ Mây Ichimoku)"""
     now_vn = get_vn_time()
     end_date = now_vn.strftime('%Y-%m-%d')
     start_date = (now_vn - timedelta(days=days_back)).strftime('%Y-%m-%d')
@@ -18,6 +18,16 @@ def get_stock_data(symbol, days_back=365):
                                    start_date=start_date, 
                                    end_date=end_date, 
                                    resolution="1D", type="stock")
+        return df
+    except Exception as e:
+        return None
+
+def get_vnindex_data():
+    now_vn = get_vn_time()
+    end_date = now_vn.strftime('%Y-%m-%d')
+    start_date = (now_vn - timedelta(days=7)).strftime('%Y-%m-%d')
+    try:
+        df = stock_historical_data(symbol='VNINDEX', start_date=start_date, end_date=end_date, resolution="1D", type="index")
         return df
     except Exception as e:
         return None
@@ -33,14 +43,12 @@ def get_all_tickers(exchange='all'):
     except Exception as e:
         return ["HPG", "SSI", "VND", "FPT", "TCB", "MBB", "MWG", "VIC", "VHM", "VNM"]
 
-# KHÔNG DÙNG BỘ NHỚ ĐỆM Ở ĐÂY - ÉP MÁY CHỦ CÀO REAL-TIME TƯƠI MỚI TỪNG GIÂY
 def get_intraday_vnindex():
-    """Cào dữ liệu VN-INDEX khung 5 phút (Real-time chuẩn vnstock)"""
+    """Cào dữ liệu VN-INDEX khung 5 phút (Hàm này bị thiếu gây lỗi nãy giờ)"""
     now_vn = get_vn_time()
     start_date = (now_vn - timedelta(days=5)).strftime('%Y-%m-%d')
     end_date = now_vn.strftime('%Y-%m-%d')
     try:
-        # SỬA LỖI CHÍ MẠNG TẠI ĐÂY: Tham số chuẩn của API vnstock là "5", không phải "5m"
         df = stock_historical_data(symbol='VNINDEX', 
                                    start_date=start_date, 
                                    end_date=end_date, 
