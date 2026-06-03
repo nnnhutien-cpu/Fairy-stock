@@ -4,7 +4,7 @@ import concurrent.futures
 from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex
 from indicators import calculate_technical_signals
 from ui_layout import render_sidebar, render_market_tab, render_screener_results
-from valuation import get_stock_valuation # [MỚI] Gọi file định giá
+from valuation import get_stock_valuation
 
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
@@ -15,7 +15,7 @@ exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Định Giá")
 
-tab_market, tab_screener = st.tabs(["📊 TỔNG QUAN VN-INDEX", "🚀 BỘ LỌC CỔ PHIẾU"])
+tab_market, tab_screener = st.tabs(["📊 TỔNG QUAN VN-INDEX", "🚀 BỘ LỌC SIÊU CỔ PHIẾU"])
 
 with tab_market:
     intraday_df = get_intraday_vnindex()
@@ -70,22 +70,20 @@ with tab_screener:
         tickers = get_all_tickers(ex_code)
         tickers_to_scan = tickers[:max_scan]
         
-        with st.status(f"Đang dùng 10 Luồng quét {len(tickers_to_scan)} mã. Đang lấy Vốn hóa lưu hành...", expanded=True) as status:
+        with st.status(f"Đang dùng 10 Luồng quét {len(tickers_to_scan)} mã. Đang tính Toán Vốn Hóa, P/E, P/B...", expanded=True) as status:
             progress_bar = st.progress(0)
             results = []
             total = len(tickers_to_scan)
             processed = 0
 
             def process_ticker(ticker):
-                # 1. Cào giá
                 df = get_stock_data(ticker)
-                # 2. Tính toán kỹ thuật
                 signal_data = calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
                 
-                # 3. [MỚI] Nếu vượt qua bộ lọc 20 Tỷ, thì đi cào thêm Định giá P/E, P/B
                 if signal_data is not None:
-                    val_data = get_stock_valuation(ticker, signal_data["Ichimoku_Cloud"])
-                    signal_data.update(val_data) # Gộp kết quả
+                    # TRUYỀN THÊM GIÁ ĐỂ TÍNH VỐN HÓA LƯU HÀNH
+                    val_data = get_stock_valuation(ticker, signal_data["Ichimoku_Cloud"], signal_data["Giá"])
+                    signal_data.update(val_data)
                     return signal_data
                 return None
 
