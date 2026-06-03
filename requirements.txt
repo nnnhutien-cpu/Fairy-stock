@@ -1,4 +1,5 @@
-vnstock>=0.2.8
+streamlit
+vnstock==0.2.8.2
 pandas
 numpy
 plotly
