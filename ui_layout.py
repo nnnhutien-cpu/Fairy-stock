@@ -12,7 +12,6 @@ def render_sidebar():
         max_scan = st.slider("Số lượng mã quét tối đa:", 10, 300, 80)
         
         st.divider()
-        # BẢNG TÙY CHỈNH THÔNG SỐ ICHIMOKU DÀNH CHO DÂN PRO
         with st.expander("🛠️ TÙY CHỈNH ICHIMOKU (NÂNG CAO)", expanded=False):
             st.caption("Mặc định chuẩn Nhật: 9 - 26 - 52 - 26")
             p_tenkan = st.number_input("Tenkan-sen (Đường chuyển đổi)", value=9, step=1)
@@ -64,7 +63,8 @@ def render_screener_results(results, signal_filter):
                     "Ichimoku_Tenkan": st.column_config.NumberColumn(format="%.2f"),
                     "Ichimoku_Kijun": st.column_config.NumberColumn(format="%.2f"),
                     "Senkou A": st.column_config.NumberColumn(format="%.2f"),
-                    "Senkou B": st.column_config.NumberColumn(format="%.2f")
+                    "Senkou B": st.column_config.NumberColumn(format="%.2f"),
+                    "Ichimoku_Chikou": st.column_config.NumberColumn(format="%.2f")
                 }
             )
             st.toast("Đã hiển thị danh sách siêu lọc dòng tiền thành công!", icon="🧚‍♀️")
