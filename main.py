@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import concurrent.futures
 from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex
 from indicators import calculate_technical_signals
 from ui_layout import render_sidebar, render_market_tab, render_screener_results
@@ -9,13 +10,15 @@ st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_
 if 'scan_results' not in st.session_state:
     st.session_state['scan_results'] = []
 
-# NHẬN CÁC THÔNG SỐ TÙY CHỈNH TỪ SIDEBAR
 exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift = render_sidebar()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền")
 
 tab_market, tab_screener = st.tabs(["📊 TỔNG QUAN VN-INDEX", "🚀 BỘ LỌC CỔ PHIẾU"])
 
+# ==========================================
+# XỬ LÝ TAB 1: THỊ TRƯỜNG
+# ==========================================
 with tab_market:
     intraday_df = get_intraday_vnindex()
     chart_df, df_today = None, None
@@ -60,6 +63,9 @@ with tab_market:
             
     render_market_tab(chart_df, df_today)
 
+# ==========================================
+# XỬ LÝ TAB 2: QUÉT ĐA LUỒNG SIÊU TỐC
+# ==========================================
 with tab_screener:
     st.subheader(f"Danh Sách Quét Sàn {exchange_choice} (>20 Tỷ VNĐ)")
     scan_button = st.button("🚀 KÍCH HOẠT QUÉT TOÀN DIỆN", use_container_width=True, type="primary")
@@ -69,22 +75,33 @@ with tab_screener:
         tickers = get_all_tickers(ex_code)
         tickers_to_scan = tickers[:max_scan]
         
-        with st.status(f"Đang tiến hành xử lý dữ liệu {len(tickers_to_scan)} mã. Vui lòng đợi...", expanded=True) as status:
+        with st.status(f"Đang dùng 10 Luồng quét {len(tickers_to_scan)} mã. Tốc độ ánh sáng...", expanded=True) as status:
             progress_bar = st.progress(0)
             results = []
             total = len(tickers_to_scan)
-            
-            for i, ticker in enumerate(tickers_to_scan):
+            processed = 0
+
+            # Hàm xử lý đơn lẻ cho mỗi luồng
+            def process_ticker(ticker):
                 df = get_stock_data(ticker)
-                # TRUYỀN THÔNG SỐ ĐỘNG VÀO THUẬT TOÁN
-                signal_data = calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
+                return calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
+
+            # Lập trình đa luồng (10 máy con chạy song song)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
                 
-                if signal_data is not None:
-                    results.append(signal_data)
-                    
-                progress_bar.progress((i + 1) / total)
+                for future in concurrent.futures.as_completed(future_to_ticker):
+                    processed += 1
+                    try:
+                        signal_data = future.result()
+                        if signal_data is not None:
+                            results.append(signal_data)
+                    except Exception as e:
+                        pass
+                    # Cập nhật thanh tiến trình
+                    progress_bar.progress(processed / total)
                 
-            status.update(label=f"✅ Đã quét xong! Tiến hành hiển thị dữ liệu nhóm: {signal_filter}", state="complete", expanded=False)
+            status.update(label=f"✅ Đã quét xong siêu tốc! Hiển thị dữ liệu nhóm: {signal_filter}", state="complete", expanded=False)
         
         st.session_state['scan_results'] = results
     
