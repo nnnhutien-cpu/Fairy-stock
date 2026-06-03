@@ -6,8 +6,8 @@ from ui_layout import render_sidebar, render_market_tab, render_screener_results
 
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
-# 1. Gọi thanh điều khiển Sidebar
-scan_button, exchange_choice, max_scan = render_sidebar()
+# 1. Gọi thanh điều khiển Sidebar (Lấy cấu hình)
+exchange_choice, max_scan = render_sidebar()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền")
 
@@ -46,6 +46,9 @@ with tab_market:
 with tab_screener:
     st.subheader(f"Kết Quả Lọc Sàn {exchange_choice}")
     
+    # Nút bấm ĐÃ ĐƯỢC DỜI VÀO ĐÂY!
+    scan_button = st.button("🚀 KÍCH HOẠT LỌC NGAY", use_container_width=True, type="primary")
+    
     if scan_button:
         ex_code = 'all' if exchange_choice == "Tất cả 3 sàn" else exchange_choice
         tickers = get_all_tickers(ex_code)
@@ -69,4 +72,4 @@ with tab_screener:
         
         render_screener_results(results)
     else:
-        st.caption("👈 Hãy thiết lập thông số ở thanh công cụ bên trái và bấm 'KÍCH HOẠT LỌC NGAY' để truy tìm siêu cổ phiếu.")
+        st.caption("👈 Nhấn nút 'KÍCH HOẠT LỌC NGAY' ở trên để truy tìm siêu cổ phiếu (Chỉ số quét được cài ở thanh bên trái).")
