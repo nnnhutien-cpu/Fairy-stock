@@ -1,74 +1,34 @@
-# FORCE UPDATE YFINANCE - VERSION 2.0
-import os
-import json
-import time
+import streamlit as st
+from vnstock import stock_historical_data
 import pandas as pd
-import gspread
-import yfinance as yf
-from google.oauth2.service_account import Credentials
 
-# 1. KẾT NỐI GOOGLE SHEETS
-creds_json = os.environ.get('GCP_CREDENTIALS')
-if not creds_json:
-    raise ValueError("LỖI: Không tìm thấy GCP_CREDENTIALS!")
-creds_dict = json.loads(creds_json)
-scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-client = gspread.authorize(creds)
-sheet = client.open('Chứng khoán').sheet1
+# Cấu hình trang web
+st.set_page_config(page_title="Cổ Tiên Stock Dashboard", layout="wide")
+st.title("📈 Dashboard Phân Tích Cổ Phiếu - Cổ Tiên Stock")
 
-# 2. LẤY DỮ LIỆU BẰNG YFINANCE
-symbols = ['SSI','BCM','VHM','VIC','VRE','BVH','POW','GAS','ACB','BID','CTG','HDB','MBB','SHB','STB','TCB','TPB','VCB','VIB','VPB','HPG','GVR','MSN','VNM','SAB','MWG','FPT','GEX','REE','PNJ','VJC','HVN','NVL','PDR','DIG','DXG','NLG','KDH','KBC','VND','VCI','HCM','VIX','FTS','BSI','CTS','MBS','SHS','DGC','DPM','DCM','CSV','HSG','NKG','VGC','IDC','SZC','PC1','HDG','BCG','TCH','HAG','SBT','PAN','ASM','GEG','LCG','HHV','VCG','FCN','CTD','VHC','ANV','IDI','HAH','GMD','PVT','PVS','PVD','BSR','OIL','ACV','VEA','MCH','CTR','FOX','VTP','NAF','LPB','EVF','MSR','KDC','PHR','DCL']
+# Thanh nhập liệu mã cổ phiếu
+symbol = st.text_input("Nhập mã cổ phiếu (Ví dụ: HPG, SSI, FPT):", "HPG").upper()
 
-data_rows = []
-for sym in symbols:
+if st.button("Lấy dữ liệu"):
     try:
-        ticker = yf.Ticker(f"{sym}.VN")
-        df_hist = ticker.history(period="2mo")
-        if df_hist.empty or len(df_hist) < 20:
-            continue
-
-        df_hist = df_hist.tail(20)
-        close_price_vnd = df_hist['Close'].iloc[-1]
-        close_kvnd = close_price_vnd / 1000
-        avg_vol_20 = df_hist['Volume'].mean()
-
-        gtgd = (close_price_vnd * avg_vol_20) / 1000000000
-        if gtgd <= 20:
-            continue
-
-        try:
-            info = ticker.info
-            market_cap_raw = info.get('marketCap', 0)
-            market_cap = (market_cap_raw / 1000000000) if market_cap_raw else "N/A"
-            pe = info.get('trailingPE', "N/A")
-        except Exception:
-            market_cap, pe = "N/A", "N/A"
-
-        ma20 = df_hist['Close'].mean()
-        trend = "KHẢ QUAN" if close_price_vnd > ma20 else "TRUNG TÍNH"
-        tech_score = 5 if close_price_vnd > ma20 else 2
-
-        data_rows.append([
-            sym,
-            round(close_kvnd, 2),
-            int(avg_vol_20),
-            tech_score,
-            trend,
-            round(market_cap, 0) if isinstance(market_cap, float) else market_cap,
-            round(pe, 1) if isinstance(pe, float) else pe,
-            round(gtgd, 1)
-        ])
-        time.sleep(0.5)
-    except Exception:
-        continue
-
-# 3. ĐẨY LÊN SHEET
-columns = ['Mã (đơn vị)', 'Đóng cửa (kvnd)', 'KLTB 20N', 'Điểm kỹ thuật (*)', 'Xu hướng SMG ngắn hạn', 'Vốn hóa (tỷ đồng)', 'P/E (lần)', 'GTGD (tỷ đồng)']
-if data_rows:
-    df = pd.DataFrame(data_rows, columns=columns).sort_values(by=['GTGD (tỷ đồng)'], ascending=False)
-    sheet.clear()
-    sheet.update([df.columns.values.tolist()] + df.values.tolist())
-    print("THÀNH CÔNG: Dữ liệu đã được cập nhật!")
-else:
-    print("CẢNH BÁO: Không có dữ liệu nào được lấy về!")
+        with st.spinner('Đang tải dữ liệu từ Vnstock...'):
+            # Gọi hàm cào dữ liệu từ vnstock
+            df = stock_historical_data(symbol=symbol, 
+                                       start_date="2023-01-01", 
+                                       end_date="2024-06-01", 
+                                       resolution="1D", type="stock")
+            
+            st.success(f"Đã cào thành công dữ liệu mã {symbol}")
+            
+            # Vẽ biểu đồ giá đóng cửa
+            st.subheader(f"Biểu Đồ Giá Đóng Cửa - {symbol}")
+            # Đặt cột 'time' làm trục X để biểu đồ hiển thị đúng ngày tháng
+            chart_data = df.set_index('time')['close']
+            st.line_chart(chart_data)
+            
+            # Hiển thị bảng số liệu chi tiết
+            st.subheader("Bảng Số Liệu Chi Tiết")
+            st.dataframe(df, use_container_width=True)
+            
+    except Exception as e:
+        st.error(f"Lỗi: Không thể lấy dữ liệu mã {symbol}. Vui lòng kiểm tra lại.")
