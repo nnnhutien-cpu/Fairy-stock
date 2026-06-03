@@ -70,7 +70,7 @@ with tab_screener:
         tickers = get_all_tickers(ex_code)
         tickers_to_scan = tickers[:max_scan]
         
-        with st.status(f"Đang dùng 10 Luồng quét {len(tickers_to_scan)} mã. Đang tính Toán P/E, P/B...", expanded=True) as status:
+        with st.status(f"Đang dùng 10 Luồng quét {len(tickers_to_scan)} mã. Đang lấy Vốn hóa lưu hành...", expanded=True) as status:
             progress_bar = st.progress(0)
             results = []
             total = len(tickers_to_scan)
