@@ -6,15 +6,17 @@ from ui_layout import render_sidebar, render_market_tab, render_screener_results
 
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
-# 1. Gọi thanh điều khiển Sidebar (Lấy cấu hình)
-exchange_choice, max_scan = render_sidebar()
+# 1. Gọi thanh điều khiển cấu hình bộ lọc từ file UI
+exchange_choice, signal_filter, max_scan = render_sidebar()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền")
 
-# 2. Tạo 2 Tabs
-tab_market, tab_screener = st.tabs(["📊 TỔNG QUAN VN-INDEX", "🚀 LỌC SIÊU CỔ PHIẾU"])
+# 2. Phân tách Tab giao diện rõ ràng giúp luồng xử lý mượt mà
+tab_market, tab_screener = st.tabs(["📊 TỔNG QUAN VN-INDEX", "🚀 BỘ LỌC CỔ PHIẾU"])
 
-# --- TAB 1 ---
+# ==========================================
+# XỬ LÝ TAB 1: BIỂU ĐỒ THANH KHOẢN HÌNH 2
+# ==========================================
 with tab_market:
     intraday_df = get_intraday_vnindex()
     chart_df, df_today = None, None
@@ -42,19 +44,19 @@ with tab_market:
             
     render_market_tab(chart_df, df_today)
 
-# --- TAB 2 ---
+# ==========================================
+# XỬ LÝ TAB 2: LỌC TOÀN DIỆN TIÊU CỰC VÀ TÍCH CỰC
+# ==========================================
 with tab_screener:
-    st.subheader(f"Kết Quả Lọc Sàn {exchange_choice}")
-    
-    # Nút bấm ĐÃ ĐƯỢC DỜI VÀO ĐÂY!
-    scan_button = st.button("🚀 KÍCH HOẠT LỌC NGAY", use_container_width=True, type="primary")
+    st.subheader(f"Danh Sách Quét Sàn {exchange_choice} (>20 Tỷ VNĐ)")
+    scan_button = st.button("🚀 KÍCH HOẠT QUÉT TOÀN DIỆN", use_container_width=True, type="primary")
     
     if scan_button:
         ex_code = 'all' if exchange_choice == "Tất cả 3 sàn" else exchange_choice
         tickers = get_all_tickers(ex_code)
         tickers_to_scan = tickers[:max_scan]
         
-        with st.status(f"Đang phân tích {len(tickers_to_scan)} mã. Cô Tiên đang làm việc...", expanded=True) as status:
+        with st.status(f"Đang tiến hành xử lý dữ liệu {len(tickers_to_scan)} mã. Vui lòng đợi...", expanded=True) as status:
             progress_bar = st.progress(0)
             results = []
             total = len(tickers_to_scan)
@@ -68,8 +70,9 @@ with tab_screener:
                     
                 progress_bar.progress((i + 1) / total)
                 
-            status.update(label=f"✅ Quét xong! Bắt được {len(results)} siêu cổ phiếu.", state="complete", expanded=False)
+            status.update(label=f"✅ Đã quét xong! Tiến hành hiển thị dữ liệu nhóm: {signal_filter}", state="complete", expanded=False)
         
-        render_screener_results(results)
+        # Đẩy dữ liệu ra bảng kèm bộ lọc động
+        render_screener_results(results, signal_filter)
     else:
-        st.caption("👈 Nhấn nút 'KÍCH HOẠT LỌC NGAY' ở trên để truy tìm siêu cổ phiếu (Chỉ số quét được cài ở thanh bên trái).")
+        st.caption(f"Hãy cấu hình thông số ở Sidebar trái và bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' để bắt đầu.")
