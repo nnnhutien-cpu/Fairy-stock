@@ -2,6 +2,7 @@ from vnstock import stock_historical_data, listing_companies
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import streamlit as st
+import pandas as pd
 
 def get_vn_time():
     """Hàm ép máy chủ Mỹ phải dùng đồng hồ múi giờ Việt Nam (GMT+7)"""
@@ -45,8 +46,9 @@ def get_all_tickers(exchange='all'):
         return df['ticker'].tolist()
     except Exception as e:
         # Danh sách dự phòng nếu vnstock bảo trì
-        return ["HPG", "SSI", "VND", "FPT", "TCB", "MBB", "MWG", "VIC", "VHM", "VNM"] 
-        @st.cache_data(ttl=300) # Bộ nhớ đệm tự làm mới sau 5 phút
+        return ["HPG", "SSI", "VND", "FPT", "TCB", "MBB", "MWG", "VIC", "VHM", "VNM"]
+
+@st.cache_data(ttl=300) # Bộ nhớ đệm tự làm mới sau 5 phút
 def get_intraday_vnindex():
     """Lấy dữ liệu VN-INDEX khung 5 phút để vẽ biểu đồ thanh khoản"""
     now_vn = get_vn_time()
