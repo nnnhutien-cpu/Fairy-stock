@@ -1,45 +1,52 @@
-import pandas as pd
-from vnstock import company_overview
-import traceback
+import requests
 
 def get_stock_valuation(ticker, ichi_status):
     """
-    Hàm cào dữ liệu Vốn hóa và Đánh giá (Đã được bọc lỗi an toàn)
+    Hàm cào dữ liệu trực tiếp từ API gốc (Không dùng vnstock để tránh lỗi phiên bản)
+    Lấy chính xác Vốn hóa lưu hành và tính toán Đánh giá (Thấp/Cao/Trung bình)
     """
     try:
-        # Gọi API lấy dữ liệu tổng quan
-        df = company_overview(ticker)
+        # 1. Gọi trực tiếp API máy chủ gốc
+        url = f"https://apipubaws.tcbs.com.vn/tcanalysis/v1/ticker/{ticker}/overview"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
         
-        # Nếu DataFrame rỗng hoặc bị None
-        if df is None or df.empty:
-            return {"Vốn hóa lưu hành": 0.0, "Đánh Giá": str(ichi_status)}
+        # Lấy dữ liệu với thời gian chờ tối đa 5 giây
+        response = requests.get(url, headers=headers, timeout=5)
+        
+        if response.status_code == 200:
+            data = response.json()
             
-        # Tìm cột chứa từ khóa "cap" (không phân biệt hoa thường)
-        # Phiên bản cũ của vnstock có thể dùng 'marketCap', 'market_cap', hoặc tiếng Việt
-        market_cap_col = None
-        for col in df.columns:
-            if 'cap' in str(col).lower() or 'vốn hóa' in str(col).lower():
-                market_cap_col = col
-                break
+            # 2. Trích xuất chính xác Vốn hóa, P/E, P/B
+            market_cap = float(data.get('marketCap', 0.0))
+            pe = float(data.get('pe', 0.0))
+            pb = float(data.get('pb', 0.0))
+            
+            # 3. Logic Đánh giá Cổ phiếu (Định giá Thấp / Trung Bình / Cao)
+            # Bạn có thể tự chỉnh sửa các con số 12, 1.5, 20... cho phù hợp với tiêu chuẩn của bạn
+            if pe > 0 and pb > 0:
+                if pe < 12 and pb < 1.5:
+                    danh_gia = "🟢 Định giá thấp"
+                elif pe > 20 or pb > 2.5:
+                    danh_gia = "🔴 Định giá cao"
+                else:
+                    danh_gia = "🟡 Trung bình"
+            else:
+                danh_gia = "🟡 Trung bình"
                 
-        # Trích xuất giá trị vốn hóa
-        market_cap_val = 0.0
-        if market_cap_col and market_cap_col in df.columns:
-            try:
-                # Ép kiểu an toàn
-                market_cap_val = float(df[market_cap_col].iloc[0])
-            except (ValueError, TypeError, IndexError):
-                market_cap_val = 0.0
-                
-        return {
-            "Vốn hóa lưu hành": market_cap_val,
-            "Đánh Giá": str(ichi_status) # Ép kiểu chuỗi để tránh N/A
-        }
-
+            # Trả về đúng 2 cột cho file main.py và ui_layout.py
+            return {
+                "Vốn hóa lưu hành": market_cap,
+                "Đánh Giá": danh_gia
+            }
+            
     except Exception as e:
-        # Trong trường hợp API sập hoàn toàn
         print(f"Lỗi khi cào {ticker}: {e}")
-        return {
-            "Vốn hóa lưu hành": 0.0, 
-            "Đánh Giá": str(ichi_status) if ichi_status else "Lỗi API"
-        }
+        pass
+        
+    # Nếu hệ thống mạng lỗi, trả về mặc định
+    return {
+        "Vốn hóa lưu hành": 0.0,
+        "Đánh Giá": "N/A"
+    }
