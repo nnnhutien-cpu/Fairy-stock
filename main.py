@@ -6,16 +6,14 @@ from ui_layout import render_sidebar, render_market_tab, render_screener_results
 
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
-# [MỚI] Khởi tạo bộ nhớ tạm để ghim dữ liệu không bị mất khi bấm bộ lọc
+# Lưu trữ tạm thời kết quả lọc để không bị mất khi bấm nút Tích cực/Tiêu cực
 if 'scan_results' not in st.session_state:
     st.session_state['scan_results'] = []
 
-# 1. Gọi thanh điều khiển cấu hình bộ lọc từ file UI
 exchange_choice, signal_filter, max_scan = render_sidebar()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền")
 
-# 2. Phân tách Tab giao diện rõ ràng
 tab_market, tab_screener = st.tabs(["📊 TỔNG QUAN VN-INDEX", "🚀 BỘ LỌC CỔ PHIẾU"])
 
 # ==========================================
@@ -26,12 +24,21 @@ with tab_market:
     chart_df, df_today = None, None
 
     if intraday_df is not None and not intraday_df.empty:
-        # [MỚI] Chuẩn hóa tên cột để chống lỗi KeyError: 'close'
-        intraday_df.columns = [str(c).lower() for c in intraday_df.columns]
-        if 'close' not in intraday_df.columns and 'price' in intraday_df.columns:
-            intraday_df['close'] = intraday_df['price']
-            
-        if 'time' in intraday_df.columns:
+        # [BỘ QUY ĐỔI BỌC THÉP] Tự động dò và đổi đúng tên cột dù API trả về bất cứ chữ gì
+        col_mapping = {}
+        for col in intraday_df.columns:
+            lower_col = str(col).lower().strip()
+            if lower_col in ['close', 'price', 'c', 'điểm', 'index', 'indexvalue']:
+                col_mapping[col] = 'close'
+            elif lower_col in ['volume', 'vol', 'v', 'khối lượng']:
+                col_mapping[col] = 'volume'
+            elif lower_col in ['time', 't', 'thời gian']:
+                col_mapping[col] = 'time'
+        
+        intraday_df.rename(columns=col_mapping, inplace=True)
+        
+        # Chỉ chạy nếu đã tìm thấy đủ cột time và volume
+        if 'time' in intraday_df.columns and 'volume' in intraday_df.columns:
             intraday_df['time'] = pd.to_datetime(intraday_df['time'])
             intraday_df['date'] = intraday_df['time'].dt.date
             intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
@@ -82,10 +89,10 @@ with tab_screener:
                 
             status.update(label=f"✅ Đã quét xong! Tiến hành hiển thị dữ liệu nhóm: {signal_filter}", state="complete", expanded=False)
         
-        # [MỚI] Lưu dữ liệu vừa quét vào bộ nhớ tạm
+        # Ghim kết quả vào bộ nhớ tạm
         st.session_state['scan_results'] = results
     
-    # Hiển thị dữ liệu từ bộ nhớ tạm (Giúp bộ lọc Radio Button hoạt động trơn tru)
+    # Render dữ liệu từ bộ nhớ tạm để không bị mất khi bấm đổi Tab hoặc đổi Lọc
     if st.session_state['scan_results']:
         render_screener_results(st.session_state['scan_results'], signal_filter)
     else:
