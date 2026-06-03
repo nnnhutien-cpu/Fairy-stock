@@ -55,20 +55,21 @@ def render_screener_results(results, signal_filter):
             results_df = results_df[results_df['Trạng thái'] == signal_filter]
         
         if not results_df.empty:
-            # Chỉ giữ lại các cột Kỹ thuật, Dòng tiền và 5 đường Ichimoku
+            # Sắp xếp thứ tự hiển thị cột trực quan
             cols_order = [
-                "Mã", "Giá", "GTGD (Tỷ)", "Khối Lượng", "KL TB 20 Phiên",
+                "Mã", "Giá", "GTGD (Tỷ)", "Khối Lượng", "KL TB 20 Phiên", "Đánh Giá",
                 "Tenkan", "Kijun", "Senkou A", "Senkou B", "Chikou", 
                 "Ichimoku_Cloud", "Trạng thái"
             ]
             results_df = results_df[[c for c in cols_order if c in results_df.columns]]
             
+            # CẤU HÌNH ĐỊNH DẠNG SỐ CÓ DẤU PHẨY THEO YÊU CẦU CỦA BẠN
             st.dataframe(
                 results_df, use_container_width=True, hide_index=True,
                 column_config={
-                    "Khối Lượng": st.column_config.NumberColumn(format="%d"),
+                    "Khối Lượng": st.column_config.NumberColumn(format="%d"), # Tự động thêm dấu phẩy hàng nghìn
                     "KL TB 20 Phiên": st.column_config.NumberColumn(format="%d"),
-                    "Giá": st.column_config.NumberColumn(format="%.2f"),
+                    "Giá": st.column_config.NumberColumn(format="%.2f"), # Hiện 2 chữ số thập phân gọn đẹp
                     "GTGD (Tỷ)": st.column_config.NumberColumn(format="%.2f"),
                     "Tenkan": st.column_config.NumberColumn(format="%.2f"),
                     "Kijun": st.column_config.NumberColumn(format="%.2f"),
