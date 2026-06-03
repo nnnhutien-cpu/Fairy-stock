@@ -1,5 +1,6 @@
-from vnstock import stock_historical_data
+from vnstock import stock_historical_data, listing_companies
 from datetime import datetime, timedelta
+import streamlit as st
 
 def get_stock_data(symbol, days_back=365):
     """Cào dữ liệu cổ phiếu (Lấy lùi lại 1 năm để đủ tính MA200)"""
@@ -26,3 +27,15 @@ def get_vnindex_data():
         return df
     except Exception as e:
         return None
+
+@st.cache_data(ttl=86400) # Bộ nhớ đệm: Chỉ tải danh sách 1 lần/ngày cho nhẹ web
+def get_all_tickers(exchange='all'):
+    """Lấy danh sách mã chứng khoán theo sàn"""
+    try:
+        df = listing_companies()
+        if exchange != 'all':
+            df = df[df['comGroupCode'] == exchange] # Lọc HOSE, HNX, UPCOM
+        return df['ticker'].tolist()
+    except Exception as e:
+        # Danh sách dự phòng nếu vnstock bảo trì
+        return ["HPG", "SSI", "VND", "FPT", "TCB", "MBB", "MWG", "VIC", "VHM", "VNM"]
