@@ -18,7 +18,7 @@ st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 # KHỞI TẠO 3 TAB GIAO DIỆN
 tab_market, tab_screener, tab_simulation = st.tabs([
     "📊 TỔNG QUAN VN-INDEX", 
-    "🚀 BỘ LỌC SIÊU CỔ PHIẾU", 
+    "🚀 BỘ LỌC CỔ PHIẾU", 
     "🔮 MÔ PHỎNG ICHIMOKU"
 ])
 
@@ -115,7 +115,7 @@ with tab_screener:
         st.caption(f"Hãy cấu hình thông số ở Sidebar trái và bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' để bắt đầu.")
 
 # ==========================================
-# XỬ LÝ TAB 3: MÔ PHỎNG ICHIMOKU ĐỘNG (ĐÃ THÊM VOLUME)
+# XỬ LÝ TAB 3: MÔ PHỎNG ICHIMOKU (ĐÃ THÊM MÀU NẾN VOLUME XANH/ĐỎ)
 # ==========================================
 with tab_simulation:
     st.subheader("🔮 Phòng Thí Nghiệm Chỉ Báo Kỹ Thuật Ichimoku")
@@ -146,20 +146,21 @@ with tab_simulation:
                 plot_df['Ngay'] = pd.to_datetime(plot_df['time']).dt.strftime('%Y-%m-%d')
                 plot_df.set_index('Ngay', inplace=True)
             
-            # Tách riêng dữ liệu Giá và dữ liệu Khối lượng (Volume)
+            # Tách riêng dữ liệu Giá
             chart_data = plot_df[['close', 'Tenkan', 'Kijun', 'Senkou A', 'Senkou B']]
             chart_data.columns = ['Giá Hiện Tại', 'Tenkan (Chuyển đổi)', 'Kijun (Cơ sở)', 'Senkou A (Biên mây 1)', 'Senkou B (Biên mây 2)']
             
-            vol_data = plot_df[['volume']]
-            vol_data.columns = ['Khối Lượng Giao Dịch']
+            # [MỚI] TẠO CỘT MÀU SẮC CHO VOLUME BẰNG CÁCH SO SÁNH GIÁ ĐÓNG VÀ GIÁ MỞ
+            plot_df['Màu Sắc'] = ['#00C853' if c >= o else '#FF1744' for c, o in zip(plot_df['close'], plot_df['open'])]
+            plot_df['Khối Lượng'] = plot_df['volume']
             
             # Biểu đồ 1: Đường Giá và Ichimoku
             st.markdown(f"**📈 Đồ thị Đường Giá & Mây Ichimoku mã {sim_ticker}**")
             st.line_chart(chart_data, height=400)
             
-            # Biểu đồ 2: Cột Khối lượng (Volume) nằm ngay bên dưới
+            # Biểu đồ 2: Cột Khối lượng (Volume) Xanh/Đỏ y hệt TradingView
             st.markdown(f"**📊 Khối Lượng Giao Dịch (Volume)**")
-            st.bar_chart(vol_data, height=150)
+            st.bar_chart(plot_df, y='Khối Lượng', color='Màu Sắc', height=150)
             
             st.info(f"💡 **Mẹo thực chiến cho mã {sim_ticker}:** Hãy thử thay đổi thông số nâng cao ở Sidebar trái, đồ thị trên sẽ lập tức biến đổi Real-time để bạn tìm ra bộ khung chu kỳ tối ưu nhất cho riêng mình!")
         else:
