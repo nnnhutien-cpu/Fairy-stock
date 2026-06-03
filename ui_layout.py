@@ -33,7 +33,8 @@ def render_market_tab(chart_df, df_today):
             today_vol_total = latest_point.get('Vol_Hôm_Nay', 0.0)
             
             with col1:
-                st.metric(label=f"VN-INDEX ({current_time})", value=f"{close_price:.2f}")
+                # Đã thêm định dạng dấu phẩy cho điểm VN-INDEX
+                st.metric(label=f"VN-INDEX ({current_time})", value=f"{close_price:,.2f}")
             with col2:
                 st.metric(label="Tổng Khối Lượng Hôm Nay", value=f"{int(today_vol_total):,}")
             with col3:
@@ -55,27 +56,26 @@ def render_screener_results(results, signal_filter):
             results_df = results_df[results_df['Trạng thái'] == signal_filter]
         
         if not results_df.empty:
-            # Sắp xếp thứ tự hiển thị cột trực quan
             cols_order = [
-                "Mã", "Giá", "GTGD (Tỷ)", "Khối Lượng", "KL TB 20 Phiên", "Đánh Giá",
+                "Mã", "Giá", "GTGD (Tỷ)", "Khối Lượng", "KL TB 20 Phiên",
                 "Tenkan", "Kijun", "Senkou A", "Senkou B", "Chikou", 
                 "Ichimoku_Cloud", "Trạng thái"
             ]
             results_df = results_df[[c for c in cols_order if c in results_df.columns]]
             
-            # CẤU HÌNH ĐỊNH DẠNG SỐ CÓ DẤU PHẨY THEO YÊU CẦU CỦA BẠN
+            # CẤU HÌNH ĐỊNH DẠNG: Đã đổi sang chuẩn có dấu phẩy (,.0f) cho đẹp mắt
             st.dataframe(
                 results_df, use_container_width=True, hide_index=True,
                 column_config={
-                    "Khối Lượng": st.column_config.NumberColumn(format="%d"), # Tự động thêm dấu phẩy hàng nghìn
-                    "KL TB 20 Phiên": st.column_config.NumberColumn(format="%d"),
-                    "Giá": st.column_config.NumberColumn(format="%.2f"), # Hiện 2 chữ số thập phân gọn đẹp
-                    "GTGD (Tỷ)": st.column_config.NumberColumn(format="%.2f"),
-                    "Tenkan": st.column_config.NumberColumn(format="%.2f"),
-                    "Kijun": st.column_config.NumberColumn(format="%.2f"),
-                    "Senkou A": st.column_config.NumberColumn(format="%.2f"),
-                    "Senkou B": st.column_config.NumberColumn(format="%.2f"),
-                    "Chikou": st.column_config.NumberColumn(format="%.2f")
+                    "Khối Lượng": st.column_config.NumberColumn(format=",.0f"),
+                    "KL TB 20 Phiên": st.column_config.NumberColumn(format=",.0f"),
+                    "Giá": st.column_config.NumberColumn(format=",.0f"), # Ví dụ: 27,300
+                    "GTGD (Tỷ)": st.column_config.NumberColumn(format=",.2f"), # Vẫn giữ 2 số thập phân cho tỷ đồng
+                    "Tenkan": st.column_config.NumberColumn(format=",.0f"),
+                    "Kijun": st.column_config.NumberColumn(format=",.0f"),
+                    "Senkou A": st.column_config.NumberColumn(format=",.0f"),
+                    "Senkou B": st.column_config.NumberColumn(format=",.0f"),
+                    "Chikou": st.column_config.NumberColumn(format=",.0f")
                 }
             )
             st.toast("Đã hiển thị danh sách siêu lọc kỹ thuật thành công!", icon="🧚‍♀️")
