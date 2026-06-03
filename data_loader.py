@@ -1,11 +1,17 @@
 from vnstock import stock_historical_data, listing_companies
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import streamlit as st
+
+def get_vn_time():
+    """Hàm ép máy chủ Mỹ phải dùng đồng hồ múi giờ Việt Nam (GMT+7)"""
+    return datetime.now(ZoneInfo('Asia/Ho_Chi_Minh'))
 
 def get_stock_data(symbol, days_back=365):
     """Cào dữ liệu cổ phiếu (Lấy lùi lại 1 năm để đủ tính MA200)"""
-    end_date = datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+    now_vn = get_vn_time()
+    end_date = now_vn.strftime('%Y-%m-%d')
+    start_date = (now_vn - timedelta(days=days_back)).strftime('%Y-%m-%d')
     try:
         df = stock_historical_data(symbol=symbol, 
                                    start_date=start_date, 
@@ -16,9 +22,10 @@ def get_stock_data(symbol, days_back=365):
         return None
 
 def get_vnindex_data():
-    """Cào dữ liệu chỉ số VN-INDEX 7 ngày gần nhất"""
-    end_date = datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+    """Cào dữ liệu chỉ số VN-INDEX Real-time"""
+    now_vn = get_vn_time()
+    end_date = now_vn.strftime('%Y-%m-%d')
+    start_date = (now_vn - timedelta(days=7)).strftime('%Y-%m-%d')
     try:
         df = stock_historical_data(symbol='VNINDEX', 
                                    start_date=start_date, 
