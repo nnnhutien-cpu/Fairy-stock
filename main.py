@@ -15,7 +15,7 @@ exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Định Giá")
 
-tab_market, tab_screener = st.tabs(["📊 TỔNG QUAN VN-INDEX", "🚀 BỘ LỌC SIÊU CỔ PHIẾU"])
+tab_market, tab_screener = st.tabs(["📊 TỔNG QUAN VN-INDEX", "🚀 BỘ LỌC CỔ PHIẾU"])
 
 with tab_market:
     intraday_df = get_intraday_vnindex()
