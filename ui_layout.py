@@ -50,11 +50,24 @@ def render_market_tab(chart_df, df_today):
 
 def render_screener_results(results, signal_filter):
     if results:
+        # Chuyển list kết quả thành DataFrame
         results_df = pd.DataFrame(results)
+        
+        # Lọc trạng thái Tích cực/Tiêu cực
         if signal_filter != "Tất cả":
             results_df = results_df[results_df['Trạng thái'] == signal_filter]
         
         if not results_df.empty:
+            # Sắp xếp lại thứ tự cột cho đẹp mắt
+            cols_order = [
+                "Mã", "Giá", "GTGD (Tỷ)", "Khối Lượng", "KL TB 20 Phiên",
+                "P/E", "P/B", "Đánh Giá", 
+                "Tenkan", "Kijun", "Senkou A", "Senkou B", "Chikou", 
+                "Ichimoku_Cloud", "Trạng thái"
+            ]
+            # Chỉ lấy các cột tồn tại để tránh lỗi
+            results_df = results_df[[c for c in cols_order if c in results_df.columns]]
+            
             st.dataframe(
                 results_df, use_container_width=True, hide_index=True,
                 column_config={
@@ -62,6 +75,8 @@ def render_screener_results(results, signal_filter):
                     "KL TB 20 Phiên": st.column_config.NumberColumn(format="%d"),
                     "Giá": st.column_config.NumberColumn(format="%.2f"),
                     "GTGD (Tỷ)": st.column_config.NumberColumn(format="%.2f"),
+                    "P/E": st.column_config.NumberColumn(format="%.2f"),
+                    "P/B": st.column_config.NumberColumn(format="%.2f"),
                     "Tenkan": st.column_config.NumberColumn(format="%.2f"),
                     "Kijun": st.column_config.NumberColumn(format="%.2f"),
                     "Senkou A": st.column_config.NumberColumn(format="%.2f"),
