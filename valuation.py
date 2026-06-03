@@ -1,52 +1,74 @@
-import requests
+import pandas as pd
 
-def get_stock_valuation(ticker, ichi_status):
+def get_stock_valuation(ticker, ichi_status, price_val):
     """
-    Hàm cào dữ liệu trực tiếp từ API gốc (Không dùng vnstock để tránh lỗi phiên bản)
-    Lấy chính xác Vốn hóa lưu hành và tính toán Đánh giá (Thấp/Cao/Trung bình)
+    Hàm cào dữ liệu định giá Cơ bản (P/E, P/B, Vốn hóa) 
+    và kết hợp với Kỹ thuật (Ichimoku) để ra đánh giá.
     """
+    pe, pb, von_hoa = 0.0, 0.0, 0.0
+    
+    # 1. Cào Overview để lấy Khối lượng lưu hành (Tính Vốn hóa)
     try:
-        # 1. Gọi trực tiếp API máy chủ gốc
-        url = f"https://apipubaws.tcbs.com.vn/tcanalysis/v1/ticker/{ticker}/overview"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        }
-        
-        # Lấy dữ liệu với thời gian chờ tối đa 5 giây
-        response = requests.get(url, headers=headers, timeout=5)
-        
-        if response.status_code == 200:
-            data = response.json()
+        try:
+            from vnstock.stock import ticker_overview
+        except ImportError:
+            from vnstock import ticker_overview
             
-            # 2. Trích xuất chính xác Vốn hóa, P/E, P/B
-            market_cap = float(data.get('marketCap', 0.0))
-            pe = float(data.get('pe', 0.0))
-            pb = float(data.get('pb', 0.0))
+        df_overview = ticker_overview(ticker)
+        if df_overview is not None and not df_overview.empty:
+            df_overview.columns = [str(c).lower().strip() for c in df_overview.columns]
             
-            # 3. Logic Đánh giá Cổ phiếu (Định giá Thấp / Trung Bình / Cao)
-            # Bạn có thể tự chỉnh sửa các con số 12, 1.5, 20... cho phù hợp với tiêu chuẩn của bạn
-            if pe > 0 and pb > 0:
-                if pe < 12 and pb < 1.5:
-                    danh_gia = "🟢 Định giá thấp"
-                elif pe > 20 or pb > 2.5:
-                    danh_gia = "🔴 Định giá cao"
-                else:
-                    danh_gia = "🟡 Trung bình"
-            else:
-                danh_gia = "🟡 Trung bình"
-                
-            # Trả về đúng 2 cột cho file main.py và ui_layout.py
-            return {
-                "Vốn hóa lưu hành": market_cap,
-                "Đánh Giá": danh_gia
-            }
+            # Tính Vốn hóa (Market Cap)
+            if 'outstandingshare' in df_overview.columns:
+                # Giá vnstock đôi khi trả về 22.5 (Ngàn VNĐ) hoặc 22500 (VNĐ), ta chuẩn hóa về VNĐ
+                p_vnd = price_val * 1000 if price_val < 500 else price_val
+                out_share = float(df_overview['outstandingshare'].iloc[0]) # Đơn vị: Triệu CP
+                von_hoa = (out_share * p_vnd) / 1000 # Ra đơn vị Tỷ VNĐ
             
+            # Nếu trong overview có sẵn pe, pb thì lấy luôn
+            if 'pe' in df_overview.columns: pe = df_overview['pe'].iloc[0]
+            if 'pb' in df_overview.columns: pb = df_overview['pb'].iloc[0]
     except Exception as e:
-        print(f"Lỗi khi cào {ticker}: {e}")
         pass
-        
-    # Nếu hệ thống mạng lỗi, trả về mặc định
+
+    # 2. Nếu P/E và P/B vẫn bằng 0, ta gọi "đệ tử" Financial Ratio ra để đào dữ liệu
+    if pe == 0.0 and pb == 0.0:
+        try:
+            try:
+                from vnstock.stock import financial_ratio
+            except ImportError:
+                from vnstock import financial_ratio
+                
+            df_ratio = financial_ratio(ticker, 'quarterly', True)
+            if df_ratio is not None and not df_ratio.empty:
+                df_ratio.columns = [str(c).lower().strip() for c in df_ratio.columns]
+                
+                if 'pe' in df_ratio.columns: pe = df_ratio['pe'].iloc[0]
+                elif 'pricetoearning' in df_ratio.columns: pe = df_ratio['pricetoearning'].iloc[0]
+                    
+                if 'pb' in df_ratio.columns: pb = df_ratio['pb'].iloc[0]
+                elif 'pricetobook' in df_ratio.columns: pb = df_ratio['pricetobook'].iloc[0]
+        except Exception as e:
+            pass
+
+    # Làm sạch số liệu (Xóa bỏ các số lỗi)
+    pe = round(float(pe), 2) if pd.notna(pe) else 0.0
+    pb = round(float(pb), 2) if pd.notna(pb) else 0.0
+    von_hoa = round(float(von_hoa), 2) if pd.notna(von_hoa) else 0.0
+
+    # THUẬT TOÁN ĐỊNH GIÁ KẾT HỢP ICHIMOKU
+    if pe == 0.0 and pb == 0.0:
+        danh_gia = "⚠️ Đang tính toán"
+    elif "Dưới Mây" in str(ichi_status):
+        danh_gia = "📉 Định giá Thấp (Rẻ)"
+    elif "Trên Mây" in str(ichi_status):
+        danh_gia = "📈 Định giá Cao (Đắt)"
+    else:
+        danh_gia = "⚖️ Hợp lý (Trong mây)"
+
     return {
-        "Vốn hóa lưu hành": 0.0,
-        "Đánh Giá": "N/A"
+        "P/E": pe,
+        "P/B": pb,
+        "Vốn Hóa (Tỷ)": von_hoa,
+        "Đánh Giá": danh_gia
     }
