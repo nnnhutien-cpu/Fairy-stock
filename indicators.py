@@ -1,25 +1,77 @@
-import streamlit as st
 import pandas as pd
+import numpy as np
 
-def render_sidebar():
-    with st.sidebar:
-        st.title("🧚‍♀️ CÔ TIÊN STOCK")
-        st.caption("Hệ thống phân tích thông minh")
-        st.divider()
-        st.header("⚙️ CẤU HÌNH BỘ LỌC")
-        exchange_choice = st.selectbox("Chọn sàn giao dịch:", ["HOSE", "HNX", "UPCOM", "Tất cả 3 sàn"])
-        signal_filter = st.radio("Bộ lọc tín hiệu kỹ thuật:", ["Tất cả", "🟢 Tích cực", "🔴 Tiêu cực"])
-        max_scan = st.slider("Số lượng mã quét tối đa:", 10, 300, 80)
-        
-        st.divider()
-        # BẢNG TÙY CHỈNH THÔNG SỐ ICHIMOKU DÀNH CHO DÂN PRO
-        with st.expander("🛠️ TÙY CHỈNH ICHIMOKU (NÂNG CAO)", expanded=False):
-            st.caption("Mặc định chuẩn Nhật: 9 - 26 - 52 - 26")
-            p_tenkan = st.number_input("Tenkan-sen (Đường chuyển đổi)", value=9, step=1)
-            p_kijun = st.number_input("Kijun-sen (Đường cơ sở)", value=26, step=1)
-            p_senkou_b = st.number_input("Senkou Span B (Đỉnh/Đáy mây)", value=52, step=1)
-            p_shift = st.number_input("Độ dịch chuyển Mây (Shift)", value=26, step=1)
-            
-    return exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
+def calculate_technical_signals(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=52, p_shift=26):
+    """Tính toán Ichimoku linh hoạt theo thông số User truyền vào"""
+    if df is None or len(df) < max(p_senkou_b, 60):
+        return None
+    
+    df.columns = [str(c).lower().strip() for c in df.columns]
+    
+    # 1. TÍNH TOÁN RSI & MA
+    df['MA20'] = df['close'].rolling(window=20).mean()
+    delta = df['close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df['RSI14'] = 100 - (100 / (1 + rs))
+    
+    # 2. TÍNH TOÁN HỆ SINH THÁI ICHIMOKU (TÙY CHỈNH NĂNG ĐỘNG)
+    period_high_t = df['high'].rolling(window=p_tenkan).max()
+    period_low_t = df['low'].rolling(window=p_tenkan).min()
+    df['Tenkan'] = (period_high_t + period_low_t) / 2
 
-def render_market_tab
+    period_high_k = df['high'].rolling(window=p_kijun).max()
+    period_low_k = df['low'].rolling(window=p_kijun).min()
+    df['Kijun'] = (period_high_k + period_low_k) / 2
+
+    senkou_a = (df['Tenkan'] + df['Kijun']) / 2
+    df['Senkou_A_Current'] = senkou_a.shift(p_shift)
+
+    period_high_s = df['high'].rolling(window=p_senkou_b).max()
+    period_low_s = df['low'].rolling(window=p_senkou_b).min()
+    senkou_b = (period_high_s + period_low_s) / 2
+    df['Senkou_B_Current'] = senkou_b.shift(p_shift)
+
+    # 3. LẤY DỮ LIỆU PHIÊN CUỐI CÙNG
+    latest = df.iloc[-1]
+    price_val = latest['close']
+
+    if price_val < 500: 
+        gtgd_ty = (price_val * 1000 * latest['volume']) / 1_000_000_000
+    else: 
+        gtgd_ty = (price_val * latest['volume']) / 1_000_000_000
+
+    if gtgd_ty < 20: 
+        return None
+
+    senkou_a_val = latest['Senkou_A_Current']
+    senkou_b_val = latest['Senkou_B_Current']
+    
+    cloud_top = max(senkou_a_val, senkou_b_val)
+    cloud_bottom = min(senkou_a_val, senkou_b_val)
+
+    if price_val > cloud_top:
+        ichi_status = "☁️ Trên Mây"
+    elif price_val < cloud_bottom:
+        ichi_status = "🌧️ Dưới Mây"
+    else:
+        ichi_status = "🌫️ Trong Mây"
+
+    if latest['close'] > latest['MA20'] and latest['RSI14'] > 50 and price_val > cloud_top:
+        status_signal = "🟢 Tích cực"
+    else:
+        status_signal = "🔴 Tiêu cực"
+
+    return {
+        "Mã": ticker,
+        "Giá": price_val,
+        "GTGD (Tỷ)": round(gtgd_ty, 2),
+        "Khối Lượng": int(latest['volume']),
+        "Ichimoku_Tenkan": round(latest['Tenkan'], 2),
+        "Ichimoku_Kijun": round(latest['Kijun'], 2),
+        "Senkou A": round(senkou_a_val, 2),
+        "Senkou B": round(senkou_b_val, 2),
+        "Ichimoku_Cloud": ichi_status,
+        "Trạng thái": status_signal
+    }
