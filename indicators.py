@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 def calculate_technical_signals(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=52, p_shift=26):
-    """Tính toán Ichimoku linh hoạt (Đầy đủ 5 đường chuẩn)"""
+    """Tính toán Ichimoku 5 đường chuẩn Fireant"""
     if df is None or len(df) < max(p_senkou_b, 60):
         return None
     
@@ -16,28 +16,19 @@ def calculate_technical_signals(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=5
     rs = gain / loss
     df['RSI14'] = 100 - (100 / (1 + rs))
     
-    # 2. TÍNH TOÁN HỆ SINH THÁI ICHIMOKU (ĐỦ 5 ĐƯỜNG)
-    # Đường 1: Tenkan-sen
-    period_high_t = df['high'].rolling(window=p_tenkan).max()
-    period_low_t = df['low'].rolling(window=p_tenkan).min()
-    df['Tenkan'] = (period_high_t + period_low_t) / 2
+    # 2. HỆ SINH THÁI ICHIMOKU (5 ĐƯỜNG)
+    df['Tenkan'] = (df['high'].rolling(window=p_tenkan).max() + df['low'].rolling(window=p_tenkan).min()) / 2
+    df['Kijun'] = (df['high'].rolling(window=p_kijun).max() + df['low'].rolling(window=p_kijun).min()) / 2
 
-    # Đường 2: Kijun-sen
-    period_high_k = df['high'].rolling(window=p_kijun).max()
-    period_low_k = df['low'].rolling(window=p_kijun).min()
-    df['Kijun'] = (period_high_k + period_low_k) / 2
-
-    # Đường 3: Senkou Span A
     senkou_a = (df['Tenkan'] + df['Kijun']) / 2
     df['Senkou_A_Current'] = senkou_a.shift(p_shift)
 
-    # Đường 4: Senkou Span B
     period_high_s = df['high'].rolling(window=p_senkou_b).max()
     period_low_s = df['low'].rolling(window=p_senkou_b).min()
     senkou_b = (period_high_s + period_low_s) / 2
     df['Senkou_B_Current'] = senkou_b.shift(p_shift)
 
-    # Đường 5: Chikou Span (Đường trễ)
+    # Chikou Span (Đường trễ) - Giá trị của nó ở phiên hiện tại chính là Giá đóng cửa
     df['Chikou'] = df['close']
 
     # 3. LẤY DỮ LIỆU PHIÊN CUỐI CÙNG
@@ -54,7 +45,6 @@ def calculate_technical_signals(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=5
 
     senkou_a_val = latest['Senkou_A_Current']
     senkou_b_val = latest['Senkou_B_Current']
-    chikou_val = latest['Chikou']
     
     cloud_top = max(senkou_a_val, senkou_b_val)
     cloud_bottom = min(senkou_a_val, senkou_b_val)
@@ -76,11 +66,11 @@ def calculate_technical_signals(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=5
         "Giá": price_val,
         "GTGD (Tỷ)": round(gtgd_ty, 2),
         "Khối Lượng": int(latest['volume']),
-        "Ichimoku_Tenkan": round(latest['Tenkan'], 2),
-        "Ichimoku_Kijun": round(latest['Kijun'], 2),
+        "Tenkan": round(latest['Tenkan'], 2),
+        "Kijun": round(latest['Kijun'], 2),
         "Senkou A": round(senkou_a_val, 2),
         "Senkou B": round(senkou_b_val, 2),
-        "Ichimoku_Chikou": round(chikou_val, 2),
+        "Chikou": round(latest['Chikou'], 2),
         "Ichimoku_Cloud": ichi_status,
         "Trạng thái": status_signal
     }
