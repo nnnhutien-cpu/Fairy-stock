@@ -48,6 +48,29 @@ def render_market_tab(chart_df, df_today):
     else:
         st.warning("Đang kết nối dữ liệu Real-time hoặc thị trường đang đóng cửa...")
 
+# =========================================================
+# [MỚI] CÁC HÀM TỰ ĐỘNG PHỐI MÀU NỀN THEO ĐIỀU KIỆN 
+# =========================================================
+def color_dong_tien(val):
+    """Tô màu nền dịu mắt cho cột Dòng Tiền"""
+    if val == "🔥 Tiền Vào Mạnh":
+        return "background-color: rgba(0, 200, 83, 0.25); color: #00796B; font-weight: bold;"
+    elif val == "💤 Tiền Yếu":
+        return "background-color: rgba(255, 23, 68, 0.15); color: #C62828;"
+    elif val == "⚡ Có Tín Hiệu":
+        return "background-color: rgba(255, 235, 59, 0.3); color: #F57F17;"
+    return ""
+
+def color_danh_gia(val):
+    """Tô màu nền dịu mắt cho cột Đánh Giá (Mây Ichimoku)"""
+    if val == "📉 Định giá Thấp":
+        return "background-color: rgba(0, 200, 83, 0.25); color: #00796B; font-weight: bold;"
+    elif val == "📈 Định giá Cao":
+        return "background-color: rgba(255, 23, 68, 0.15); color: #C62828;"
+    elif val == "⚖️ Hợp lý":
+        return "background-color: rgba(240, 242, 246, 1); color: #31333F;"
+    return ""
+
 def render_screener_results(results, signal_filter):
     if results:
         results_df = pd.DataFrame(results)
@@ -55,7 +78,6 @@ def render_screener_results(results, signal_filter):
             results_df = results_df[results_df['Trạng thái'] == signal_filter]
         
         if not results_df.empty:
-            # [MỚI] Sắp xếp cột chứa thêm cột "Dòng Tiền" nằm ngay sau cột Đánh Giá
             cols_order = [
                 "Mã", "Giá", "GTGD (Tỷ)", "Khối Lượng", "KL TB 20 Phiên", "Đánh Giá", "Dòng Tiền",
                 "Tenkan", "Kijun", "Senkou A", "Senkou B", "Chikou", 
@@ -63,7 +85,7 @@ def render_screener_results(results, signal_filter):
             ]
             results_df = results_df[[c for c in cols_order if c in results_df.columns]]
             
-            # Xử lý format dấu phẩy hàng nghìn bằng Pandas Style mượt mà
+            # 1. Định dạng cấu hình hiển thị dấu phẩy hàng nghìn và số thập phân
             format_dict = {
                 "Giá": "{:,.0f}",
                 "Khối Lượng": "{:,.0f}",
@@ -76,7 +98,12 @@ def render_screener_results(results, signal_filter):
                 "Chikou": "{:,.0f}"
             }
             valid_format_dict = {k: v for k, v in format_dict.items() if k in results_df.columns}
-            styled_df = results_df.style.format(valid_format_dict)
+            
+            # 2. ÁP DỤNG ĐỊNH DẠNG SỐ VÀ TÔ MÀU BẢNG ĐIỆN ĐỘNG
+            styled_df = (results_df.style
+                         .format(valid_format_dict)
+                         .map(color_dong_tien, subset=['Dòng Tiền'] if 'Dòng Tiền' in results_df.columns else [])
+                         .map(color_danh_gia, subset=['Đánh Giá'] if 'Đánh Giá' in results_df.columns else []))
             
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
             st.toast("Đã hiển thị danh sách siêu lọc kỹ thuật thành công!", icon="🧚‍♀️")
