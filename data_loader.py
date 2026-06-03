@@ -45,4 +45,19 @@ def get_all_tickers(exchange='all'):
         return df['ticker'].tolist()
     except Exception as e:
         # Danh sách dự phòng nếu vnstock bảo trì
-        return ["HPG", "SSI", "VND", "FPT", "TCB", "MBB", "MWG", "VIC", "VHM", "VNM"]
+        return ["HPG", "SSI", "VND", "FPT", "TCB", "MBB", "MWG", "VIC", "VHM", "VNM"] 
+        @st.cache_data(ttl=300) # Bộ nhớ đệm tự làm mới sau 5 phút
+def get_intraday_vnindex():
+    """Lấy dữ liệu VN-INDEX khung 5 phút để vẽ biểu đồ thanh khoản"""
+    now_vn = get_vn_time()
+    # Lấy lùi lại 5 ngày để đảm bảo luôn có dữ liệu của ngày hôm qua (trừ T7, CN)
+    start_date = (now_vn - timedelta(days=5)).strftime('%Y-%m-%d')
+    end_date = now_vn.strftime('%Y-%m-%d')
+    try:
+        df = stock_historical_data(symbol='VNINDEX', 
+                                   start_date=start_date, 
+                                   end_date=end_date, 
+                                   resolution="5m", type="index")
+        return df
+    except Exception as e:
+        return None
