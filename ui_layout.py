@@ -33,7 +33,7 @@ def render_market_tab(chart_df, df_today):
             today_vol_total = latest_point.get('Vol_Hôm_Nay', 0.0)
             
             with col1:
-                st.metric(label=f"VN-INDEX ({current_time})", value=f"{close_price:.2f}")
+                st.metric(label=f"VN-INDEX ({current_time})", value=f"{close_price:,.2f}")
             with col2:
                 st.metric(label="Tổng Khối Lượng Hôm Nay", value=f"{int(today_vol_total):,}")
             with col3:
@@ -55,28 +55,31 @@ def render_screener_results(results, signal_filter):
             results_df = results_df[results_df['Trạng thái'] == signal_filter]
         
         if not results_df.empty:
-            # Chỉ giữ lại các cột Kỹ thuật, Dòng tiền và 5 đường Ichimoku
+            # 1. KHÔI PHỤC CỘT "Đánh Giá"
             cols_order = [
-                "Mã", "Giá", "GTGD (Tỷ)", "Khối Lượng", "KL TB 20 Phiên",
+                "Mã", "Giá", "GTGD (Tỷ)", "Khối Lượng", "KL TB 20 Phiên", "Đánh Giá",
                 "Tenkan", "Kijun", "Senkou A", "Senkou B", "Chikou", 
                 "Ichimoku_Cloud", "Trạng thái"
             ]
             results_df = results_df[[c for c in cols_order if c in results_df.columns]]
             
-            st.dataframe(
-                results_df, use_container_width=True, hide_index=True,
-                column_config={
-                    "Khối Lượng": st.column_config.NumberColumn(format="%d"),
-                    "KL TB 20 Phiên": st.column_config.NumberColumn(format="%d"),
-                    "Giá": st.column_config.NumberColumn(format="%.2f"),
-                    "GTGD (Tỷ)": st.column_config.NumberColumn(format="%.2f"),
-                    "Tenkan": st.column_config.NumberColumn(format="%.2f"),
-                    "Kijun": st.column_config.NumberColumn(format="%.2f"),
-                    "Senkou A": st.column_config.NumberColumn(format="%.2f"),
-                    "Senkou B": st.column_config.NumberColumn(format="%.2f"),
-                    "Chikou": st.column_config.NumberColumn(format="%.2f")
-                }
-            )
+            # 2. XỬ LÝ DẤU PHẨY ĐÚNG CHUẨN (Giúp hệ thống không báo lỗi và vẫn xếp hạng được)
+            format_dict = {
+                "Giá": "{:,.0f}",
+                "Khối Lượng": "{:,.0f}",
+                "KL TB 20 Phiên": "{:,.0f}",
+                "GTGD (Tỷ)": "{:,.2f}",
+                "Tenkan": "{:,.0f}",
+                "Kijun": "{:,.0f}",
+                "Senkou A": "{:,.0f}",
+                "Senkou B": "{:,.0f}",
+                "Chikou": "{:,.0f}"
+            }
+            # Lọc các cột có tồn tại để áp dụng định dạng
+            valid_format_dict = {k: v for k, v in format_dict.items() if k in results_df.columns}
+            styled_df = results_df.style.format(valid_format_dict)
+            
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
             st.toast("Đã hiển thị danh sách siêu lọc kỹ thuật thành công!", icon="🧚‍♀️")
         else:
             st.info(f"Không có mã nào thuộc nhóm '{signal_filter}' đạt điều kiện.")
