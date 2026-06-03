@@ -2,14 +2,17 @@ import pandas as pd
 import numpy as np
 
 def calculate_technical_signals(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=52, p_shift=26):
-    """Tính toán Ichimoku 5 đường chuẩn Fireant"""
+    """Tính toán Ichimoku 5 đường chuẩn Fireant & Khối lượng TB 20 phiên"""
     if df is None or len(df) < max(p_senkou_b, 60):
         return None
     
     df.columns = [str(c).lower().strip() for c in df.columns]
     
-    # 1. TÍNH TOÁN RSI & MA
+    # 1. TÍNH TOÁN RSI, MA Giá & MA KHỐI LƯỢNG
     df['MA20'] = df['close'].rolling(window=20).mean()
+    # [MỚI] Tính Khối lượng trung bình 20 phiên
+    df['Vol_MA20'] = df['volume'].rolling(window=20).mean() 
+    
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -28,7 +31,7 @@ def calculate_technical_signals(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=5
     senkou_b = (period_high_s + period_low_s) / 2
     df['Senkou_B_Current'] = senkou_b.shift(p_shift)
 
-    # Chikou Span (Đường trễ) - Giá trị của nó ở phiên hiện tại chính là Giá đóng cửa
+    # Chikou Span (Đường trễ)
     df['Chikou'] = df['close']
 
     # 3. LẤY DỮ LIỆU PHIÊN CUỐI CÙNG
@@ -66,6 +69,7 @@ def calculate_technical_signals(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=5
         "Giá": price_val,
         "GTGD (Tỷ)": round(gtgd_ty, 2),
         "Khối Lượng": int(latest['volume']),
+        "KL TB 20 Phiên": int(latest['Vol_MA20']) if pd.notna(latest['Vol_MA20']) else 0,
         "Tenkan": round(latest['Tenkan'], 2),
         "Kijun": round(latest['Kijun'], 2),
         "Senkou A": round(senkou_a_val, 2),
