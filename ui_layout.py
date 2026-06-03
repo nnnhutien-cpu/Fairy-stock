@@ -6,7 +6,6 @@ def render_sidebar():
         st.title("🧚‍♀️ CÔ TIÊN STOCK")
         st.caption("Hệ thống phân tích thông minh")
         st.divider()
-        
         st.header("⚙️ CẤU HÌNH BỘ LỌC")
         exchange_choice = st.selectbox("Chọn sàn giao dịch:", ["HOSE", "HNX", "UPCOM", "Tất cả 3 sàn"])
         signal_filter = st.radio("Bộ lọc tín hiệu kỹ thuật:", ["Tất cả", "🟢 Tích cực", "🔴 Tiêu cực"])
@@ -20,14 +19,6 @@ def render_sidebar():
             p_kijun = st.number_input("Kijun-sen", value=26, step=1)
             p_senkou_b = st.number_input("Senkou B", value=52, step=1)
             p_shift = st.number_input("Shift", value=26, step=1)
-            
-        st.divider()
-        # Nút dọn dẹp và làm mới dữ liệu
-        if st.button("🔄 Lấy dữ liệu mới nhất", use_container_width=True, type="primary"):
-            st.cache_data.clear()
-            if hasattr(st, 'cache_resource'):
-                st.cache_resource.clear()
-            st.rerun() 
             
     return exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
 
@@ -59,41 +50,34 @@ def render_market_tab(chart_df, df_today):
 
 def render_screener_results(results, signal_filter):
     if results:
-        # Chuyển list kết quả thành DataFrame
         results_df = pd.DataFrame(results)
-        
-        # Lọc trạng thái Tích cực/Tiêu cực
         if signal_filter != "Tất cả":
             results_df = results_df[results_df['Trạng thái'] == signal_filter]
         
         if not results_df.empty:
-            # Sắp xếp cột: Đã loại bỏ hoàn toàn P/E, P/B và cố định vị trí Vốn hóa lưu hành
+            # Chỉ giữ lại các cột Kỹ thuật, Dòng tiền và 5 đường Ichimoku
             cols_order = [
                 "Mã", "Giá", "GTGD (Tỷ)", "Khối Lượng", "KL TB 20 Phiên",
-                "Vốn hóa lưu hành", "Đánh Giá", 
                 "Tenkan", "Kijun", "Senkou A", "Senkou B", "Chikou", 
                 "Ichimoku_Cloud", "Trạng thái"
             ]
-            # Chỉ lấy các cột tồn tại để tránh lỗi
             results_df = results_df[[c for c in cols_order if c in results_df.columns]]
             
             st.dataframe(
                 results_df, use_container_width=True, hide_index=True,
                 column_config={
-                    # Cấu hình định dạng dấu phẩy cho tất cả các cột
-                    "Khối Lượng": st.column_config.NumberColumn(format="%,d"),
-                    "KL TB 20 Phiên": st.column_config.NumberColumn(format="%,d"),
-                    "Giá": st.column_config.NumberColumn(format="%,.2f"),
-                    "GTGD (Tỷ)": st.column_config.NumberColumn(format="%,.2f"),
-                    "Vốn hóa lưu hành": st.column_config.NumberColumn(format="%,.2f"), 
-                    "Tenkan": st.column_config.NumberColumn(format="%,.2f"),
-                    "Kijun": st.column_config.NumberColumn(format="%,.2f"),
-                    "Senkou A": st.column_config.NumberColumn(format="%,.2f"),
-                    "Senkou B": st.column_config.NumberColumn(format="%,.2f"),
-                    "Chikou": st.column_config.NumberColumn(format="%,.2f")
+                    "Khối Lượng": st.column_config.NumberColumn(format="%d"),
+                    "KL TB 20 Phiên": st.column_config.NumberColumn(format="%d"),
+                    "Giá": st.column_config.NumberColumn(format="%.2f"),
+                    "GTGD (Tỷ)": st.column_config.NumberColumn(format="%.2f"),
+                    "Tenkan": st.column_config.NumberColumn(format="%.2f"),
+                    "Kijun": st.column_config.NumberColumn(format="%.2f"),
+                    "Senkou A": st.column_config.NumberColumn(format="%.2f"),
+                    "Senkou B": st.column_config.NumberColumn(format="%.2f"),
+                    "Chikou": st.column_config.NumberColumn(format="%.2f")
                 }
             )
-            st.toast("Đã hiển thị danh sách lọc cổ phiếu thành công!", icon="🧚‍♀️")
+            st.toast("Đã hiển thị danh sách siêu lọc kỹ thuật thành công!", icon="🧚‍♀️")
         else:
             st.info(f"Không có mã nào thuộc nhóm '{signal_filter}' đạt điều kiện.")
     else:
