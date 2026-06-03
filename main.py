@@ -1,34 +1,29 @@
 import streamlit as st
-from vnstock import stock_historical_data
-import pandas as pd
+# Nhúng 2 file vệ tinh mà bạn vừa tạo vào hệ thống
+from data_loader import get_stock_data
+from charts import draw_closing_price_chart
 
-# Cấu hình trang web
+# Cấu hình giao diện tổng
 st.set_page_config(page_title="Cổ Tiên Stock Dashboard", layout="wide")
 st.title("📈 Dashboard Phân Tích Cổ Phiếu - Cổ Tiên Stock")
 
-# Thanh nhập liệu mã cổ phiếu
+# Nhập mã cổ phiếu
 symbol = st.text_input("Nhập mã cổ phiếu (Ví dụ: HPG, SSI, FPT):", "HPG").upper()
 
 if st.button("Lấy dữ liệu"):
-    try:
-        with st.spinner('Đang tải dữ liệu từ Vnstock...'):
-            # Gọi hàm cào dữ liệu từ vnstock
-            df = stock_historical_data(symbol=symbol, 
-                                       start_date="2023-01-01", 
-                                       end_date="2024-06-01", 
-                                       resolution="1D", type="stock")
-            
+    with st.spinner('Đang tải dữ liệu từ Vnstock...'):
+        
+        # 1. Gọi file data_loader đi lấy dữ liệu
+        df = get_stock_data(symbol, "2023-01-01", "2024-06-01")
+        
+        if df is not None:
             st.success(f"Đã cào thành công dữ liệu mã {symbol}")
             
-            # Vẽ biểu đồ giá đóng cửa
-            st.subheader(f"Biểu Đồ Giá Đóng Cửa - {symbol}")
-            # Đặt cột 'time' làm trục X để biểu đồ hiển thị đúng ngày tháng
-            chart_data = df.set_index('time')['close']
-            st.line_chart(chart_data)
+            # 2. Gọi file charts ra vẽ biểu đồ
+            draw_closing_price_chart(df, symbol)
             
-            # Hiển thị bảng số liệu chi tiết
+            # 3. Hiển thị bảng số liệu
             st.subheader("Bảng Số Liệu Chi Tiết")
             st.dataframe(df, use_container_width=True)
-            
-    except Exception as e:
-        st.error(f"Lỗi: Không thể lấy dữ liệu mã {symbol}. Vui lòng kiểm tra lại.")
+        else:
+            st.error(f"Lỗi: Không thể lấy dữ liệu mã {symbol}. Vui lòng kiểm tra lại.")
