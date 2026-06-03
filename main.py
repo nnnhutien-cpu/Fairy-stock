@@ -10,12 +10,21 @@ st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_
 if 'scan_results' not in st.session_state:
     st.session_state['scan_results'] = []
 
+# Đọc các thông số Ichimoku động từ Sidebar bên trái
 exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift = render_sidebar()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 
-tab_market, tab_screener = st.tabs(["📊 TỔNG QUAN VN-INDEX", "🚀 BỘ LỌC SIÊU CỔ PHIẾU"])
+# KHỞI TẠO 3 TAB GIAO DIỆN (ĐÃ THÊM TAB MÔ PHỎNG SỐ 3)
+tab_market, tab_screener, tab_simulation = st.tabs([
+    "📊 TỔNG QUAN VN-INDEX", 
+    "🚀 BỘ LỌC CỔ PHIẾU", 
+    "🔮 MÔ PHỎNG ICHIMOKU"
+])
 
+# ==========================================
+# XỬ LÝ TAB 1: NHỊP ĐẬP THỊ TRƯỜNG
+# ==========================================
 with tab_market:
     intraday_df = get_intraday_vnindex()
     chart_df, df_today = None, None
@@ -60,6 +69,9 @@ with tab_market:
             
     render_market_tab(chart_df, df_today)
 
+# ==========================================
+# XỬ LÝ TAB 2: BỘ LỌC ĐA LUỒNG
+# ==========================================
 with tab_screener:
     st.subheader(f"Danh Sách Quét Sàn {exchange_choice} (>20 Tỷ VNĐ)")
     scan_button = st.button("🚀 KÍCH HOẠT QUÉT TOÀN DIỆN", use_container_width=True, type="primary")
@@ -79,7 +91,6 @@ with tab_screener:
                 df = get_stock_data(ticker)
                 if df is None or df.empty:
                     return None
-                    
                 signal_data = calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
                 return signal_data
 
@@ -96,10 +107,60 @@ with tab_screener:
                     progress_bar.progress(processed / total)
                 
             status.update(label=f"✅ Đã quét xong siêu tốc! Hiển thị dữ liệu nhóm: {signal_filter}", state="complete", expanded=False)
-        
         st.session_state['scan_results'] = results
     
     if st.session_state['scan_results']:
         render_screener_results(st.session_state['scan_results'], signal_filter)
     else:
         st.caption(f"Hãy cấu hình thông số ở Sidebar trái và bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' để bắt đầu.")
+
+# ==========================================
+# [MỚI] XỬ LÝ TAB 3: MÔ PHỎNG ICHIMOKU ĐỘNG
+# ==========================================
+with tab_simulation:
+    st.subheader("🔮 Phòng Thí Nghiệm Chỉ Báo Kỹ Thuật Ichimoku")
+    st.caption("Nhập một mã cổ phiếu bất kỳ để hệ thống tự động vẽ đồ thị phân rã toàn bộ 5 đường Ichimoku dựa trên thông số gạt ở Sidebar trái.")
+    
+    # Hộp nhập mã cổ phiếu tương tác
+    sim_ticker = st.text_input("Nhập mã cổ phiếu muốn kiểm tra đồ thị (Ví dụ: HPG, VND, FPT):", value="HPG").upper().strip()
+    
+    if sim_ticker:
+        # Gọi hàm cào dữ liệu gốc từ vnstock có sẵn
+        df_sim = get_stock_data(sim_ticker)
+        
+        if df_sim is not None and not df_sim.empty:
+            df_sim.columns = [str(c).lower().strip() for c in df_sim.columns]
+            
+            # Tính toán trọn bộ chuỗi 5 đường dựa trên tham số động từ Sidebar
+            df_sim['Tenkan'] = (df_sim['high'].rolling(window=p_tenkan).max() + df_sim['low'].rolling(window=p_tenkan).min()) / 2
+            df_sim['Kijun'] = (df_sim['high'].rolling(window=p_kijun).max() + df_sim['low'].rolling(window=p_kijun).min()) / 2
+            
+            # Tính toán 2 đường biên mây Kumo
+            senkou_a_raw = (df_sim['Tenkan'] + df_sim['Kijun']) / 2
+            df_sim['Senkou A'] = senkou_a_raw.shift(p_shift)
+            
+            senkou_b_raw = (df_sim['high'].rolling(window=p_senkou_b).max() + df_sim['low'].rolling(window=p_senkou_b).min()) / 2
+            df_sim['Senkou B'] = senkou_b_raw.shift(p_shift)
+            
+            # Đường trễ Chikou Span (Vẽ lùi lại quá khứ)
+            df_sim['Chikou'] = df_sim['close']
+            
+            # Trích xuất 60 phiên giao dịch gần nhất để biểu đồ nhìn thông thoáng, sắc nét
+            plot_df = df_sim.tail(60).copy()
+            
+            if 'time' in plot_df.columns:
+                plot_df['Ngay'] = pd.to_datetime(plot_df['time']).dt.strftime('%Y-%m-%d')
+                plot_df.set_index('Ngay', inplace=True)
+            
+            # Gộp các đường chỉ báo vào dataframe đồ thị
+            chart_data = plot_df[['close', 'tenkan', 'kijun', 'senkou a', 'senkou b']]
+            chart_data.columns = ['Giá Hiện Tại', 'Tenkan (Chuyển đổi)', 'Kijun (Cơ sở)', 'Senkou A (Biên mây 1)', 'Senkou B (Biên mây 2)']
+            
+            # Vẽ biểu đồ đường tương tác đa sắc màu
+            st.markdown(f"**📈 Đồ thị phân tích kỹ thuật mã {sim_ticker}**")
+            st.line_chart(chart_data, height=450)
+            
+            # Gợi ý chiến thuật thực chiến bằng mẹo nhỏ thông minh
+            st.info(f"💡 **Mẹo thực chiến cho mã {sim_ticker}:** Hãy thử thay đổi thông số nâng cao ở Sidebar trái, đồ thị trên sẽ lập tức biến đổi Real-time để bạn tìm ra bộ khung chu kỳ tối ưu nhất cho riêng mình!")
+        else:
+            st.error(f"⚠️ Không thể kết nối hoặc không tìm thấy dữ liệu lịch sử của mã '{sim_ticker}'. Vui lòng thử lại mã khác.")
