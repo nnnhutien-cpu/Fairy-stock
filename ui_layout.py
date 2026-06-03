@@ -9,15 +9,17 @@ def render_sidebar():
         st.header("⚙️ CẤU HÌNH BỘ LỌC")
         exchange_choice = st.selectbox("Chọn sàn giao dịch:", ["HOSE", "HNX", "UPCOM", "Tất cả 3 sàn"])
         signal_filter = st.radio("Bộ lọc tín hiệu kỹ thuật:", ["Tất cả", "🟢 Tích cực", "🔴 Tiêu cực"])
-        max_scan = st.slider("Số lượng mã quét tối đa:", 10, 300, 80)
+        
+        # Đã nâng giới hạn Slider lên 400 để quét sạch cả sàn, không sót VND!
+        max_scan = st.slider("Số lượng mã quét tối đa:", 10, 500, 400)
         
         st.divider()
         with st.expander("🛠️ TÙY CHỈNH ICHIMOKU (NÂNG CAO)", expanded=False):
             st.caption("Mặc định chuẩn Nhật: 9 - 26 - 52 - 26")
-            p_tenkan = st.number_input("Tenkan-sen (Đường chuyển đổi)", value=9, step=1)
-            p_kijun = st.number_input("Kijun-sen (Đường cơ sở)", value=26, step=1)
-            p_senkou_b = st.number_input("Senkou Span B (Đỉnh/Đáy mây)", value=52, step=1)
-            p_shift = st.number_input("Độ dịch chuyển Mây (Shift)", value=26, step=1)
+            p_tenkan = st.number_input("Tenkan-sen", value=9, step=1)
+            p_kijun = st.number_input("Kijun-sen", value=26, step=1)
+            p_senkou_b = st.number_input("Senkou B", value=52, step=1)
+            p_shift = st.number_input("Shift", value=26, step=1)
             
     return exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
 
@@ -39,7 +41,7 @@ def render_market_tab(chart_df, df_today):
                 yest_vol_same_time = chart_df.loc[current_time, 'Vol_Hôm_Qua'] if current_time in chart_df.index else None
                 if pd.notna(yest_vol_same_time) and yest_vol_same_time > 0:
                     vol_diff_pct = ((today_vol_total - yest_vol_same_time) / yest_vol_same_time) * 100
-                    st.metric(label="% Thanh Khoản (So với cùng giờ hôm qua)", value=f"{vol_diff_pct:+.2f}%", delta=f"{vol_diff_pct:+.2f}%", delta_color="normal")
+                    st.metric(label="% Thanh Khoản", value=f"{vol_diff_pct:+.2f}%", delta=f"{vol_diff_pct:+.2f}%", delta_color="normal")
                 else:
                     st.metric(label="% Thanh Khoản", value="Đang tính toán...")
         st.markdown("**📈 Biểu Đồ Thanh Khoản Cộng Dồn Trong Phiên (Đỏ: Hôm qua | Xanh: Hôm nay)**")
@@ -60,11 +62,11 @@ def render_screener_results(results, signal_filter):
                     "Khối Lượng": st.column_config.NumberColumn(format="%d"),
                     "Giá": st.column_config.NumberColumn(format="%.2f"),
                     "GTGD (Tỷ)": st.column_config.NumberColumn(format="%.2f"),
-                    "Ichimoku_Tenkan": st.column_config.NumberColumn(format="%.2f"),
-                    "Ichimoku_Kijun": st.column_config.NumberColumn(format="%.2f"),
+                    "Tenkan": st.column_config.NumberColumn(format="%.2f"),
+                    "Kijun": st.column_config.NumberColumn(format="%.2f"),
                     "Senkou A": st.column_config.NumberColumn(format="%.2f"),
                     "Senkou B": st.column_config.NumberColumn(format="%.2f"),
-                    "Ichimoku_Chikou": st.column_config.NumberColumn(format="%.2f")
+                    "Chikou": st.column_config.NumberColumn(format="%.2f")
                 }
             )
             st.toast("Đã hiển thị danh sách siêu lọc dòng tiền thành công!", icon="🧚‍♀️")
