@@ -1,88 +1,50 @@
 import streamlit as st
 import pandas as pd
+import concurrent.futures
+from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex
+from indicators import calculate_technical_signals
+from ui_layout import render_sidebar, render_market_tab, render_screener_results
 
-def render_sidebar():
-    with st.sidebar:
-        st.title("🧚‍♀️ CÔ TIÊN STOCK")
-        st.caption("Hệ thống phân tích thông minh")
-        st.divider()
-        st.header("⚙️ CẤU HÌNH BỘ LỌC")
-        exchange_choice = st.selectbox("Chọn sàn giao dịch:", ["HOSE", "HNX", "UPCOM", "Tất cả 3 sàn"])
-        signal_filter = st.radio("Bộ lọc tín hiệu kỹ thuật:", ["Tất cả", "🟢 Tích cực", "🔴 Tiêu cực"])
-        
-        max_scan = st.slider("Số lượng mã quét tối đa:", 10, 2000, 1600)
-        
-        st.divider()
-        with st.expander("🛠️ TÙY CHỈNH ICHIMOKU (NÂNG CAO)", expanded=False):
-            st.caption("Mặc định chuẩn Nhật: 9 - 26 - 52 - 26")
-            p_tenkan = st.number_input("Tenkan-sen", value=9, step=1)
-            p_kijun = st.number_input("Kijun-sen", value=26, step=1)
-            p_senkou_b = st.number_input("Senkou B", value=52, step=1)
-            p_shift = st.number_input("Shift", value=26, step=1)
-            
-    return exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
+st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
-def render_market_tab(chart_df, df_today):
-    st.subheader("Nhịp Đập Thị Trường (Thanh khoản Real-time)")
-    if chart_df is not None and df_today is not None and not df_today.empty:
-        with st.container(border=True):
-            col1, col2, col3 = st.columns(3)
-            latest_point = df_today.iloc[-1]
-            current_time = latest_point.get('hour_min', 'N/A')
-            close_price = latest_point.get('close', 0.0)
-            today_vol_total = latest_point.get('Vol_Hôm_Nay', 0.0)
-            
-            with col1:
-                st.metric(label=f"VN-INDEX ({current_time})", value=f"{close_price:.2f}")
-            with col2:
-                st.metric(label="Tổng Khối Lượng Hôm Nay", value=f"{int(today_vol_total):,}")
-            with col3:
-                yest_vol_same_time = chart_df.loc[current_time, 'Vol_Hôm_Qua'] if current_time in chart_df.index else None
-                if pd.notna(yest_vol_same_time) and yest_vol_same_time > 0:
-                    vol_diff_pct = ((today_vol_total - yest_vol_same_time) / yest_vol_same_time) * 100
-                    st.metric(label="% Thanh Khoản", value=f"{vol_diff_pct:+.2f}%", delta=f"{vol_diff_pct:+.2f}%", delta_color="normal")
-                else:
-                    st.metric(label="% Thanh Khoản", value="Đang tính toán...")
-        st.markdown("**📈 Biểu Đồ Thanh Khoản Cộng Dồn Trong Phiên (Đỏ: Hôm qua | Xanh: Hôm nay)**")
-        st.line_chart(chart_df, color=["#FF0000", "#00FF00"], height=380)
-    else:
-        st.warning("Đang kết nối dữ liệu Real-time hoặc thị trường đang đóng cửa...")
+if 'scan_results' not in st.session_state:
+    st.session_state['scan_results'] = []
 
-def render_screener_results(results, signal_filter):
-    if results:
-        results_df = pd.DataFrame(results)
-        if signal_filter != "Tất cả":
-            results_df = results_df[results_df['Trạng thái'] == signal_filter]
+exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift = render_sidebar()
+
+st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
+
+tab_market, tab_screener = st.tabs(["📊 TỔNG QUAN VN-INDEX", "🚀 BỘ LỌC SIÊU CỔ PHIẾU"])
+
+with tab_market:
+    intraday_df = get_intraday_vnindex()
+    chart_df, df_today = None, None
+
+    if intraday_df is not None and not intraday_df.empty:
+        col_mapping = {}
+        for col in intraday_df.columns:
+            lower_col = str(col).lower().strip()
+            if lower_col in ['close', 'price', 'c', 'điểm', 'index', 'indexvalue']:
+                col_mapping[col] = 'close'
+            elif lower_col in ['volume', 'vol', 'v', 'khối lượng', 'matchvolume']:
+                col_mapping[col] = 'volume'
+            elif lower_col in ['time', 't', 'thời gian']:
+                col_mapping[col] = 'time'
         
-        if not results_df.empty:
-            # Sắp xếp lại thứ tự cột
-            cols_order = [
-                "Mã", "Giá", "GTGD (Tỷ)", "Khối Lượng", "KL TB 20 Phiên",
-                "Vốn Hóa (Tỷ)", "P/E", "P/B", "Đánh Giá", 
-                "Tenkan", "Kijun", "Senkou A", "Senkou B", "Chikou", 
-                "Ichimoku_Cloud", "Trạng thái"
-            ]
-            results_df = results_df[[c for c in cols_order if c in results_df.columns]]
+        intraday_df.rename(columns=col_mapping, inplace=True)
+        
+        if 'time' in intraday_df.columns and 'volume' in intraday_df.columns:
+            intraday_df['volume'] = pd.to_numeric(intraday_df['volume'], errors='coerce').fillna(0)
+            intraday_df['time'] = pd.to_datetime(intraday_df['time'])
+            intraday_df['date'] = intraday_df['time'].dt.date
+            intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
             
-            st.dataframe(
-                results_df, use_container_width=True, hide_index=True,
-                column_config={
-                    "Khối Lượng": st.column_config.NumberColumn(format="%d"),
-                    "KL TB 20 Phiên": st.column_config.NumberColumn(format="%d"),
-                    "Giá": st.column_config.NumberColumn(format="%.2f"),
-                    "GTGD (Tỷ)": st.column_config.NumberColumn(format="%.2f"),
-                    "Vốn Hóa (Tỷ)": st.column_config.NumberColumn(format="%.2f"),
-                    "P/E": st.column_config.NumberColumn(format="%.2f"),
-                    "P/B": st.column_config.NumberColumn(format="%.2f"),
-                    "Tenkan": st.column_config.NumberColumn(format="%.2f"),
-                    "Kijun": st.column_config.NumberColumn(format="%.2f"),
-                    "Senkou A": st.column_config.NumberColumn(format="%.2f"),
-                    "Senkou B": st.column_config.NumberColumn(format="%.2f"),
-                    "Chikou": st.column_config.NumberColumn(format="%.2f")
-                }
-            )
-            st.toast("Đã hiển thị danh sách siêu lọc dòng tiền thành công!", icon="🧚‍♀️")
-        else:
-            st.info(f"Không có mã nào thuộc nhóm '{signal_filter}' đạt điều kiện.")
-    else:
-        st.info("Chưa tìm thấy mã nào đạt điều kiện thanh khoản.")
+            dates = intraday_df['date'].unique()
+            if len(dates) >= 2:
+                today_date = dates[-1]
+                yest_date = dates[-2]
+                
+                df_today = intraday_df[intraday_df['date'] == today_date].copy()
+                df_yest = intraday_df[intraday_df['date'] == yest_date].copy()
+                
+                df_today['Vol_
