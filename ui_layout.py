@@ -9,12 +9,8 @@ def render_sidebar():
         st.divider()
         
         st.header("⚙️ CẤU HÌNH BỘ LỌC")
-        # Lưu ý: vnstock định danh sàn HOSE thay cho chữ HSX nên mình đồng bộ HOSE cho chuẩn API nhé
         exchange_choice = st.selectbox("Chọn sàn giao dịch:", ["HOSE", "HNX", "UPCOM", "Tất cả 3 sàn"])
-        
-        # BỔ SUNG TRƯỜNG UI TRỰC QUAN CHO BẠN CHỌN TRẠNG THÁI XEM REAL-TIME
         signal_filter = st.radio("Bộ lọc tín hiệu kỹ thuật:", ["Tất cả", "🟢 Tích cực", "🔴 Tiêu cực"])
-        
         max_scan = st.slider("Số lượng mã quét tối đa:", 10, 300, 80)
         
     return exchange_choice, signal_filter, max_scan
@@ -27,12 +23,15 @@ def render_market_tab(chart_df, df_today):
         with st.container(border=True):
             col1, col2, col3 = st.columns(3)
             latest_point = df_today.iloc[-1]
-            current_time = latest_point['hour_min']
+            
+            # [BỌC THÉP] Dùng .get() để chống sập web. Không có dữ liệu thì hiện N/A hoặc số 0
+            current_time = latest_point.get('hour_min', 'N/A')
+            close_price = latest_point.get('close', 0.0)
+            today_vol_total = latest_point.get('Vol_Hôm_Nay', 0.0)
             
             with col1:
-                st.metric(label=f"VN-INDEX ({current_time})", value=f"{latest_point['close']:.2f}")
+                st.metric(label=f"VN-INDEX ({current_time})", value=f"{close_price:.2f}")
             with col2:
-                today_vol_total = latest_point['Vol_Hôm_Nay']
                 st.metric(label="Tổng Khối Lượng Hôm Nay", value=f"{int(today_vol_total):,}")
             with col3:
                 yest_vol_same_time = chart_df.loc[current_time, 'Vol_Hôm_Qua'] if current_time in chart_df.index else None
@@ -54,7 +53,6 @@ def render_screener_results(results, signal_filter):
     if results:
         results_df = pd.DataFrame(results)
         
-        # TIẾN HÀNH LỌC REALTIME THEO LỰA CHỌN CỦA BẠN TRÊN UI SIDEBAR
         if signal_filter != "Tất cả":
             results_df = results_df[results_df['Trạng thái'] == signal_filter]
         
