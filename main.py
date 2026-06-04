@@ -163,7 +163,7 @@ with tab_backtest:
                     st.error(f"⚠️ Lỗi mạng hoặc mã {bt_ticker} không tồn tại. Vui lòng kiểm tra lại!")
                     status.update(label="Backtest thất bại!", state="error")
                 else:
-                    df_indicators = bt.calculate_ichimoku_3m(
+                    df_indicators = bt.calculate_ichimoku_5m(
                         df_raw, 
                         p_tenkan=p_tenkan, 
                         p_kijun=p_kijun, 
