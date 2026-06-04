@@ -129,13 +129,9 @@ with tab_screener:
                 # Lưu kết quả dưới dạng DataFrame để dễ dàng xử lý UI/UX
                 st.session_state['scan_results'] = pd.DataFrame(results)
 
-    # --- RENDER GIAO DIỆN (Hiển thị Bảng & Nút Tải CSV) ---
-# SỬA DÒNG CŨ:
-# if 'scan_results' in st.session_state and not st.session_state['scan_results'].empty:
-
-# THÀNH DÒNG MỚI:
-if 'scan_results' in st.session_state and st.session_state['scan_results']:
-    st.divider()
+   # --- RENDER GIAO DIỆN (Hiển thị Bảng & Nút Tải CSV) ---
+    if 'scan_results' in st.session_state and st.session_state['scan_results']:
+        st.divider()
         
         # 1. Gọi hàm UX: Hiển thị thanh Search và Nút tải Excel/CSV
         # Trả về df_display (Đã được lọc theo từ khóa Search nếu có)
