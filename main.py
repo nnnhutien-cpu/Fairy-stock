@@ -241,14 +241,21 @@ with tab_backtest:
                         if not trade_log.empty:
                             display_log = trade_log.copy()
                             
-                            if 'Price' in display_log.columns:
-                                display_log['Price'] = display_log['Price'].map('{:,.2f}'.format)
-                            if 'Total Capital' in display_log.columns:
-                                display_log['Total Capital'] = display_log['Total Capital'].map('{:,.0f} VNĐ'.format)
+                            # --- 1. PHẦN MỚI: Định dạng số liệu hiển thị trên Web cho đẹp ---
+                            if 'Giá khớp' in display_log.columns:
+                                display_log['Giá khớp'] = display_log['Giá khớp'].map('{:,.2f}'.format)
+                            if 'Vol nến 5P' in display_log.columns:
+                                display_log['Vol nến 5P'] = display_log['Vol nến 5P'].map('{:,.0f}'.format)
+                            if 'Khối lượng nắm giữ' in display_log.columns:
+                                display_log['Khối lượng nắm giữ'] = display_log['Khối lượng nắm giữ'].map('{:,.0f}'.format)
+                            if 'Vốn khả dụng' in display_log.columns:
+                                display_log['Vốn khả dụng'] = display_log['Vốn khả dụng'].map('{:,.0f} VNĐ'.format)
                                 
-                            st.dataframe(display_log, use_container_width=True)
+                            st.dataframe(display_log, use_container_width=True, hide_index=True)
                             
-                            csv_data = trade_log.to_csv(index=False).encode('utf-8')
+                            # --- 2. PHẦN CŨ (GIỮ NGUYÊN): Nút xuất file CSV ---
+                            # Mẹo nhỏ: Tôi đổi 'utf-8' thành 'utf-8-sig' để khi mở bằng Excel không bị lỗi font Tiếng Việt
+                            csv_data = trade_log.to_csv(index=False).encode('utf-8-sig')
                             st.download_button(
                                 label="📥 Xuất Nhật Ký Giao Dịch Sang File CSV",
                                 data=csv_data,
@@ -257,4 +264,5 @@ with tab_backtest:
                                 use_container_width=True
                             )
                         else:
+                            st.info("ℹ️ Không tìm thấy bất kỳ tín hiệu Mua/Bán nào được kích hoạt trong khoảng thời gian này.")
                             st.info("ℹ️ Không tìm thấy bất kỳ tín hiệu Mua/Bán nào được kích hoạt trong khoảng thời gian này.")
