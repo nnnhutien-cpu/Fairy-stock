@@ -1,99 +1,87 @@
-import streamlit as st
-import pandas as pd
-import concurrent.futures
-from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex
-from indicators import calculate_technical_signals
-from ui_layout import render_sidebar, render_market_tab, render_screener_results
-from ux_components import setup_cache_clear_button, render_search_and_export # Gọi file UX
-import backtester as bt # [MỚI] Nhập file backtest khung 3 phút
+with tab_backtest:
+    st.subheader("🛠️ Hệ Thống Thử Nghiệm Chiến Lược Ichimoku Khung 5 Phút")
+    st.markdown("""
+    * **Chiến lược áp dụng:**
+        * 🟢 **Tín hiệu MUA:** Giá đóng cửa cắt lên trên biên trên của Mây Kumo (**Cloud Top**).
+        * 🔴 **Tín hiệu BÁN:** Giá đóng cửa cắt xuống dưới biên dưới của Mây Kumo (**Cloud Bottom**).
+    """)
 
-st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
+    # 1. Khởi tạo form nhập thông số đầu vào cho Backtest
+    col_bt1, col_bt2, col_bt3 = st.columns(3)
+    with col_bt1:
+        bt_ticker = st.text_input("🔤 Nhập mã cổ phiếu thử nghiệm:", value="CEO").upper().strip()
+    with col_bt2:
+        bt_capital = st.number_input("💰 Vốn đầu tư ban đầu (VNĐ):", min_value=10000000, value=100000000, step=10000000, format="%d")
+    with col_bt3:
+        bt_days = st.slider("📅 Khoảng thời gian khảo sát (Số ngày về trước):", min_value=1, max_value=60, value=30)
 
-if 'scan_results' not in st.session_state:
-    st.session_state['scan_results'] = []
+    # Nút kích hoạt lệnh chạy
+    btn_run_bt = st.button("🎯 KÍCH HOẠT BACKTEST TOÀN DIỆN", use_container_width=True, type="primary")
 
-# Đọc các thông số Ichimoku động từ Sidebar bên trái
-exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift = render_sidebar()
-
-# [GỌI HÀM UX] Tạo nút xóa Cache
-setup_cache_clear_button()
-
-st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
-
-# [CẬP NHẬT] Thêm Tab thứ 4 cho Backtest
-tab_market, tab_screener, tab_simulation, tab_backtest = st.tabs([
-    "📊 TỔNG QUAN VN-INDEX", 
-    "🚀 BỘ LỌC CỔ PHIẾU", 
-    "🔮 MÔ PHỎNG ICHIMOKU",
-    "🛠️ BACKTEST KHUNG 3P"
-])
-
-with tab_market:
-    intraday_df = get_intraday_vnindex()
-    chart_df, df_today = None, None
-
-    # Bẫy lỗi: Đảm bảo có dữ liệu mới vẽ biểu đồ để không bị trắng bảng
-    if intraday_df is not None and not intraday_df.empty:
-        col_mapping = {}
-        for col in intraday_df.columns:
-            lower_col = str(col).lower().strip()
-            if lower_col in ['close', 'price', 'c', 'điểm', 'index', 'indexvalue']:
-                col_mapping[col] = 'close'
-            elif lower_col in ['volume', 'vol', 'v', 'khối lượng', 'matchvolume']:
-                col_mapping[col] = 'volume'
-            elif lower_col in ['time', 't', 'thời gian']:
-                col_mapping[col] = 'time'
-        
-        intraday_df.rename(columns=col_mapping, inplace=True)
-        
-        if 'time' in intraday_df.columns and 'volume' in intraday_df.columns:
-            intraday_df['volume'] = pd.to_numeric(intraday_df['volume'], errors='coerce').fillna(0)
-            intraday_df['time'] = pd.to_datetime(intraday_df['time'])
-            intraday_df['date'] = intraday_df['time'].dt.date
-            intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
-            
-            dates = intraday_df['date'].unique()
-            if len(dates) >= 2:
-                today_date = dates[-1]
-                yest_date = dates[-2]
-                
-                df_today = intraday_df[intraday_df['date'] == today_date].copy()
-                df_yest = intraday_df[intraday_df['date'] == yest_date].copy()
-                
-                df_today['Vol_Hôm_Nay'] = df_today['volume'].cumsum()
-                df_yest['Vol_Hôm_Qua'] = df_yest['volume'].cumsum()
-                
-                chart_df = pd.merge(df_yest[['hour_min', 'Vol_Hôm_Qua']], 
-                                    df_today[['hour_min', 'Vol_Hôm_Nay']], 
-                                    on='hour_min', how='outer').sort_values('hour_min')
-                
-                chart_df['Vol_Hôm_Qua'] = chart_df['Vol_Hôm_Qua'].ffill()
-                chart_df['Vol_Hôm_Nay'] = chart_df['Vol_Hôm_Nay'].ffill()
-                chart_df.set_index('hour_min', inplace=True)
-    else:
-        st.warning("⚠️ Đang chờ dữ liệu VN-INDEX từ API. Vui lòng tải lại trang sau ít phút...")
-            
-    render_market_tab(chart_df, df_today)
-
-with tab_screener:
-    st.subheader(f"Danh Sách Quét Sàn {exchange_choice} (>20 Tỷ VNĐ)")
-    scan_button = st.button("🚀 KÍCH HOẠT QUÉT TOÀN DIỆN", use_container_width=True, type="primary")
-    
-    if scan_button:
-        ex_code = 'all' if exchange_choice == "Tất cả 3 sàn" else exchange_choice
-        tickers = get_all_tickers(ex_code)
-        
-        # Bẫy lỗi không lấy được danh sách mã
-        if tickers is None or len(tickers) == 0:
-            st.error("⚠️ Lỗi mạng: Không lấy được danh sách mã chứng khoán!")
+    if btn_run_bt:
+        if not bt_ticker:
+            st.error("⚠️ Lỗi: Bạn chưa điền mã cổ phiếu!")
         else:
-            tickers_to_scan = tickers[:max_scan]
-            
-            with st.status(f"Đang dùng 10 Luồng quét {len(tickers_to_scan)} mã. Tốc độ siêu tốc...", expanded=True) as status:
-                progress_bar = st.progress(0)
-                results = []
-                total = len(tickers_to_scan)
-                processed = 0
-
-                def process_ticker(ticker):
-                    df = get_stock_
+            with st.status(f"⚡ Đang kéo dữ liệu intraday và chạy mô phỏng mã {bt_ticker}...", expanded=True) as status:
+                
+                # Bước 1: Gọi hàm lấy dữ liệu nến 5P trực tiếp từ API trong file backtester
+                df_raw = bt.get_5m_data(bt_ticker, days_back=bt_days)
+                
+                if df_raw is None or df_raw.empty:
+                    st.error(f"⚠️ Lỗi mạng hoặc mã {bt_ticker} không tồn tại. Vui lòng kiểm tra lại!")
+                    status.update(label="Backtest thất bại!", state="error")
+                else:
+                    # Bước 2: Tính chỉ báo Ichimoku lấy từ các thông số cấu hình ĐỘNG bên Sidebar
+                    df_indicators = bt.calculate_ichimoku_3m(
+                        df_raw, 
+                        p_tenkan=p_tenkan, 
+                        p_kijun=p_kijun, 
+                        p_senkou_b=p_senkou_b, 
+                        p_shift=p_shift
+                    )
+                    
+                    if df_indicators is None or df_indicators.empty:
+                        st.warning("⚠️ Tập dữ liệu quá ngắn, không đủ để hình thành Mây Ichimoku. Vui lòng tăng số ngày khảo sát!")
+                        status.update(label="Thiếu dữ liệu dựng chỉ báo!", state="value_error")
+                    else:
+                        # Bước 3: Đẩy vào bộ máy Backtest tính toán lợi nhuận
+                        stats, trade_log = bt.run_ichimoku_backtest(df_indicators, initial_capital=bt_capital)
+                        
+                        status.update(label="🎯 Đã xử lý xong dữ liệu giao dịch!", state="complete")
+                        
+                        # ---- HIỂN THỊ KẾT QUẢ RA GIAO DIỆN ----
+                        st.success(f"🎉 Kết quả Backtest chiến lược mã: {bt_ticker} (Khung 5 Phút)")
+                        
+                        # Tạo các ô số liệu tổng quan (Metrics)
+                        m1, m2, m3, m4, m5 = st.columns(5)
+                        m1.metric("💵 Vốn đầu vào", stats["Vốn ban đầu"])
+                        m2.metric("💰 Vốn cuối kỳ", stats["Vốn cuối kỳ"])
+                        m3.metric("📈 Lợi nhuận ròng", stats["Lợi nhuận ròng"])
+                        m4.metric("📊 Tổng số lệnh", stats["Tổng số lệnh (Cặp Mua/Bán)"])
+                        m5.metric("🎯 Tỷ lệ Thắng", stats["Tỷ lệ Thắng (Win Rate)"])
+                        
+                        # Bảng hiển thị Nhật ký lịch sử mua bán chi tiết
+                        st.subheader("📋 Nhật Ký Lịch Sử Giao Dịch Chi Tiết (Trade Log)")
+                        if not trade_log.empty:
+                            # Sao chép bảng để định dạng hiển thị đẹp mắt hơn mà không làm hỏng dữ liệu gốc
+                            display_log = trade_log.copy()
+                            
+                            # Định dạng tiền tệ và tỷ lệ phần trăm cho dễ nhìn
+                            if 'Price' in display_log.columns:
+                                display_log['Price'] = display_log['Price'].map('{:,.2f}'.format)
+                            if 'Total Capital' in display_log.columns:
+                                display_log['Total Capital'] = display_log['Total Capital'].map('{:,.0f} VNĐ'.format)
+                                
+                            st.dataframe(display_log, use_container_width=True)
+                            
+                            # Cho phép người dùng xuất file Excel/CSV nhật ký để nghiên cứu sâu
+                            csv_data = trade_log.to_csv(index=False).encode('utf-8')
+                            st.download_button(
+                                label="📥 Xuất Nhật Ký Giao Dịch Sang File CSV",
+                                data=csv_data,
+                                file_name=f"Backtest_Ichimoku_5M_{bt_ticker}.csv",
+                                mime="text/csv",
+                                use_container_width=True
+                            )
+                        else:
+                            st.info("ℹ️ Không tìm thấy bất kỳ tín hiệu Mua/Bán nào được kích hoạt trong khoảng thời gian này.")
