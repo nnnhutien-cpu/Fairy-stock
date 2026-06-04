@@ -128,8 +128,58 @@ with tab_screener:
 # ==========================================
 # TAB 3: MÔ PHỎNG ICHIMOKU
 # ==========================================
+# ==========================================
+# TAB 3: MÔ PHỎNG ICHIMOKU
+# ==========================================
 with tab_simulation:
-    st.info("🔮 Tính năng Mô phỏng Ichimoku đang được phát triển. Dữ liệu sẽ được cập nhật sớm!")
+    st.subheader("🔮 Hệ Thống Mô Phỏng & Trực Quan Hóa Mây Ichimoku")
+    
+    sim_col1, sim_col2 = st.columns([1, 3])
+    with sim_col1:
+        sim_ticker = st.text_input("🔤 Nhập mã CK cần xem:", value="SSI", key="sim_input").upper().strip()
+        sim_btn = st.button("📈 VẼ ĐỒ THỊ MÂY", use_container_width=True, type="primary")
+        
+    if sim_btn:
+        if not sim_ticker:
+            st.warning("⚠️ Vui lòng nhập mã chứng khoán!")
+        else:
+            with st.spinner(f"Đang tính toán mây Kumo cho {sim_ticker}..."):
+                # 1. Tận dụng hàm bốc dữ liệu từ data_loader
+                df_sim = get_stock_data(sim_ticker)
+                
+                if df_sim is not None and not df_sim.empty:
+                    # 2. Đưa vào hàm tính toán Ichimoku (Dùng chung hàm bên file backtester)
+                    # Truyền các thông số động lấy từ Sidebar vào
+                    df_ichimoku = bt.calculate_ichimoku_5m(
+                        df_sim, 
+                        p_tenkan=p_tenkan, 
+                        p_kijun=p_kijun, 
+                        p_senkou_b=p_senkou_b, 
+                        p_shift=p_shift
+                    )
+                    
+                    if df_ichimoku is not None and not df_ichimoku.empty:
+                        latest = df_ichimoku.iloc[-1]
+                        
+                        st.success(f"✅ Phân tích thành công! Trạng thái hiện tại của {sim_ticker}:")
+                        
+                        # 3. Hiển thị bảng Dashboard thông số hiện tại
+                        m1, m2, m3, m4 = st.columns(4)
+                        m1.metric("🔴 Giá Đóng Cửa", f"{latest['close']:,.2f}")
+                        m2.metric("🔵 Tenkan (Đường chuyển)", f"{latest['tenkan']:,.2f}")
+                        m3.metric("🟡 Kijun (Đường chuẩn)", f"{latest['kijun']:,.2f}")
+                        m4.metric("☁️ Viền Mây (Top/Bottom)", f"{latest['cloud_top']:,.2f} / {latest['cloud_bottom']:,.2f}")
+                        
+                        # 4. Trực quan hóa bằng biểu đồ siêu mượt của Streamlit
+                        st.markdown("### 📊 Biểu đồ Xu Hướng Giá & Cấu Trúc Mây")
+                        
+                        # Chỉ lọc ra các đường cần thiết để vẽ đồ thị
+                        chart_data = df_ichimoku.set_index('time')[['close', 'tenkan', 'kijun', 'senkou_a', 'senkou_b']]
+                        st.line_chart(chart_data)
+                    else:
+                        st.warning("⚠️ Tập dữ liệu không đủ dài (Cần ít nhất 52 phiên) để hình thành Mây Kumo.")
+                else:
+                    st.error("⚠️ Lỗi mạng hoặc không tìm thấy mã chứng khoán này trên hệ thống!")
 
 # ==========================================
 # TAB 4: BACKTEST KHUNG 5 PHÚT
