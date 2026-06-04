@@ -78,6 +78,7 @@ with tab_market:
     render_market_tab(chart_df, df_today)
 
 # ==========================================
+# ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU ĐA LUỒNG
 # ==========================================
 with tab_screener:
@@ -105,9 +106,13 @@ with tab_screener:
                         if df is not None and not df.empty:
                             signals = calculate_technical_signals(df, p_tenkan, p_kijun, p_senkou_b, p_shift)
                             if signals: 
-                                return {"Mã CK": ticker, "Tín hiệu": signals, "Trạng thái": "Thành công"}
-                    except Exception as e:
-                        return {"Mã CK": ticker, "Lỗi": str(e), "Trạng thái": "Lỗi"}
+                                # [QUAN TRỌNG] Gộp trực tiếp ticker và trạng thái vào dict signals để bảng hiển thị phẳng, không bị lỗi {...}
+                                signals["Mã CK"] = ticker
+                                signals["Trạng thái"] = "Thành công"
+                                return signals
+                    except Exception:
+                        # Bỏ qua mã lỗi để không làm sập tiến trình
+                        pass
                     return None
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
@@ -120,18 +125,25 @@ with tab_screener:
                         progress_bar.progress(processed / total)
                 
                 status.update(label=f"✅ Đã quét xong {total} mã chứng khoán!", state="complete")
-                st.session_state['scan_results'] = results
+                
+                # Lưu kết quả dưới dạng DataFrame để dễ dàng xử lý UI/UX
+                st.session_state['scan_results'] = pd.DataFrame(results)
 
-    # Render dữ liệu bằng hàm UX mới tối ưu (Có Search & Tự cố định chiều cao)
-    if st.session_state['scan_results']:
-        render_search_and_export(st.session_state['scan_results'])
-
+    # --- RENDER GIAO DIỆN (Hiển thị Bảng & Nút Tải CSV) ---
+    if 'scan_results' in st.session_state and not st.session_state['scan_results'].empty:
+        st.divider()
+        
+        # 1. Gọi hàm UX: Hiển thị thanh Search và Nút tải Excel/CSV
+        # Trả về df_display (Đã được lọc theo từ khóa Search nếu có)
+        df_display = render_search_and_export(st.session_state['scan_results'])
+        
+        # 2. Gọi hàm UI: Render bảng dữ liệu màu sắc theo signal_filter (Tích cực/Tiêu cực)
+        if df_display is not None and not df_display.empty:
+            render_screener_results(df_display, signal_filter)
+    else:
+        st.info("💡 Hệ thống đang trống. Vui lòng bấm '🚀 KÍCH HOẠT QUÉT TOÀN DIỆN' để bắt đầu.")
 # ==========================================
 # TAB 3: MÔ PHỎNG ICHIMOKU
-# ==========================================
-# ==========================================
-# TAB 3: MÔ PHỎNG ICHIMOKU
-# ==========================================
 # ==========================================
 # TAB 3: MÔ PHỎNG ICHIMOKU REAL-TIME & VOLUME
 # ==========================================
