@@ -1,4 +1,4 @@
-import chart as c  # [MỚI] Gọi file gánh biểu đồ phân tầng
+import charts as c  # Gọi file gánh biểu đồ phân tầng
 import streamlit as st
 import pandas as pd
 import concurrent.futures
