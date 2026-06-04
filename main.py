@@ -1,3 +1,4 @@
+import chart as c  # [MỚI] Gọi file gánh biểu đồ phân tầng
 import streamlit as st
 import pandas as pd
 import concurrent.futures
@@ -131,25 +132,28 @@ with tab_screener:
 # ==========================================
 # TAB 3: MÔ PHỎNG ICHIMOKU
 # ==========================================
+# ==========================================
+# TAB 3: MÔ PHỎNG ICHIMOKU REAL-TIME & VOLUME
+# ==========================================
 with tab_simulation:
-    st.subheader("🔮 Hệ Thống Mô Phỏng & Trực Quan Hóa Mây Ichimoku")
+    st.subheader("🔮 Hệ Thống Mô Phỏng & Trực Quan Hóa Mây Ichimoku Nâng Cao")
+    st.markdown("* **Hỗ trợ thực chiến:** Tự động đồng bộ cấu hình chỉ báo động từ Sidebar và bóc tách khối lượng dòng tiền phân tầng.")
     
     sim_col1, sim_col2 = st.columns([1, 3])
     with sim_col1:
-        sim_ticker = st.text_input("🔤 Nhập mã CK cần xem:", value="SSI", key="sim_input").upper().strip()
-        sim_btn = st.button("📈 VẼ ĐỒ THỊ MÂY", use_container_width=True, type="primary")
+        sim_ticker = st.text_input("🔤 Nhập mã CK cần mô phỏng:", value="SSI", key="sim_input_unique").upper().strip()
+        sim_btn = st.button("📈 VẼ ĐỒ THỊ KỸ THUẬT ĐA TẦNG", use_container_width=True, type="primary")
         
     if sim_btn:
         if not sim_ticker:
-            st.warning("⚠️ Vui lòng nhập mã chứng khoán!")
+            st.warning("⚠️ Vui lòng điền mã cổ phiếu trước khi kích hoạt!")
         else:
-            with st.spinner(f"Đang tính toán mây Kumo cho {sim_ticker}..."):
-                # 1. Tận dụng hàm bốc dữ liệu từ data_loader
-                df_sim = get_stock_data(sim_ticker)
+            with st.spinner(f"⚡ Đang cào dữ liệu nến 5P và dựng cấu trúc mây {sim_ticker}..."):
+                # Kéo dữ liệu 5 phút (lấy 5 ngày cho nhẹ máy và dư phiên tính toán)
+                df_sim = bt.get_5m_data(sim_ticker, days_back=5)
                 
                 if df_sim is not None and not df_sim.empty:
-                    # 2. Đưa vào hàm tính toán Ichimoku (Dùng chung hàm bên file backtester)
-                    # Truyền các thông số động lấy từ Sidebar vào
+                    # Tính toán mây Ichimoku dựa trên thông số Sidebar
                     df_ichimoku = bt.calculate_ichimoku_5m(
                         df_sim, 
                         p_tenkan=p_tenkan, 
@@ -161,25 +165,32 @@ with tab_simulation:
                     if df_ichimoku is not None and not df_ichimoku.empty:
                         latest = df_ichimoku.iloc[-1]
                         
-                        st.success(f"✅ Phân tích thành công! Trạng thái hiện tại của {sim_ticker}:")
+                        st.success(f"🎉 Đồng bộ thành công dữ liệu Real-time mã: {sim_ticker}")
                         
-                        # 3. Hiển thị bảng Dashboard thông số hiện tại
+                        # Hiển thị thanh số liệu nhanh (Metrics Dashboard) có cột Dòng tiền Volume
                         m1, m2, m3, m4 = st.columns(4)
-                        m1.metric("🔴 Giá Đóng Cửa", f"{latest['close']:,.2f}")
-                        m2.metric("🔵 Tenkan (Đường chuyển)", f"{latest['tenkan']:,.2f}")
-                        m3.metric("🟡 Kijun (Đường chuẩn)", f"{latest['kijun']:,.2f}")
-                        m4.metric("☁️ Viền Mây (Top/Bottom)", f"{latest['cloud_top']:,.2f} / {latest['cloud_bottom']:,.2f}")
+                        close_price = float(latest.get('close', 0))
+                        volume = float(latest.get('volume', 0))
+                        tenkan = float(latest.get('tenkan', 0))
+                        kijun = float(latest.get('kijun', 0))
+                        cloud_top = float(latest.get('cloud_top', 0))
+                        cloud_bottom = float(latest.get('cloud_bottom', 0))
                         
-                        # 4. Trực quan hóa bằng biểu đồ siêu mượt của Streamlit
-                        st.markdown("### 📊 Biểu đồ Xu Hướng Giá & Cấu Trúc Mây")
+                        prev_close = float(df_ichimoku.iloc[-2]['close']) if len(df_ichimoku) > 1 else close_price
+                        price_change = close_price - prev_close
                         
-                        # Chỉ lọc ra các đường cần thiết để vẽ đồ thị
-                        chart_data = df_ichimoku.set_index('time')[['close', 'tenkan', 'kijun', 'senkou_a', 'senkou_b']]
-                        st.line_chart(chart_data)
+                        m1.metric("🔴 Giá Khớp Lệnh Hiện Tại", f"{close_price:,.2f}", delta=f"{price_change:,.2f}" if price_change != 0 else None)
+                        m2.metric("📊 Vol Cây Nến 5P Vừa Qua", f"{volume:,.0f}")
+                        m3.metric("🔵 Tenkan / 🟡 Kijun", f"{tenkan:,.2f} / {kijun:,.2f}")
+                        m4.metric("☁️ Biên Mây (Top/Bottom)", f"{cloud_top:,.2f} / {cloud_bottom:,.2f}")
+                        
+                        # 🚀 ĐOẠN ĐỈNH CAO CHẤT LƯỢNG: Ủy thác toàn bộ việc vẽ đồ thị cho file chart.py gánh vác
+                        st.markdown("### 📊 Đồ Thị Phân Tích Kỹ Thuật Phân Tầng (Giá & Volume Dòng Tiền)")
+                        c.render_ichimoku_simulation_chart(df_ichimoku)
                     else:
-                        st.warning("⚠️ Tập dữ liệu không đủ dài (Cần ít nhất 52 phiên) để hình thành Mây Kumo.")
+                        st.warning("⚠️ Tập dữ liệu không đủ dài để dựng mây Ichimoku. Vui lòng thử lại!")
                 else:
-                    st.error("⚠️ Lỗi mạng hoặc không tìm thấy mã chứng khoán này trên hệ thống!")
+                    st.error("⚠️ Không kéo được dữ liệu. Mã CK có thể sai hoặc hệ thống API quá tải!")
 
 # ==========================================
 # TAB 4: BACKTEST KHUNG 5 PHÚT
