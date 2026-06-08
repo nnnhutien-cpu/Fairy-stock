@@ -274,7 +274,12 @@ with tab_backtest:
                             if 'Vốn khả dụng' in display_log.columns:
                                 display_log['Vốn khả dụng'] = display_log['Vốn khả dụng'].map('{:,.0f} VNĐ'.format)
                                 
-                            st.dataframe(display_log, use_container_width=True, hide_index=True)
+                            # Đánh số thứ tự (STT) cho nhật ký giao dịch
+                            display_log.index = range(1, len(display_log) + 1)
+                            display_log.index.name = 'STT'
+                            
+                            # In ra màn hình (Bỏ hide_index đi để hiện cột STT)
+                            st.dataframe(display_log, use_container_width=True)
                             
                             # --- 2. PHẦN CŨ (GIỮ NGUYÊN): Nút xuất file CSV ---
                             # Mẹo nhỏ: Tôi đổi 'utf-8' thành 'utf-8-sig' để khi mở bằng Excel không bị lỗi font Tiếng Việt
@@ -287,5 +292,4 @@ with tab_backtest:
                                 use_container_width=True
                             )
                         else:
-                            st.info("ℹ️ Không tìm thấy bất kỳ tín hiệu Mua/Bán nào được kích hoạt trong khoảng thời gian này.")
                             st.info("ℹ️ Không tìm thấy bất kỳ tín hiệu Mua/Bán nào được kích hoạt trong khoảng thời gian này.")
