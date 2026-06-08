@@ -18,12 +18,14 @@ def render_sidebar():
             p_shift = st.number_input("Shift", value=26, step=1, help="Độ dịch chuyển")
     return exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
 
+
 def render_market_tab(chart_df, df_today):
     st.subheader("Nhịp Đập Thị Trường")
     if chart_df is not None:
         st.line_chart(chart_df, color=["#FF0000", "#00FF00"], height=380)
-        
-st.dataframe(df_display, use_container_width=True, hide_index=True)
+
+
+def render_screener_results(results_df, signal_filter):
     if not isinstance(results_df, pd.DataFrame):
         results_df = pd.DataFrame(results_df)
     
@@ -31,6 +33,7 @@ st.dataframe(df_display, use_container_width=True, hide_index=True)
         if signal_filter != "Tất cả" and 'Trạng thái' in results_df.columns:
             results_df = results_df[results_df['Trạng thái'] == signal_filter]
         
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        # Đã tích hợp luôn ẩn cột Index (số đếm) ở dòng này cho bạn!
+        st.dataframe(results_df, use_container_width=True, hide_index=True)
     else:
         st.info("Chưa có dữ liệu.")
