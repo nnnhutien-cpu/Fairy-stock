@@ -130,7 +130,7 @@ with tab_screener:
                 st.session_state['scan_results'] = pd.DataFrame(results)
 
    # --- RENDER GIAO DIỆN (Hiển thị Bảng & Nút Tải CSV) ---
-    if 'scan_results' in st.session_state and st.session_state['scan_results']:
+    if 'scan_results' in st.session_state and len(st.session_state['scan_results']) > 0:
         st.divider()
         
         # 1. Gọi hàm UX: Hiển thị thanh Search và Nút tải Excel/CSV
