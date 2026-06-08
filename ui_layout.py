@@ -31,6 +31,6 @@ def render_screener_results(results_df, signal_filter):
         if signal_filter != "Tất cả" and 'Trạng thái' in results_df.columns:
             results_df = results_df[results_df['Trạng thái'] == signal_filter]
         
-        st.dataframe(results_df, use_container_width=True, hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)
     else:
         st.info("Chưa có dữ liệu.")
