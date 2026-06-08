@@ -24,7 +24,6 @@ def render_market_tab(chart_df, df_today):
     if chart_df is not None and not chart_df.empty:
         st.line_chart(chart_df, color=["#FF0000", "#00FF00"], height=380)
 
-
 def render_screener_results(results_df, signal_filter):
     # Đảm bảo dữ liệu luôn là Bảng Pandas
     if not isinstance(results_df, pd.DataFrame):
@@ -47,7 +46,10 @@ def render_screener_results(results_df, signal_filter):
             if results_df[col].dtype == 'float64':
                 results_df[col] = results_df[col].round(2)
                 
-        # IN RA 1 BẢNG DUY NHẤT LÊN GIAO DIỆN VÀ ẨN CỘT INDEX SỐ LỘN XỘN
+        # --- VŨ KHÍ HỦY DIỆT CỘT SỐ THỪA THÃI ---
+        results_df.reset_index(drop=True, inplace=True)
+        
+        # IN RA 1 BẢNG DUY NHẤT LÊN GIAO DIỆN VÀ ẨN INDEX
         st.dataframe(results_df, use_container_width=True, hide_index=True)
     else:
         st.info("Chưa có dữ liệu hoặc không có mã nào thỏa mãn điều kiện lọc.")
