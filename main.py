@@ -162,12 +162,17 @@ with tab_simulation:
         else:
             with st.spinner(f"⚡ Đang cào dữ liệu nến 5P và dựng cấu trúc mây {sim_ticker}..."):
                 # Kéo dữ liệu 5 phút (lấy 5 ngày cho nhẹ máy và dư phiên tính toán)
+                # Kéo dữ liệu 5 phút
+                # Kéo dữ liệu 5 phút
                 df_sim = bt.get_5m_data(sim_ticker, days_back=5)
                 
-                if df_sim is not None and not df_sim.empty:
-                    # Tính toán mây Ichimoku dựa trên thông số Sidebar
-                    df_ichimoku = bt.calculate_ichimoku_5m(
-                        df_sim, 
+                # --- LỚP KHIÊN BẢO VỆ MỚI ---
+                if isinstance(df_sim, tuple):
+                    df_sim = df_sim[0] if len(df_sim) > 0 else None
+                # ----------------------------
+                
+                if isinstance(df_sim, pd.DataFrame) and not df_sim.empty:
+                    # Tính toán mây Ichimoku...
                         p_tenkan=p_tenkan, 
                         p_kijun=p_kijun, 
                         p_senkou_b=p_senkou_b, 
@@ -232,11 +237,16 @@ with tab_backtest:
             with st.status(f"⚡ Đang kéo dữ liệu intraday và chạy mô phỏng mã {bt_ticker}...", expanded=True) as status:
                 df_raw = bt.get_5m_data(bt_ticker, days_back=bt_days)
                 
-                if df_raw is None or df_raw.empty:
+                # --- LỚP KHIÊN BẢO VỆ MỚI ---
+                if isinstance(df_raw, tuple):
+                    df_raw = df_raw[0] if len(df_raw) > 0 else None
+                # ----------------------------
+                
+                if not isinstance(df_raw, pd.DataFrame) or df_raw.empty:
                     st.error(f"⚠️ Lỗi mạng hoặc mã {bt_ticker} không tồn tại. Vui lòng kiểm tra lại!")
                     status.update(label="Backtest thất bại!", state="error")
                 else:
-                    df_indicators = bt.calculate_ichimoku_5m(
+                    # df_indicators = bt.calculate_ichimoku_5m...
                         df_raw, 
                         p_tenkan=p_tenkan, 
                         p_kijun=p_kijun, 
