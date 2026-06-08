@@ -34,22 +34,20 @@ def render_screener_results(results_df, signal_filter):
         if signal_filter != "Tất cả" and 'Trạng thái' in results_df.columns:
             results_df = results_df[results_df['Trạng thái'] == signal_filter]
         
-        # Nhấc bổng Mã CK lên đầu
-        cols = results_df.columns.tolist()
-        if 'Mã CK' in cols:
-            cols.remove('Mã CK')
-            cols = ['Mã CK'] + cols
-            results_df = results_df[cols]
+        # DỌN DẸP RÁC: Xóa ngay các cột có tên là số (nếu có do lỗi cũ sinh ra)
+        cols_to_drop = [c for c in results_df.columns if str(c).isdigit() or str(c).lower() == 'index']
+        results_df.drop(columns=cols_to_drop, inplace=True, errors='ignore')
             
-        # XỬ LÝ "CHỮ SAI/SỐ XẤU": Tự động làm tròn số thập phân về 2 chữ số
+        # XỬ LÝ SỐ THẬP PHÂN: Làm tròn 2 chữ số
         for col in results_df.columns:
             if results_df[col].dtype == 'float64':
                 results_df[col] = results_df[col].round(2)
                 
-        # --- VŨ KHÍ HỦY DIỆT CỘT SỐ THỪA THÃI ---
-        results_df.reset_index(drop=True, inplace=True)
+        # 👑 CHIÊU CUỐI: Ép thẳng 'Mã CK' làm Chỉ mục (Index) thay cho cột số
+        if 'Mã CK' in results_df.columns:
+            results_df.set_index('Mã CK', inplace=True)
         
-        # IN RA 1 BẢNG DUY NHẤT LÊN GIAO DIỆN VÀ ẨN INDEX
-        st.dataframe(results_df, use_container_width=True, hide_index=True)
+        # IN BẢNG RA: Lúc này Mã CK đã chiếm vị trí Index, cột số 9 sẽ biến mất vĩnh viễn!
+        st.dataframe(results_df, use_container_width=True)
     else:
         st.info("Chưa có dữ liệu hoặc không có mã nào thỏa mãn điều kiện lọc.")
