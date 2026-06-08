@@ -47,11 +47,7 @@ def render_screener_results(results_df, signal_filter):
             if results_df[col].dtype == 'float64':
                 results_df[col] = results_df[col].round(2)
                 
-        # Tạo số thứ tự đẹp
-        results_df.index = range(1, len(results_df) + 1)
-        results_df.index.name = 'STT'
-        
-        # IN RA 1 BẢNG DUY NHẤT LÊN GIAO DIỆN
-        st.dataframe(results_df, use_container_width=True)
+        # IN RA 1 BẢNG DUY NHẤT LÊN GIAO DIỆN VÀ ẨN CỘT INDEX SỐ LỘN XỘN
+        st.dataframe(results_df, use_container_width=True, hide_index=True)
     else:
         st.info("Chưa có dữ liệu hoặc không có mã nào thỏa mãn điều kiện lọc.")
