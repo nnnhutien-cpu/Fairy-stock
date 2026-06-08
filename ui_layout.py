@@ -22,8 +22,8 @@ def render_market_tab(chart_df, df_today):
     st.subheader("Nhịp Đập Thị Trường")
     if chart_df is not None:
         st.line_chart(chart_df, color=["#FF0000", "#00FF00"], height=380)
-
-def render_screener_results(results_df, signal_filter):
+        
+st.dataframe(df_display, use_container_width=True, hide_index=True)
     if not isinstance(results_df, pd.DataFrame):
         results_df = pd.DataFrame(results_df)
     
