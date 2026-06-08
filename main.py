@@ -127,9 +127,9 @@ with tab_screener:
                 status.update(label=f"✅ Đã quét xong {total} mã chứng khoán!", state="complete")
                 
                 # Lưu kết quả dưới dạng DataFrame để dễ dàng xử lý UI/UX
-                st.session_state['scan_results'] = pd.DataFrame(results)
+        st.session_state['scan_results'] = pd.DataFrame(results)
 
-   # --- RENDER GIAO DIỆN (Hiển thị Bảng & Nút Tải CSV) ---
+    # --- RENDER GIAO DIỆN (Hiển thị Bảng & Nút Tải CSV) ---
     if 'scan_results' in st.session_state and len(st.session_state['scan_results']) > 0:
         st.divider()
         
