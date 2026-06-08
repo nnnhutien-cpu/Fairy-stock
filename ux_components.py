@@ -27,7 +27,7 @@ def render_search_and_export(results_list, filename="Dulieu_Chungkhoan.csv"):
     xuất file chống lỗi Font và cố định chiều cao bảng chống giật lag.
     """
     # 1. Bẫy lỗi: Rỗng thì không render bảng để tiết kiệm tài nguyên
-    if not results_list:
+    if results_list is None or results_list.empty:
         return None
         
     df_display = pd.DataFrame(results_list)
