@@ -42,11 +42,16 @@ def render_screener_results(results_df, signal_filter):
             cols = ['Mã CK'] + cols
             results_df = results_df[cols]
             
+        # XỬ LÝ "CHỮ SAI/SỐ XẤU": Tự động làm tròn số thập phân về 2 chữ số
+        for col in results_df.columns:
+            if results_df[col].dtype == 'float64':
+                results_df[col] = results_df[col].round(2)
+                
         # Tạo số thứ tự đẹp
         results_df.index = range(1, len(results_df) + 1)
         results_df.index.name = 'STT'
         
-        # LỆNH IN BẢNG (CHỈ CÓ 1 LỆNH DUY NHẤT Ở ĐÂY ĐỂ TRÁNH DOUBLE)
+        # IN RA 1 BẢNG DUY NHẤT LÊN GIAO DIỆN
         st.dataframe(results_df, use_container_width=True)
     else:
-        st.info("Chưa có dữ liệu.")
+        st.info("Chưa có dữ liệu hoặc không có mã nào thỏa mãn điều kiện lọc.")
