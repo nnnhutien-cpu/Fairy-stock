@@ -93,7 +93,7 @@ with tab_screener:
         else:
             tickers_to_scan = tickers[:max_scan]
             
-            with st.status(f"Đang dùng 10 Luồng quét {len(tickers_to_scan)} mã. Tốc độ siêu tốc...", expanded=True) as status:
+            with st.status(f"Đang dùng 50 Luồng quét {len(tickers_to_scan)} mã. Tốc độ siêu tốc...", expanded=True) as status:
                 progress_bar = st.progress(0)
                 results = []
                 total = len(tickers_to_scan)
@@ -112,7 +112,7 @@ with tab_screener:
                         pass
                     return None
 
-                with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
                     future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
                     for future in concurrent.futures.as_completed(future_to_ticker):
                         res = future.result()
