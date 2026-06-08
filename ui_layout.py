@@ -24,6 +24,7 @@ def render_market_tab(chart_df, df_today):
     if chart_df is not None and not chart_df.empty:
         st.line_chart(chart_df, color=["#FF0000", "#00FF00"], height=380)
 
+
 def render_screener_results(results_df, signal_filter):
     # Đảm bảo dữ liệu luôn là Bảng Pandas
     if not isinstance(results_df, pd.DataFrame):
@@ -33,21 +34,33 @@ def render_screener_results(results_df, signal_filter):
         # Lọc trạng thái
         if signal_filter != "Tất cả" and 'Trạng thái' in results_df.columns:
             results_df = results_df[results_df['Trạng thái'] == signal_filter]
-        
-        # DỌN DẸP RÁC: Xóa ngay các cột có tên là số (nếu có do lỗi cũ sinh ra)
-        cols_to_drop = [c for c in results_df.columns if str(c).isdigit() or str(c).lower() == 'index']
-        results_df.drop(columns=cols_to_drop, inplace=True, errors='ignore')
             
-        # XỬ LÝ SỐ THẬP PHÂN: Làm tròn 2 chữ số
+        # --- 🔑 CHÌA KHÓA GIẢI QUYẾT LỖI CỘT SỐ 9 ---
+        # Bắt các cột mang tên số (9, 26, 52) và đổi lại tên cho chuẩn xác!
+        rename_map = {
+            9: 'Tenkan (9)', '9': 'Tenkan (9)',
+            26: 'Kijun (26)', '26': 'Kijun (26)',
+            52: 'Senkou (52)', '52': 'Senkou (52)'
+        }
+        results_df.rename(columns=rename_map, inplace=True)
+        
+        # Đề phòng còn cột số lộn xộn nào khác, xóa sạch luôn
+        cols_to_drop = [c for c in results_df.columns if str(c).isdigit()]
+        results_df.drop(columns=cols_to_drop, inplace=True, errors='ignore')
+        
+        # Nhấc bổng Mã CK lên đầu
+        cols = results_df.columns.tolist()
+        if 'Mã CK' in cols:
+            cols.remove('Mã CK')
+            cols = ['Mã CK'] + cols
+            results_df = results_df[cols]
+            
+        # XỬ LÝ SỐ THẬP PHÂN: Làm tròn về 2 chữ số
         for col in results_df.columns:
             if results_df[col].dtype == 'float64':
                 results_df[col] = results_df[col].round(2)
                 
-        # 👑 CHIÊU CUỐI: Ép thẳng 'Mã CK' làm Chỉ mục (Index) thay cho cột số
-        if 'Mã CK' in results_df.columns:
-            results_df.set_index('Mã CK', inplace=True)
-        
-        # IN BẢNG RA: Lúc này Mã CK đã chiếm vị trí Index, cột số 9 sẽ biến mất vĩnh viễn!
-        st.dataframe(results_df, use_container_width=True)
+        # IN RA 1 BẢNG DUY NHẤT LÊN GIAO DIỆN (Ẩn các số thứ tự Index lộn xộn)
+        st.dataframe(results_df, use_container_width=True, hide_index=True)
     else:
         st.info("Chưa có dữ liệu hoặc không có mã nào thỏa mãn điều kiện lọc.")
