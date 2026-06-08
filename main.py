@@ -78,7 +78,6 @@ with tab_market:
     render_market_tab(chart_df, df_today)
 
 # ==========================================
-# ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU ĐA LUỒNG
 # ==========================================
 with tab_screener:
@@ -106,12 +105,10 @@ with tab_screener:
                         if df is not None and not df.empty:
                             signals = calculate_technical_signals(df, p_tenkan, p_kijun, p_senkou_b, p_shift)
                             if signals: 
-                                # [QUAN TRỌNG] Gộp trực tiếp ticker và trạng thái vào dict signals để bảng hiển thị phẳng, không bị lỗi {...}
                                 signals["Mã CK"] = ticker
                                 signals["Trạng thái"] = "Thành công"
                                 return signals
                     except Exception:
-                        # Bỏ qua mã lỗi để không làm sập tiến trình
                         pass
                     return None
 
@@ -125,25 +122,17 @@ with tab_screener:
                         progress_bar.progress(processed / total)
                 
                 status.update(label=f"✅ Đã quét xong {total} mã chứng khoán!", state="complete")
-                
-                # Lưu kết quả dưới dạng DataFrame để dễ dàng xử lý UI/UX
-        st.session_state['scan_results'] = pd.DataFrame(results)
+                st.session_state['scan_results'] = pd.DataFrame(results)
 
-    # --- RENDER GIAO DIỆN (Hiển thị Bảng & Nút Tải CSV) ---
+    # --- RENDER GIAO DIỆN BỘ LỌC ---
     if 'scan_results' in st.session_state and len(st.session_state['scan_results']) > 0:
         st.divider()
-        
-        # 1. Gọi hàm UX: Hiển thị thanh Search và Nút tải Excel/CSV
-        # Trả về df_display (Đã được lọc theo từ khóa Search nếu có)
         df_display = render_search_and_export(st.session_state['scan_results'])
-        
-        # 2. Gọi hàm UI: Render bảng dữ liệu màu sắc theo signal_filter (Tích cực/Tiêu cực)
         if df_display is not None and not df_display.empty:
             render_screener_results(df_display, signal_filter)
     else:
         st.info("💡 Hệ thống đang trống. Vui lòng bấm '🚀 KÍCH HOẠT QUÉT TOÀN DIỆN' để bắt đầu.")
-# ==========================================
-# TAB 3: MÔ PHỎNG ICHIMOKU
+
 # ==========================================
 # TAB 3: MÔ PHỎNG ICHIMOKU REAL-TIME & VOLUME
 # ==========================================
@@ -161,30 +150,21 @@ with tab_simulation:
             st.warning("⚠️ Vui lòng điền mã cổ phiếu trước khi kích hoạt!")
         else:
             with st.spinner(f"⚡ Đang cào dữ liệu nến 5P và dựng cấu trúc mây {sim_ticker}..."):
-                # Kéo dữ liệu 5 phút (lấy 5 ngày cho nhẹ máy và dư phiên tính toán)
-                # Kéo dữ liệu 5 phút
-                # Kéo dữ liệu 5 phút
                 df_sim = bt.get_5m_data(sim_ticker, days_back=5)
                 
-                # --- LỚP KHIÊN BẢO VỆ MỚI ---
+                # --- LỚP KHIÊN BẢO VỆ TUPLE ---
                 if isinstance(df_sim, tuple):
                     df_sim = df_sim[0] if len(df_sim) > 0 else None
                 # ----------------------------
                 
                 if isinstance(df_sim, pd.DataFrame) and not df_sim.empty:
-                    # Tính toán mây Ichimoku...
-                        p_tenkan=p_tenkan, 
-                        p_kijun=p_kijun, 
-                        p_senkou_b=p_senkou_b, 
-                        p_shift=p_shift
-                    )
+                    # GOM HÀM TRÊN 1 DÒNG ĐỂ CHỐNG LỖI THỤT LỀ
+                    df_ichimoku = bt.calculate_ichimoku_5m(df_sim, p_tenkan=p_tenkan, p_kijun=p_kijun, p_senkou_b=p_senkou_b, p_shift=p_shift)
                     
                     if df_ichimoku is not None and not df_ichimoku.empty:
                         latest = df_ichimoku.iloc[-1]
-                        
                         st.success(f"🎉 Đồng bộ thành công dữ liệu Real-time mã: {sim_ticker}")
                         
-                        # Hiển thị thanh số liệu nhanh (Metrics Dashboard) có cột Dòng tiền Volume
                         m1, m2, m3, m4 = st.columns(4)
                         close_price = float(latest.get('close', 0))
                         volume = float(latest.get('volume', 0))
@@ -201,7 +181,6 @@ with tab_simulation:
                         m3.metric("🔵 Tenkan / 🟡 Kijun", f"{tenkan:,.2f} / {kijun:,.2f}")
                         m4.metric("☁️ Biên Mây (Top/Bottom)", f"{cloud_top:,.2f} / {cloud_bottom:,.2f}")
                         
-                        # 🚀 ĐOẠN ĐỈNH CAO CHẤT LƯỢNG: Ủy thác toàn bộ việc vẽ đồ thị cho file chart.py gánh vác
                         st.markdown("### 📊 Đồ Thị Phân Tích Kỹ Thuật Phân Tầng (Giá & Volume Dòng Tiền)")
                         c.render_ichimoku_simulation_chart(df_ichimoku)
                     else:
@@ -237,7 +216,7 @@ with tab_backtest:
             with st.status(f"⚡ Đang kéo dữ liệu intraday và chạy mô phỏng mã {bt_ticker}...", expanded=True) as status:
                 df_raw = bt.get_5m_data(bt_ticker, days_back=bt_days)
                 
-                # --- LỚP KHIÊN BẢO VỆ MỚI ---
+                # --- LỚP KHIÊN BẢO VỆ TUPLE ---
                 if isinstance(df_raw, tuple):
                     df_raw = df_raw[0] if len(df_raw) > 0 else None
                 # ----------------------------
@@ -246,13 +225,8 @@ with tab_backtest:
                     st.error(f"⚠️ Lỗi mạng hoặc mã {bt_ticker} không tồn tại. Vui lòng kiểm tra lại!")
                     status.update(label="Backtest thất bại!", state="error")
                 else:
-                    # df_indicators = bt.calculate_ichimoku_5m...
-                        df_raw, 
-                        p_tenkan=p_tenkan, 
-                        p_kijun=p_kijun, 
-                        p_senkou_b=p_senkou_b, 
-                        p_shift=p_shift
-                    )
+                    # GOM HÀM TRÊN 1 DÒNG ĐỂ CHỐNG LỖI THỤT LỀ
+                    df_indicators = bt.calculate_ichimoku_5m(df_raw, p_tenkan=p_tenkan, p_kijun=p_kijun, p_senkou_b=p_senkou_b, p_shift=p_shift)
                     
                     if df_indicators is None or df_indicators.empty:
                         st.warning("⚠️ Tập dữ liệu quá ngắn, không đủ để hình thành Mây Ichimoku. Vui lòng tăng số ngày khảo sát!")
@@ -274,7 +248,7 @@ with tab_backtest:
                         if not trade_log.empty:
                             display_log = trade_log.copy()
                             
-                            # --- 1. PHẦN MỚI: Định dạng số liệu hiển thị trên Web cho đẹp ---
+                            # Định dạng số liệu hiển thị trên Web cho đẹp
                             if 'Giá khớp' in display_log.columns:
                                 display_log['Giá khớp'] = display_log['Giá khớp'].map('{:,.2f}'.format)
                             if 'Vol nến 5P' in display_log.columns:
@@ -288,11 +262,10 @@ with tab_backtest:
                             display_log.index = range(1, len(display_log) + 1)
                             display_log.index.name = 'STT'
                             
-                            # In ra màn hình (Bỏ hide_index đi để hiện cột STT)
+                            # In ra màn hình
                             st.dataframe(display_log, use_container_width=True)
                             
-                            # --- 2. PHẦN CŨ (GIỮ NGUYÊN): Nút xuất file CSV ---
-                            # Mẹo nhỏ: Tôi đổi 'utf-8' thành 'utf-8-sig' để khi mở bằng Excel không bị lỗi font Tiếng Việt
+                            # Nút xuất file CSV
                             csv_data = trade_log.to_csv(index=False).encode('utf-8-sig')
                             st.download_button(
                                 label="📥 Xuất Nhật Ký Giao Dịch Sang File CSV",
