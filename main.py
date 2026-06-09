@@ -29,25 +29,32 @@ def render_screener_results(results_df, signal_filter):
     if not isinstance(results_df, pd.DataFrame):
         results_df = pd.DataFrame(results_df)
     
+    # KHI CÓ DỮ LIỆU TỪ HỆ THỐNG TRUYỀN VÀO
     if not results_df.empty:
-        # Lọc trạng thái
+        # 1. Lọc theo trạng thái Tích cực / Tiêu cực
         if signal_filter != "Tất cả" and 'Trạng thái' in results_df.columns:
             results_df = results_df[results_df['Trạng thái'] == signal_filter]
         
-        # --- BƯỚC 1: XÓA BIẾN MẤT CỘT 9 ---
+        # 2. KIỂM TRA LẠI: Nếu lọc xong mà không có mã nào, báo lỗi ngay!
+        if results_df.empty:
+            st.warning(f"⚠️ Không có mã cổ phiếu nào thỏa mãn tín hiệu '{signal_filter}'. Bạn hãy thử đổi bộ lọc nhé!")
+            return # Dừng lại, không chạy phần vẽ bảng bên dưới nữa
+        
+        # 3. LỌC CỘT: Xóa cột 9
         cols = [col for col in results_df.columns if str(col) != '9']
         
-        # --- BƯỚC 2: ĐƯA "Mã CK" LÊN ĐẦU TIÊN THAY THẾ ---
+        # 4. SẮP XẾP: Đưa "Mã CK" lên đầu tiên
         if 'Mã CK' in cols:
-            cols.remove('Mã CK')           # Rút cột Mã CK ra khỏi danh sách
-            cols = ['Mã CK'] + cols        # Gắn nó lại vào vị trí đầu tiên (Số 1)
-        elif 'Mã' in cols:                 # Dự phòng trường hợp cột của bạn tên là 'Mã'
+            cols.remove('Mã CK')
+            cols = ['Mã CK'] + cols
+        elif 'Mã' in cols:
             cols.remove('Mã')
             cols = ['Mã'] + cols
 
         df_display = results_df[cols]
 
-        # Hiển thị bảng đã được dọn dẹp và sắp xếp lên Streamlit
+        # Hiển thị bảng
         st.dataframe(df_display, use_container_width=True, hide_index=True)
     else:
-        st.info("Chưa có dữ liệu.")
+        # KHI CHƯA BẤM NÚT QUÉT HOẶC VỪA XÓA CACHE
+        st.info("Chưa có dữ liệu. Vui lòng bấm nút 'Lọc Cổ Phiếu' để bắt đầu!")
