@@ -1,40 +1,45 @@
+import streamlit as st
+import pandas as pd
+
+def render_sidebar():
+    with st.sidebar:
+        st.title("🧚‍♀️ CÔ TIÊN STOCK")
+        st.caption("Hệ thống phân tích thông minh")
+        st.divider()
+        st.header("⚙️ CẤU HÌNH BỘ LỌC")
+        exchange_choice = st.selectbox("Chọn sàn giao dịch:", ["HOSE", "HNX", "UPCOM", "Tất cả 3 sàn"])
+        signal_filter = st.radio("Bộ lọc tín hiệu kỹ thuật:", ["Tất cả", "🟢 Tích cực", "🔴 Tiêu cực"])
+        max_scan = st.slider("Số lượng mã quét tối đa:", 10, 2000, 1600)
+        
+        with st.expander("🛠️ TÙY CHỈNH ICHIMOKU (NÂNG CAO)", expanded=False):
+            p_tenkan = st.number_input("Tenkan-sen", value=9, step=1)
+            p_kijun = st.number_input("Kijun-sen", value=26, step=1)
+            p_senkou_b = st.number_input("Senkou B", value=52, step=1)
+            p_shift = st.number_input("Shift", value=26, step=1)
+    return exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
+
+
+def render_market_tab(chart_df, df_today):
+    st.subheader("Nhịp Đập Thị Trường")
+    if chart_df is not None and not chart_df.empty:
+        st.line_chart(chart_df, color=["#FF0000", "#00FF00"], height=380)
+
+
 def render_screener_results(results_df, signal_filter):
-    # Đảm bảo dữ liệu đầu vào luôn là DataFrame
     if not isinstance(results_df, pd.DataFrame):
         results_df = pd.DataFrame(results_df)
     
-    # KHI CÓ DỮ LIỆU TỪ HỆ THỐNG TRUYỀN VÀO
     if not results_df.empty:
-        
-        # 1. BẢO VỆ LOGIC LỌC: Chỉ lọc khi người dùng chọn Tích cực/Tiêu cực (Bỏ qua "Tất cả")
+        # Lọc trạng thái
         if signal_filter != "Tất cả" and 'Trạng thái' in results_df.columns:
             results_df = results_df[results_df['Trạng thái'] == signal_filter]
         
-        # 2. KIỂM TRA LẠI: Nếu lọc xong mà bảng rỗng, cảnh báo và DỪNG CODE NGAY LẬP TỨC
-        if results_df.empty:
-            st.warning(f"⚠️ Không có mã cổ phiếu nào thỏa mãn tín hiệu '{signal_filter}'. Bạn hãy thử đổi bộ lọc nhé!")
-            return pd.DataFrame() # <--- Lệnh ngắt sinh tử giúp app không bị sập!
-        
-        # 3. LỌC CỘT: Xóa cột 9 đáng ghét
-        cols = [col for col in results_df.columns if str(col) != '9']
-        
-        # 4. SẮP XẾP: Đưa "Mã CK" lên vị trí số 1
-        if 'Mã CK' in cols:
-            cols.remove('Mã CK')
-            cols = ['Mã CK'] + cols
-        elif 'Mã' in cols:
-            cols.remove('Mã')
-            cols = ['Mã'] + cols
+        # LẤY TẤT CẢ CÁC CỘT, CHỈ LOẠI BỎ DUY NHẤT CỘT MÃ "9"
+        # str(col) != '9' đảm bảo xóa cả cột số 9 và cột chữ '9'
+        cols_to_use = [col for col in results_df.columns if str(col) != '9']
+        df_display = results_df[cols_to_use]
 
-        df_display = results_df[cols]
-
-        # 5. Hiển thị bảng
+        # Hiển thị bảng đã được dọn dẹp lên Streamlit
         st.dataframe(df_display, use_container_width=True, hide_index=True)
-        
-        # 6. Trả kết quả về cho main.py sử dụng (Giải quyết triệt để lỗi dòng 131)
-        return df_display
-        
     else:
-        # KHI CHƯA BẤM NÚT QUÉT HOẶC VỪA XÓA CACHE
-        st.info("Chưa có dữ liệu. Vui lòng bấm nút 'Lọc Cổ Phiếu' để bắt đầu!")
-        return pd.DataFrame()
+        st.info("Chưa có dữ liệu.")
