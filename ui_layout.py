@@ -34,18 +34,19 @@ def render_screener_results(results_df, signal_filter):
         if signal_filter != "Tất cả" and 'Trạng thái' in results_df.columns:
             results_df = results_df[results_df['Trạng thái'] == signal_filter]
         
-        # CHỌN CỘT THỦ CÔNG: Chỉ cho phép các cột này hiện ra, các cột khác (như cột 9) sẽ bị loại bỏ
-        allowed_cols = ['Mã CK', 'Trạng thái', 'RSI', 'MACD', 'Tín hiệu'] # Thêm các tên cột thực tế của bạn vào đây
-        # Nếu không biết tên cột chính xác, hãy lấy tất cả trừ các cột là số:
-        cols_to_use = [c for c in results_df.columns if not str(c).isdigit()]
-        results_df = results_df[cols_to_use]
-            
-        # Nhấc Mã CK lên đầu
-        if 'Mã CK' in results_df.columns:
-            cols = ['Mã CK'] + [c for c in results_df.columns if c != 'Mã CK']
-            results_df = results_df[cols]
-                
-        st.dataframe(results_df, use_container_width=True, hide_index=True)
+        # Xác định chính xác những cột bạn MUỐN hiển thị
+danh_sach_cot = [
+    'Mã', 'Giá', 'Khối Lượng', 'Tín hiệu', 
+    'MACD', 'RSI', 'Đường Kijun', 'Đường Tenkan', 
+    'Senkou A', 'Senkou B'
+]
+
+# Chỉ lấy những cột có trong danh sách trên
+# Lệnh này sẽ tự động bỏ qua cột "9" hay bất kỳ cột rác nào khác
+df_display = df[danh_sach_cot]
+
+# Hiển thị bảng đã được dọn dẹp lên Streamlit
+st.dataframe(df_display, use_container_width=True, hide_index=True)
     else:
         st.info("Chưa có dữ liệu.")
 
