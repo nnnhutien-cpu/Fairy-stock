@@ -34,19 +34,20 @@ def render_screener_results(results_df, signal_filter):
         if signal_filter != "Tất cả" and 'Trạng thái' in results_df.columns:
             results_df = results_df[results_df['Trạng thái'] == signal_filter]
         
+        # --- ĐOẠN NÀY ĐÃ ĐƯỢC SỬA LỖI THỤT LỀ VÀ TÊN BIẾN ---
         # Xác định chính xác những cột bạn MUỐN hiển thị
-danh_sach_cot = [
-    'Mã', 'Giá', 'Khối Lượng', 'Tín hiệu', 
-    'MACD', 'RSI', 'Đường Kijun', 'Đường Tenkan', 
-    'Senkou A', 'Senkou B'
-]
+        danh_sach_cot = [
+            'Mã', 'Giá', 'Khối Lượng', 'Tín hiệu', 
+            'MACD', 'RSI', 'Đường Kijun', 'Đường Tenkan', 
+            'Senkou A', 'Senkou B', 'Trạng thái'
+        ]
 
-# Chỉ lấy những cột có trong danh sách trên
-# Lệnh này sẽ tự động bỏ qua cột "9" hay bất kỳ cột rác nào khác
-df_display = df[danh_sach_cot]
+        # Chỉ lấy những cột có trong danh sách trên VÀ phải tồn tại trong bảng dữ liệu thực tế
+        # Điều này giúp code không bị lỗi nếu lỡ một cột nào đó bị đổi tên
+        cols_to_use = [col for col in danh_sach_cot if col in results_df.columns]
+        df_display = results_df[cols_to_use]
 
-# Hiển thị bảng đã được dọn dẹp lên Streamlit
-st.dataframe(df_display, use_container_width=True, hide_index=True)
+        # Hiển thị bảng đã được dọn dẹp lên Streamlit
+        st.dataframe(df_display, use_container_width=True, hide_index=True)
     else:
         st.info("Chưa có dữ liệu.")
-
