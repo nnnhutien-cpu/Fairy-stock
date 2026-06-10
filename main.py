@@ -79,30 +79,31 @@ with tab_screener:
     st.subheader(f"Danh Sách Quét Sàn {exchange_choice} (>20 Tỷ VNĐ)")
     scan_button = st.button("🚀 KÍCH HOẠT QUÉT TOÀN DIỆN", use_container_width=True, type="primary")
     
-    if scan_button:
+   if scan_button:
         ex_code = 'all' if exchange_choice == "Tất cả 3 sàn" else exchange_choice
         tickers = get_all_tickers(ex_code)
         
-        # Bẫy lỗi không lấy được danh sách mã
         if tickers is None or len(tickers) == 0:
             st.error("⚠️ Lỗi mạng: Không lấy được danh sách mã chứng khoán!")
         else:
             tickers_to_scan = tickers[:max_scan]
             
-            with st.status(f"Đang dùng 20 Luồng quét {len(tickers_to_scan)} mã. Tốc độ siêu tốc...", expanded=True) as status:
+            # UX: Báo cáo trạng thái rõ ràng, không làm người dùng hoang mang
+            with st.status(f"Đang dùng 15 Luồng an toàn quét {len(tickers_to_scan)} mã (Dữ liệu Daily 365 ngày)...", expanded=True) as status:
                 progress_bar = st.progress(0)
                 results = []
                 total = len(tickers_to_scan)
                 processed = 0
 
                 def process_ticker(ticker):
-                    df = get_stock_data(ticker)
+                    # Cache dữ liệu ở data_loader sẽ giúp đoạn này chạy siêu tốc
+                    df = get_stock_data(ticker, days_back=365) # Lấy 365 ngày
                     if df is None or df.empty:
                         return None
-                    signal_data = calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
-                    return signal_data
+                    return calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
 
-                with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                # CHÚ Ý: Giảm max_workers xuống 15 để không bị nghẽn mạng!
+                with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
                     future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
                     for future in concurrent.futures.as_completed(future_to_ticker):
                         processed += 1
@@ -112,9 +113,10 @@ with tab_screener:
                                 results.append(res)
                         except Exception:
                             pass
+                        # Cập nhật thanh UX mượt mà
                         progress_bar.progress(processed / total)
                 
-                status.update(label=f"✅ Đã quét xong siêu tốc!", state="complete", expanded=False)
+                status.update(label=f"✅ Đã quét xong siêu tốc và an toàn!", state="complete", expanded=False)
             st.session_state['scan_results'] = results
     
     if st.session_state['scan_results']:
