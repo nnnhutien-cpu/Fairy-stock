@@ -89,7 +89,7 @@ with tab_screener:
         else:
             tickers_to_scan = tickers[:max_scan]
             
-            with st.status(f"Đang dùng 100 Luồng quét {len(tickers_to_scan)} mã. Tốc độ siêu tốc...", expanded=True) as status:
+            with st.status(f"Đang dùng 20 Luồng quét {len(tickers_to_scan)} mã. Tốc độ siêu tốc...", expanded=True) as status:
                 progress_bar = st.progress(0)
                 results = []
                 total = len(tickers_to_scan)
