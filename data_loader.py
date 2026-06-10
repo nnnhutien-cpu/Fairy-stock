@@ -1,59 +1,23 @@
-from vnstock import stock_historical_data, listing_companies
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 import streamlit as st
+from vnstock import stock_historical_data, stock_listing
 import pandas as pd
+from datetime import datetime, timedelta
 
-def get_vn_time():
-    """Hàm ép hệ thống dùng đồng hồ Việt Nam (GMT+7)"""
-    return datetime.now(ZoneInfo('Asia/Ho_Chi_Minh'))
-
-def get_stock_data(symbol, days_back=365):
-    """Cào dữ liệu lịch sử cổ phiếu (Lấy 1 năm để đủ vẽ Mây Ichimoku)"""
-    now_vn = get_vn_time()
-    end_date = now_vn.strftime('%Y-%m-%d')
-    start_date = (now_vn - timedelta(days=days_back)).strftime('%Y-%m-%d')
-    try:
-        df = stock_historical_data(symbol=symbol, 
-                                   start_date=start_date, 
-                                   end_date=end_date, 
-                                   resolution="1D", type="stock")
-        return df
-    except Exception as e:
-        return None
-
-def get_vnindex_data():
-    now_vn = get_vn_time()
-    end_date = now_vn.strftime('%Y-%m-%d')
-    start_date = (now_vn - timedelta(days=7)).strftime('%Y-%m-%d')
-    try:
-        df = stock_historical_data(symbol='VNINDEX', start_date=start_date, end_date=end_date, resolution="1D", type="index")
-        return df
-    except Exception as e:
-        return None
-
-@st.cache_data(ttl=86400)
+# BÙA CHÚ 1: Cất danh sách mã vào bộ nhớ ảo 1 ngày
+@st.cache_data(ttl=86400) 
 def get_all_tickers(exchange='all'):
-    """Lấy danh sách mã chứng khoán"""
-    try:
-        df = listing_companies()
-        if exchange != 'all':
-            df = df[df['comGroupCode'] == exchange]
-        return df['ticker'].tolist()
-    except Exception as e:
-        return ["HPG", "SSI", "VND", "FPT", "TCB", "MBB", "MWG", "VIC", "VHM", "VNM"]
+    # Code lấy danh sách mã của bạn ở đây...
+    df = stock_listing()
+    return df['ticker'].tolist()
 
-def get_intraday_vnindex():
-    """Cào dữ liệu VN-INDEX khung 5 phút (Hàm này bị thiếu gây lỗi nãy giờ)"""
-    now_vn = get_vn_time()
-    start_date = (now_vn - timedelta(days=5)).strftime('%Y-%m-%d')
-    end_date = now_vn.strftime('%Y-%m-%d')
+# BÙA CHÚ 2: Cất dữ liệu giá 365 ngày vào bộ nhớ ảo 1 giờ
+@st.cache_data(ttl=3600, show_spinner=False) 
+def get_stock_data(ticker, days_back=365):
+    # Code cào dữ liệu của bạn ở đây...
+    end_date = datetime.now().strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
     try:
-        df = stock_historical_data(symbol='VNINDEX', 
-                                   start_date=start_date, 
-                                   end_date=end_date, 
-                                   resolution="5", 
-                                   type="index")
+        df = stock_historical_data(symbol=ticker, start_date=start_date, end_date=end_date, resolution="1D", type="stock")
         return df
-    except Exception as e:
+    except:
         return None
