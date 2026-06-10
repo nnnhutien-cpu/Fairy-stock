@@ -178,35 +178,42 @@ with tab_simulation:
             else:
                 st.error(f"⚠️ Không thể kết nối hoặc không tìm thấy dữ liệu lịch sử của mã '{sim_ticker}'. Vui lòng thử lại mã khác.")
 
-# [MỚI] Tích hợp Tab 4: Backtest Cổ Phiếu Khung 3 Phút
+# [MỚI] Tích hợp Tab 4: Backtest Cổ Phiếu Khung Ngày (Daily) - Có Risk Management
 with tab_backtest:
-    st.subheader("🛠️ Hệ Thống Kiểm Thử Chiến Lược Mây Ichimoku Khung 3 Phút")
-    st.caption("Hệ thống tự động gộp nến 1 phút thành 3 phút, giả lập mua khi giá vượt Mây và bán khi gãy Mây.")
+    st.subheader("🛠️ Hệ Thống Backtest Dài Hạn (Khung 1D)")
+    st.caption("Thuật toán Quant: Tự động bắt Râu nến để Stoploss (-7%) hoặc Take Profit (+15%). Chặn bán nếu gãy trend Kumo.")
 
     col_input1, col_input2 = st.columns(2)
     with col_input1:
-        ticker_bt = st.text_input("Nhập mã cổ phiếu để test (Ví dụ: VGI, SSI):", value="VGI", key="bt_ticker").upper()
+        ticker_bt = st.text_input("Nhập mã cổ phiếu để test (Ví dụ: FPT, HPG):", value="FPT", key="bt_ticker").upper()
     with col_input2:
-        days_back = st.slider("Số ngày quá khứ muốn kiểm tra:", min_value=5, max_value=60, value=30)
+        # UX: Đổi từ thanh trượt "Ngày" sang thanh trượt "Năm" cho dài hạn
+        years_back = st.slider("Số NĂM quá khứ muốn kiểm tra:", min_value=1, max_value=10, value=5)
 
-    if st.button("🚀 Bắt đầu chạy Backtest"):
-        with st.spinner(f"Đang cào dữ liệu 1 phút và gộp nến 3 phút mô phỏng mã {ticker_bt}..."):
-            # Gọi hàm cào dữ liệu 3 phút từ file backtester.py
-            df_3m = bt.get_3m_data(ticker_bt, days_back)
+    if st.button("🚀 Bắt đầu chạy Backtest Tự Động"):
+        with st.spinner(f"Đang cào dữ liệu Daily trong {years_back} năm và mô phỏng giao dịch mã {ticker_bt}..."):
             
-            if df_3m is not None and not df_3m.empty:
-                df_ichimoku = bt.calculate_ichimoku_3m(df_3m)
+            # 1. Gọi đúng tên hàm Khung Ngày từ file backtester.py
+            df_daily = bt.get_daily_data(ticker_bt, years_back)
+            
+            if df_daily is not None and not df_daily.empty:
+                # 2. Gọi hàm tính toán mây Ichimoku Daily
+                df_ichimoku = bt.calculate_ichimoku_daily(df_daily)
+                
                 if df_ichimoku is not None:
-                    stats, trade_log = bt.run_ichimoku_backtest(df_ichimoku)
+                    # 3. Chạy vòng lặp kiểm thử thông minh bản Daily
+                    stats, trade_log = bt.run_ichimoku_backtest_daily(df_ichimoku)
                     
-                    st.success(f"Dữ liệu kiểm thử mã {ticker_bt} thành công!")
+                    st.success(f"Dữ liệu kiểm thử mã {ticker_bt} trong {years_back} năm thành công!")
                     
-                    st.subheader("📊 Kết quả hiệu suất chỉ báo")
+                    # --- HIỂN THỊ KẾT QUẢ HIỆU SUẤT ---
+                    st.subheader("📊 Kết quả hiệu suất chiến lược")
                     m_col1, m_col2, m_col3 = st.columns(3)
                     m_col1.metric("Vốn cuối kỳ", stats["Vốn cuối kỳ"])
                     m_col2.metric("Lợi nhuận ròng", stats["Lợi nhuận ròng"])
                     m_col3.metric("Tỷ lệ Thắng (Win Rate)", stats["Tỷ lệ Thắng (Win Rate)"])
                     
+                    # --- HIỂN THỊ NHẬT KÝ CHI TIẾT ---
                     st.subheader("📋 Nhật ký lệnh chi tiết của Bot")
                     st.dataframe(trade_log, use_container_width=True)
                 else:
