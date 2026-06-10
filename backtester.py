@@ -8,7 +8,6 @@ def get_daily_data(ticker, years_back):
     end_date = datetime.now().strftime('%Y-%m-%d')
     start_date = (datetime.now() - timedelta(days=years_back * 365)).strftime('%Y-%m-%d')
     try:
-        # Lấy dữ liệu 1D chuẩn cho Backtest dài hạn
         df = stock_historical_data(symbol=ticker, start_date=start_date, end_date=end_date, resolution="1D", type="stock")
         if df is not None and not df.empty:
             df.columns = [str(c).lower().strip() for c in df.columns]
@@ -24,7 +23,6 @@ def calculate_ichimoku_daily(df, p_tenkan=9, p_kijun=26, p_senkou_b=52, p_shift=
     
     df = df.copy()
     
-    # Tính Mây Ichimoku
     df['Tenkan'] = (df['high'].rolling(window=p_tenkan).max() + df['low'].rolling(window=p_tenkan).min()) / 2
     df['Kijun'] = (df['high'].rolling(window=p_kijun).max() + df['low'].rolling(window=p_kijun).min()) / 2
     
@@ -34,10 +32,9 @@ def calculate_ichimoku_daily(df, p_tenkan=9, p_kijun=26, p_senkou_b=52, p_shift=
     senkou_b_raw = (df['high'].rolling(window=p_senkou_b).max() + df['low'].rolling(window=p_senkou_b).min()) / 2
     df['Senkou_B'] = senkou_b_raw.shift(p_shift)
     
-    # [THÊM MỚI] Tính Trung bình Khối lượng 20 phiên (Volume MA20)
+    # Tính Trung bình Khối lượng 20 phiên (Volume MA20)
     df['Vol_MA20'] = df['volume'].rolling(window=20).mean()
     
-    # Xóa các dòng đầu bị thiếu dữ liệu do quá trình Shift mây và MA20
     df.dropna(subset=['Senkou_A', 'Senkou_B', 'Vol_MA20'], inplace=True)
     return df
 
@@ -54,10 +51,9 @@ def run_ichimoku_backtest_daily(df, initial_capital=100000000, stop_loss_pct=-0.
         vol = df['volume'].iloc[i]
         vol_ma20 = df['Vol_MA20'].iloc[i]
         
-        # Xác định các đường biên Ichimoku
         senkou_a = df['Senkou_A'].iloc[i]
         senkou_b = df['Senkou_B'].iloc[i]
-        kijun = df['Kijun'].iloc[i]  # [MỚI] Lấy đường Kijun để làm ranh giới gồng lãi
+        kijun = df['Kijun'].iloc[i]  # Đường Kijun-sen để chặn lãi
         
         top_kumo = max(senkou_a, senkou_b)
         bot_kumo = min(senkou_a, senkou_b)
@@ -82,21 +78,21 @@ def run_ichimoku_backtest_daily(df, initial_capital=100000000, stop_loss_pct=-0.
                 })
                 
         # ==========================================
-        # 🔴 LOGIC BÁN (SELL): Bỏ chốt lời 15%, ôm trọn con sóng!
+        # 🔴 LOGIC BÁN (SELL): Ôm trọn con sóng!
         # ==========================================
         elif position > 0:
             profit_pct = (close - buy_price) / buy_price
             sell_signal = ""
             
-            # 1. Cắt lỗ cứng để bảo vệ vốn khi sai (Luôn giữ ở mức -7%)
+            # Cắt lỗ cứng khi sai (-7%)
             if profit_pct <= stop_loss_pct:
                 sell_signal = f"Cắt Lỗ ({stop_loss_pct*100}%)"
                 
-            # 2. [MỚI] Chốt lời động: Gãy Kijun-sen (Báo hiệu đà tăng đã kết thúc)
+            # Chốt lời động: Gãy Kijun-sen
             elif close < kijun:
                 sell_signal = "Chốt Lời/Cắt Lỗ (Gãy Kijun)"
                 
-            # 3. Gãy Trend siêu dài hạn (Thủng đáy mây)
+            # Gãy Trend (Thủng đáy mây)
             elif close < bot_kumo:
                 sell_signal = "Gãy Trend (Thủng đáy mây)"
                 
@@ -138,9 +134,6 @@ def run_ichimoku_backtest_daily(df, initial_capital=100000000, stop_loss_pct=-0.
         "Lợi nhuận ròng": f"{net_profit:,.0f} VNĐ",
         "Tỷ lệ Thắng (Win Rate)": win_rate,
         "Tổng số lệnh": total_trades
-    }
-    
-    return stats, pd.DataFrame(trade_log)
     }
     
     return stats, pd.DataFrame(trade_log)
