@@ -23,7 +23,7 @@ st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 # [CẬP NHẬT] Thêm Tab thứ 4 cho Backtest
 tab_market, tab_screener, tab_simulation, tab_backtest = st.tabs([
     "📊 TỔNG QUAN VN-INDEX", 
-    "🚀 BỘ LỌC SIÊU CỔ PHIẾU", 
+    "🚀 BỘ LỌC CỔ PHIẾU", 
     "🔮 MÔ PHỎNG ICHIMOKU",
     "🛠️ BACKTEST KHUNG 3P"
 ])
@@ -89,7 +89,7 @@ with tab_screener:
         else:
             tickers_to_scan = tickers[:max_scan]
             
-            with st.status(f"Đang dùng 10 Luồng quét {len(tickers_to_scan)} mã. Tốc độ siêu tốc...", expanded=True) as status:
+            with st.status(f"Đang dùng 100 Luồng quét {len(tickers_to_scan)} mã. Tốc độ siêu tốc...", expanded=True) as status:
                 progress_bar = st.progress(0)
                 results = []
                 total = len(tickers_to_scan)
