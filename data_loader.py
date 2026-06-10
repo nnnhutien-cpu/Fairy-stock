@@ -1,5 +1,5 @@
 import streamlit as st
-from vnstock import stock_historical_data, stock_listing_companies
+from vnstock import stock_historical_data, listing_companies
 import pandas as pd
 from datetime import datetime, timedelta
 
