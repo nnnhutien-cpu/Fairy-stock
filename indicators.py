@@ -1,7 +1,12 @@
+import streamlit as st
 import pandas as pd
+import numpy as np
 
+# BÙA CHÚ CACHING: Lưu kết quả tính toán vào RAM ảo để web load cực nhanh (dưới 5 giây)
+@st.cache_data(show_spinner=False)
 def calculate_technical_signals(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=52, p_shift=26):
-    if df is None or len(df) < max(p_senkou_b, 60): return None
+    if df is None or len(df) < max(p_senkou_b, 60): 
+        return None
     
     df.columns = [str(c).lower().strip() for c in df.columns]
     
@@ -20,7 +25,8 @@ def calculate_technical_signals(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=5
     
     # 3. Bộ lọc thanh khoản (Logic gọn)
     gtgd_ty = (latest['close'] * (1000 if latest['close'] < 500 else 1) * latest['volume']) / 1_000_000_000
-    if gtgd_ty < 20: return None
+    if gtgd_ty < 20: 
+        return None
 
     # 4. Trạng thái & Định giá (Dùng List comprehension cho gọn)
     top, bot = max(latest['senkou_a'], latest['senkou_b']), min(latest['senkou_a'], latest['senkou_b'])
@@ -31,10 +37,18 @@ def calculate_technical_signals(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=5
     flow = "🔥 Tiền Vào Mạnh" if v_ratio >= 1.5 else ("⚡ Có Tín Hiệu" if v_ratio >= 1 else "💤 Tiền Yếu")
     
     return {
-        "Mã": ticker, "Giá": latest['close'], "GTGD (Tỷ)": round(gtgd_ty, 2),
-        "Khối Lượng": int(latest['volume']), "KL TB 20 Phiên": int(latest['vol_ma20']),
-        "Dòng Tiền": flow, "Đánh Giá": gia, "Tenkan": round(latest['tenkan'], 2),
-        "Kijun": round(latest['kijun'], 2), "Senkou A": round(latest['senkou_a'], 2),
-        "Senkou B": round(latest['senkou_b'], 2), "Chikou": round(latest['close'], 2),
-        "Ichimoku_Cloud": status, "Trạng thái": "🟢 Tích cực" if latest['close'] > latest['ma20'] and latest['rsi14'] > 50 else "🔴 Tiêu cực"
+        "Mã CP": ticker, 
+        "Giá": latest['close'], 
+        "GTGD (Tỷ)": round(gtgd_ty, 2),
+        "Khối Lượng": int(latest['volume']), 
+        "KL TB 20 Phiên": int(latest['vol_ma20']),
+        "Dòng Tiền": flow, 
+        "Đánh Giá": gia, 
+        "Tenkan": round(latest['tenkan'], 2),
+        "Kijun": round(latest['kijun'], 2), 
+        "Senkou A": round(latest['senkou_a'], 2),
+        "Senkou B": round(latest['senkou_b'], 2), 
+        "Chikou": round(latest['close'], 2),
+        "Ichimoku_Cloud": status, 
+        "Trạng thái": "🟢 Tích cực" if latest['close'] > latest['ma20'] and latest['rsi14'] > 50 else "🔴 Tiêu cực"
     }
