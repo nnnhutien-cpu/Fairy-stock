@@ -16,15 +16,14 @@ def get_daily_data(ticker, years_back):
         pass
     return None
 
-# 2. Hàm tính toán Mây Ichimoku, MA20 (Khối lượng) và MA129 (Giá)
+# 2. Hàm tính toán Mây Ichimoku & Volume
 def calculate_ichimoku_daily(df, p_tenkan=9, p_kijun=26, p_senkou_b=52, p_shift=26):
-    # Cần ít nhất 129 phiên để tính được đường MA129
-    if df is None or len(df) < 129:
+    if df is None or len(df) < p_senkou_b + p_shift:
         return None
     
     df = df.copy()
     
-    # Tính Mây
+    # Tính các đường Ichimoku
     df['Tenkan'] = (df['high'].rolling(window=p_tenkan).max() + df['low'].rolling(window=p_tenkan).min()) / 2
     df['Kijun'] = (df['high'].rolling(window=p_kijun).max() + df['low'].rolling(window=p_kijun).min()) / 2
     
@@ -37,14 +36,11 @@ def calculate_ichimoku_daily(df, p_tenkan=9, p_kijun=26, p_senkou_b=52, p_shift=
     # Tính Trung bình Khối lượng 20 phiên (Volume MA20)
     df['Vol_MA20'] = df['volume'].rolling(window=20).mean()
     
-    # [MỚI] Tính Trung bình Giá 129 phiên (MA129)
-    df['MA129'] = df['close'].rolling(window=129).mean()
-    
-    df.dropna(subset=['Senkou_A', 'Senkou_B', 'Vol_MA20', 'MA129'], inplace=True)
+    df.dropna(subset=['Senkou_A', 'Senkou_B', 'Vol_MA20', 'Tenkan', 'Kijun'], inplace=True)
     return df
 
-# 3. Vòng lặp Bot Giao Dịch - Phiên bản "Bắt Trend Dài Hạn + MA129"
-def run_ichimoku_backtest_daily(df, initial_capital=100000000, stop_loss_pct=-0.07):
+# 3. Vòng lặp Bot Giao Dịch - CẬP NHẬT CHUẨN LOGIC TỪ PINE SCRIPT
+def run_ichimoku_backtest_daily(df, initial_capital=100000000):
     capital = initial_capital
     position = 0
     buy_price = 0
@@ -55,22 +51,27 @@ def run_ichimoku_backtest_daily(df, initial_capital=100000000, stop_loss_pct=-0.
         close = df['close'].iloc[i]
         vol = df['volume'].iloc[i]
         vol_ma20 = df['Vol_MA20'].iloc[i]
-        ma129 = df['MA129'].iloc[i]
         
+        tenkan = df['Tenkan'].iloc[i]
+        kijun = df['Kijun'].iloc[i]
         senkou_a = df['Senkou_A'].iloc[i]
         senkou_b = df['Senkou_B'].iloc[i]
         
-        top_kumo = max(senkou_a, senkou_b)
-        bot_kumo = min(senkou_a, senkou_b)
+        cloudTop = max(senkou_a, senkou_b)
+        cloudBot = min(senkou_a, senkou_b)
+        
+        # --- Mô phỏng chính xác các biến từ Pine Script ---
+        isAboveCloud = close > cloudTop
+        isVolOk = vol >= (vol_ma20 * 1.2)
+        isMomentumUp = tenkan > kijun
+        isNotDowntrend = close >= cloudBot
         
         # ==========================================
-        # 🟢 LOGIC MUA (BUY): Vượt mây + Trên MA129 + Vol Siêu Lớn
+        # 🟢 LOGIC MUA (BUY CONDITION)
+        # buyCondition = isAboveCloud AND isVolOk AND isMomentumUp AND isNotDowntrend
         # ==========================================
         if position == 0:
-            # 1. Giá đóng cửa nằm trên MA129 (Xác nhận Uptrend dài)
-            # 2. Giá đóng cửa vượt đỉnh mây (Thoát mây giảm)
-            # 3. Khối lượng nổ lớn hơn 1.2 lần trung bình (Có dòng tiền)
-            if (close > ma129) and (close > top_kumo) and (vol > (vol_ma20 * 1.2)):
+            if isAboveCloud and isVolOk and isMomentumUp and isNotDowntrend:
                 position = capital / close
                 buy_price = close
                 capital = 0
@@ -78,7 +79,7 @@ def run_ichimoku_backtest_daily(df, initial_capital=100000000, stop_loss_pct=-0.
                     "Ngày Mua": date.strftime('%Y-%m-%d') if isinstance(date, pd.Timestamp) else date, 
                     "Giá Mua": buy_price, 
                     "Khối Lượng": vol, 
-                    "Tín Hiệu": "Vượt Mây + Nằm trên MA129 + Vol",
+                    "Tín Hiệu": "Breakout Kép + Vol>120%",
                     "Ngày Bán": None,
                     "Giá Bán": None,
                     "Lợi Nhuận (%)": None,
@@ -86,19 +87,17 @@ def run_ichimoku_backtest_daily(df, initial_capital=100000000, stop_loss_pct=-0.
                 })
                 
         # ==========================================
-        # 🔴 LOGIC BÁN (SELL): Ôm hết trend đến khi gãy mây
+        # 🔴 LOGIC BÁN (SELL CONDITION)
+        # sellCondition = close < kijun OR close < cloudBot
         # ==========================================
         elif position > 0:
-            profit_pct = (close - buy_price) / buy_price
             sell_signal = ""
             
-            # Cắt lỗ cứng khi sai (-7%)
-            if profit_pct <= stop_loss_pct:
-                sell_signal = f"Cắt Lỗ ({stop_loss_pct*100}%)"
-                
-            # Gãy Trend: Giá chui xuống thủng luôn đáy mây (Báo hiệu Uptrend kết thúc)
-            elif close < bot_kumo:
-                sell_signal = "Gãy Trend (Thủng đáy mây)"
+            # Gãy Kijun đỏ HOẶC Gãy mây (Cắt lỗ dứt khoát)
+            if close < kijun:
+                sell_signal = "BÁN (Gãy Kijun)"
+            elif close < cloudBot:
+                sell_signal = "BÁN (Gãy nền Mây)"
                 
             if sell_signal:
                 capital = position * close
@@ -112,32 +111,11 @@ def run_ichimoku_backtest_daily(df, initial_capital=100000000, stop_loss_pct=-0.
                 position = 0
                 buy_price = 0
 
-    # Tất toán lệnh cuối cùng nếu đang cầm cổ phiếu khi kết thúc ngày test
+    # Tất toán lệnh cuối cùng nếu kết thúc chu kỳ Backtest mà vẫn cầm hàng
     if position > 0:
         close = df['close'].iloc[-1]
         date = df['time'].iloc[-1] if 'time' in df.columns else df.index[-1]
         capital = position * close
         profit_realized = (close - buy_price) / buy_price
         
-        trade_log[-1]["Ngày Bán"] = date.strftime('%Y-%m-%d') if isinstance(date, pd.Timestamp) else date
-        trade_log[-1]["Giá Bán"] = close
-        trade_log[-1]["Lợi Nhuận (%)"] = round(profit_realized * 100, 2)
-        trade_log[-1]["Lý Do Bán"] = "Hết chu kỳ Backtest"
-        position = 0
-        
-    # --- Đóng gói thống kê ---
-    final_capital = capital
-    net_profit = final_capital - initial_capital
-    
-    wins = len([t for t in trade_log if t.get("Lợi Nhuận (%)", 0) > 0])
-    total_trades = len(trade_log)
-    win_rate = f"{round((wins / total_trades) * 100, 2)}%" if total_trades > 0 else "0%"
-    
-    stats = {
-        "Vốn cuối kỳ": f"{final_capital:,.0f} VNĐ",
-        "Lợi nhuận ròng": f"{net_profit:,.0f} VNĐ",
-        "Tỷ lệ Thắng (Win Rate)": win_rate,
-        "Tổng số lệnh": total_trades
-    }
-    
-    return stats, pd.DataFrame(trade_log)
+        trade_log[-1]["Ngày Bán"] = date.
