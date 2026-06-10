@@ -120,8 +120,11 @@ with tab_screener:
     if st.session_state['scan_results']:
         st.divider()
         
-        # [GỌI HÀM UX] Gọi thanh tìm kiếm và tải xuống thay vì viết dài dòng ở đây
-        df_display = render_search_and_export(st.session_state['scan_results'])
+        # [SỬA LỖI TẠI ĐÂY] Ép danh sách (List) biến thành Bảng Pandas (DataFrame) trước
+        raw_df = pd.DataFrame(st.session_state['scan_results'])
+        
+        # Đưa bảng chuẩn vào hàm UX để hiển thị thanh tìm kiếm và nút tải xuống
+        df_display = render_search_and_export(raw_df)
         
         render_screener_results(df_display, signal_filter)
     else:
