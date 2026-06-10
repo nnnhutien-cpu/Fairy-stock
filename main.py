@@ -5,7 +5,7 @@ from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_i
 from indicators import calculate_technical_signals
 from ui_layout import render_sidebar, render_market_tab, render_screener_results
 from ux_components import setup_cache_clear_button, render_search_and_export # Gọi file UX
-import backtester as bt # [MỚI] Nhập file backtest khung 3 phút
+import backtester as bt # [CẬP NHẬT] Nhập file backtest khung ngày (1DAY)
 
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
@@ -20,12 +20,12 @@ setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 
-# [CẬP NHẬT] Thêm Tab thứ 4 cho Backtest
+# [ĐỒNG BỘ CHUẨN] Đổi tên Tab thứ 4 thành Khung Ngày 1DAY theo đúng logic code
 tab_market, tab_screener, tab_simulation, tab_backtest = st.tabs([
     "📊 TỔNG QUAN VN-INDEX", 
     "🚀 BỘ LỌC CỔ PHIẾU", 
     "🔮 MÔ PHỎNG ICHIMOKU",
-    "🛠️ BACKTEST KHUNG 3P"
+    "🛠️ BACKTEST KHUNG 1DAY"
 ])
 
 with tab_market:
@@ -102,7 +102,7 @@ with tab_screener:
                         return None
                     return calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
 
-                # CHÚ Ý: Giảm max_workers xuống 15 để không bị nghẽn mạng!
+                # Giảm max_workers xuống 15 để không bị nghẽn mạng!
                 with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
                     future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
                     for future in concurrent.futures.as_completed(future_to_ticker):
@@ -122,7 +122,7 @@ with tab_screener:
     if st.session_state['scan_results']:
         st.divider()
         
-        # [SỬA LỖI TẠI ĐÂY] Ép danh sách (List) biến thành Bảng Pandas (DataFrame) trước
+        # Ép danh sách (List) biến thành Bảng Pandas (DataFrame) trước
         raw_df = pd.DataFrame(st.session_state['scan_results'])
         
         # Đưa bảng chuẩn vào hàm UX để hiển thị thanh tìm kiếm và nút tải xuống
@@ -178,16 +178,15 @@ with tab_simulation:
             else:
                 st.error(f"⚠️ Không thể kết nối hoặc không tìm thấy dữ liệu lịch sử của mã '{sim_ticker}'. Vui lòng thử lại mã khác.")
 
-# [MỚI] Tích hợp Tab 4: Backtest Cổ Phiếu Khung Ngày (Daily) - Có Risk Management
+# Tích hợp Tab 4: Hệ thống Backtest Cổ Phiếu Khung Ngày (Daily) hoàn chỉnh
 with tab_backtest:
-    st.subheader("🛠️ Hệ Thống Backtest Dài Hạn (Khung 1D)")
+    st.subheader("🛠️ Hệ Thống Backtest Dài Hạn (Khung 1DAY)")
     st.caption("Thuật toán Quant: Tự động bắt Râu nến để Stoploss (-7%) hoặc Take Profit (+15%). Chặn bán nếu gãy trend Kumo.")
 
     col_input1, col_input2 = st.columns(2)
     with col_input1:
         ticker_bt = st.text_input("Nhập mã cổ phiếu để test (Ví dụ: FPT, HPG):", value="FPT", key="bt_ticker").upper()
     with col_input2:
-        # UX: Đổi từ thanh trượt "Ngày" sang thanh trượt "Năm" cho dài hạn
         years_back = st.slider("Số NĂM quá khứ muốn kiểm tra:", min_value=1, max_value=10, value=5)
 
     if st.button("🚀 Bắt đầu chạy Backtest Tự Động"):
