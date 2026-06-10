@@ -1,45 +1,85 @@
 import streamlit as st
 import pandas as pd
+import concurrent.futures
+from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex
+from indicators import calculate_technical_signals
+from ui_layout import render_sidebar, render_market_tab, render_screener_results
+from ux_components import setup_cache_clear_button, render_search_and_export 
+import charts as c  # Gọi file charts.py đảm nhận việc vẽ đồ thị phân tầng
+import backtester as bt  # Nhập file backtest chiến lược khung 3 phút
 
-def render_sidebar():
-    with st.sidebar:
-        st.title("🧚‍♀️ CÔ TIÊN STOCK")
-        st.caption("Hệ thống phân tích thông minh")
-        st.divider()
-        st.header("⚙️ CẤU HÌNH BỘ LỌC")
-        exchange_choice = st.selectbox("Chọn sàn giao dịch:", ["HOSE", "HNX", "UPCOM", "Tất cả 3 sàn"])
-        signal_filter = st.radio("Bộ lọc tín hiệu kỹ thuật:", ["Tất cả", "🟢 Tích cực", "🔴 Tiêu cực"])
-        max_scan = st.slider("Số lượng mã quét tối đa:", 10, 2000, 1600)
-        
-        with st.expander("🛠️ TÙY CHỈNH ICHIMOKU (NÂNG CAO)", expanded=False):
-            p_tenkan = st.number_input("Tenkan-sen", value=9, step=1)
-            p_kijun = st.number_input("Kijun-sen", value=26, step=1)
-            p_senkou_b = st.number_input("Senkou B", value=52, step=1)
-            p_shift = st.number_input("Shift", value=26, step=1)
-    return exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
+# 1. Cấu hình khung giao diện Streamlit (Rộng toàn màn hình)
+st.set_page_config(
+    page_title="Cô Tiên Stock", 
+    layout="wide", 
+    initial_sidebar_state="expanded"
+)
 
+# Khởi tạo trạng thái lưu trữ kết quả quét trong Session State để tránh bị load lại
+if 'scan_results' not in st.session_state:
+    st.session_state['scan_results'] = []
 
-def render_market_tab(chart_df, df_today):
-    st.subheader("Nhịp Đập Thị Trường")
-    if chart_df is not None and not chart_df.empty:
-        st.line_chart(chart_df, color=["#FF0000", "#00FF00"], height=380)
+# 2. Hiển thị Thanh điều khiển Sidebar bên trái & Đọc các tham số động từ người dùng
+exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift = render_sidebar()
 
+# Kích hoạt nút dọn dẹp Cache hệ thống nằm ở góc giao diện
+setup_cache_clear_button()
 
-def render_screener_results(results_df, signal_filter):
-    if not isinstance(results_df, pd.DataFrame):
-        results_df = pd.DataFrame(results_df)
+# Tiêu đề chính của Trang Web App Dashboard
+st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật Chuyên Sâu")
+
+# 3. Phân rã cấu trúc giao diện thành 4 Tab chức năng cốt lõi theo thiết kế
+tab_market, tab_screener, tab_simulation, tab_backtest = st.tabs([
+    "📊 TỔNG QUAN VN-INDEX",
+    "🚀 BỘ LỌC CỔ PHIẾU REAL-TIME",
+    "🔮 MÔ PHỎNG ĐỒ THỊ PHÂN TẦNG",
+    "⏱️ BACKTEST CHIẾN LƯỢC 3 PHÚT"
+])
+
+# =====================================================================
+# TAB 1: DIỄN BIẾN THỊ TRƯỜNG CHUNG
+# =====================================================================
+with tab_market:
+    st.subheader("Diễn biến chỉ số VN-Index và Thanh khoản dòng tiền")
+    try:
+        render_market_tab()
+    except Exception as e:
+        st.error(f"❌ Không thể tải dữ liệu thị trường chung: {e}")
+
+# =====================================================================
+# TAB 2: CỖ MÁY QUÉT VÀ LỌC CỔ PHIẾU ĐA LUỒNG
+# =====================================================================
+with tab_screener:
+    st.subheader("Hệ thống quét dòng tiền và chấm điểm kỹ thuật toàn thị trường")
+    # Truyền các tham số chọn từ Sidebar vào hàm lọc xử lý đa luồng
+    render_screener_results(exchange_choice, signal_filter, max_scan)
+
+# =====================================================================
+# TAB 3: MÔ PHỎNG CHI TIẾT TÍN HIỆU MÃ THEO ICHIMOKU DỰA TRÊN VOLUME
+# =====================================================================
+with tab_simulation:
+    st.subheader("Phân tích kỹ thuật chuyên sâu cho từng mã riêng lẻ")
     
-    if not results_df.empty:
-        # Lọc trạng thái
-        if signal_filter != "Tất cả" and 'Trạng thái' in results_df.columns:
-            results_df = results_df[results_df['Trạng thái'] == signal_filter]
-        
-        # LẤY TẤT CẢ CÁC CỘT, CHỈ LOẠI BỎ DUY NHẤT CỘT MÃ "9"
-        # str(col) != '9' đảm bảo xóa cả cột số 9 và cột chữ '9'
-        cols_to_use = [col for col in results_df.columns if str(col) != '9']
-        df_display = results_df[cols_to_use]
+    # Ô nhập mã cổ phiếu tương tác trực tiếp
+    ticker = st.text_input("Nhập mã cổ phiếu của bạn (Ví dụ: SSI, HPG, TCB):", value="SSI").upper().strip()
+    
+    if ticker:
+        try:
+            # Sử dụng định danh 'c' (charts.py) để gọi đồ thị mây Ichimoku mô phỏng động
+            c.render_ichimoku_simulation_chart(ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
+            
+            # Bổ sung tính năng xuất báo cáo phân tích kỹ thuật nếu cần
+            render_search_and_export(ticker)
+        except Exception as e:
+            st.warning(f"⚠️ Biểu đồ mô phỏng mã {ticker} đang gặp gián đoạn dữ liệu: {e}")
 
-        # Hiển thị bảng đã được dọn dẹp lên Streamlit
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
-    else:
-        st.info("Chưa có dữ liệu.")
+# =====================================================================
+# TAB 4: HỆ THỐNG BACKTEST KHUNG ĐỒ THỊ 3 PHÚT (QUANT/ALGO)
+# =====================================================================
+with tab_backtest:
+    st.subheader("Kiểm thử chiến lược giao dịch trong quá khứ dựa trên nến phút")
+    try:
+        # Gọi luồng xử lý kiểm thử thuật toán từ file backtester.py
+        bt.render_backtest_layout()
+    except Exception as e:
+        st.error(f"❌ Không thể khởi chạy môi trường Backtest: {e}")
