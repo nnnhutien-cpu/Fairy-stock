@@ -41,8 +41,8 @@ def calculate_ichimoku_daily(df, p_tenkan=9, p_kijun=26, p_senkou_b=52, p_shift=
     df.dropna(subset=['Senkou_A', 'Senkou_B', 'Vol_MA20'], inplace=True)
     return df
 
-# 3. Vòng lặp Bot Giao Dịch
-def run_ichimoku_backtest_daily(df, initial_capital=100000000, stop_loss_pct=-0.07, take_profit_pct=0.15):
+# 3. Vòng lặp Bot Giao Dịch - Phiên bản "Gồng Lãi Theo Trend"
+def run_ichimoku_backtest_daily(df, initial_capital=100000000, stop_loss_pct=-0.07):
     capital = initial_capital
     position = 0
     buy_price = 0
@@ -54,9 +54,11 @@ def run_ichimoku_backtest_daily(df, initial_capital=100000000, stop_loss_pct=-0.
         vol = df['volume'].iloc[i]
         vol_ma20 = df['Vol_MA20'].iloc[i]
         
-        # Xác định đỉnh mây và đáy mây
+        # Xác định các đường biên Ichimoku
         senkou_a = df['Senkou_A'].iloc[i]
         senkou_b = df['Senkou_B'].iloc[i]
+        kijun = df['Kijun'].iloc[i]  # [MỚI] Lấy đường Kijun để làm ranh giới gồng lãi
+        
         top_kumo = max(senkou_a, senkou_b)
         bot_kumo = min(senkou_a, senkou_b)
         
@@ -80,16 +82,21 @@ def run_ichimoku_backtest_daily(df, initial_capital=100000000, stop_loss_pct=-0.
                 })
                 
         # ==========================================
-        # 🔴 LOGIC BÁN (SELL)
+        # 🔴 LOGIC BÁN (SELL): Bỏ chốt lời 15%, ôm trọn con sóng!
         # ==========================================
         elif position > 0:
             profit_pct = (close - buy_price) / buy_price
             sell_signal = ""
             
-            if profit_pct >= take_profit_pct:
-                sell_signal = f"Chốt Lời (+{take_profit_pct*100}%)"
-            elif profit_pct <= stop_loss_pct:
+            # 1. Cắt lỗ cứng để bảo vệ vốn khi sai (Luôn giữ ở mức -7%)
+            if profit_pct <= stop_loss_pct:
                 sell_signal = f"Cắt Lỗ ({stop_loss_pct*100}%)"
+                
+            # 2. [MỚI] Chốt lời động: Gãy Kijun-sen (Báo hiệu đà tăng đã kết thúc)
+            elif close < kijun:
+                sell_signal = "Chốt Lời/Cắt Lỗ (Gãy Kijun)"
+                
+            # 3. Gãy Trend siêu dài hạn (Thủng đáy mây)
             elif close < bot_kumo:
                 sell_signal = "Gãy Trend (Thủng đáy mây)"
                 
@@ -131,6 +138,9 @@ def run_ichimoku_backtest_daily(df, initial_capital=100000000, stop_loss_pct=-0.
         "Lợi nhuận ròng": f"{net_profit:,.0f} VNĐ",
         "Tỷ lệ Thắng (Win Rate)": win_rate,
         "Tổng số lệnh": total_trades
+    }
+    
+    return stats, pd.DataFrame(trade_log)
     }
     
     return stats, pd.DataFrame(trade_log)
