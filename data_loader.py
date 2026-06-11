@@ -1,7 +1,15 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
-from vnstock import stock_historical_data, listing_companies
+from supabase import create_client, Client
+
+# --- KẾT NỐI SUPABASE ---
+@st.cache_resource
+def init_connection():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
+
+supabase = init_connection()
 
 # BÙA CHÚ 1: Cất danh sách mã vào bộ nhớ ảo 1 ngày
 @st.cache_data(ttl=86400) 
