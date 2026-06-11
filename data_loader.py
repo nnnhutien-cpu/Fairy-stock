@@ -15,9 +15,9 @@ def get_all_tickers(exchange='all'):
     except:
         return []
 
-# BÙA CHÚ 2: Cất dữ liệu giá 365 ngày vào bộ nhớ ảo 1 giờ
+# BÙA CHÚ 2: Cất dữ liệu giá vào bộ nhớ ảo 1 giờ
 @st.cache_data(ttl=3600, show_spinner=False) 
-def get_stock_data(ticker, days_back=365):
+def get_stock_data(ticker, days_back=3650): # 🔑 ĐÃ SỬA: Lấy lùi về 3650 ngày (10 năm)
     end_date = datetime.now().strftime('%Y-%m-%d')
     start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
     try:
