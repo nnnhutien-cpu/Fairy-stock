@@ -26,7 +26,7 @@ tab_market, tab_screener, tab_simulation, tab_backtest, tab_charts = st.tabs([
     "📊 TỔNG QUAN VN-INDEX", 
     "🚀 BỘ LỌC CỔ PHIẾU", 
     "🔮 MÔ PHỎNG ICHIMOKU",
-    "🛠️ BACKTEST KHUNG 1DAY"
+    "🛠️ BACKTEST KHUNG 1DAY",
     "📈 CHARTS TRADINGVIEW"
 ])
 
