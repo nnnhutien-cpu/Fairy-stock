@@ -176,11 +176,11 @@ with tab_screener:
         st.caption(f"Hãy cấu hình thông số ở Sidebar trái và bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' để bắt đầu.")
 
 # ==========================================
-# TAB 3: MÔ PHỎNG ICHIMOKU (NÂNG CẤP PLOTLY PRO)
+# TAB 3: MÔ PHỎNG ICHIMOKU (NÂNG CẤP PLOTLY PRO + VOLUME MA20)
 # ==========================================
 with tab_simulation:
     st.subheader("🔮 Phòng Thí Nghiệm Chỉ Báo Kỹ Thuật Ichimoku")
-    st.caption("Đồ thị nâng cấp: Tích hợp Volume, nến Nhật và Mây Kumo chuẩn xác.")
+    st.caption("Đồ thị chuyên nghiệp: Hỗ trợ kéo chỉnh, phóng to thu nhỏ chuột, tích hợp Volume MA20.")
     
     sim_ticker = st.text_input("Nhập mã cổ phiếu (Gõ xong nhấn Enter):", value="HPG", key="sim_ticker_input").upper().strip()
     
@@ -191,7 +191,7 @@ with tab_simulation:
             if df_sim is not None and not df_sim.empty:
                 df_sim.columns = [str(c).lower().strip() for c in df_sim.columns]
                 
-                # Tính toán Ichimoku
+                # 1. Tính toán thông số Ichimoku động từ Sidebar
                 df_sim['Tenkan'] = (df_sim['high'].rolling(window=p_tenkan).max() + df_sim['low'].rolling(window=p_tenkan).min()) / 2
                 df_sim['Kijun'] = (df_sim['high'].rolling(window=p_kijun).max() + df_sim['low'].rolling(window=p_kijun).min()) / 2
                 
@@ -201,23 +201,27 @@ with tab_simulation:
                 senkou_b_raw = (df_sim['high'].rolling(window=p_senkou_b).max() + df_sim['low'].rolling(window=p_senkou_b).min()) / 2
                 df_sim['Senkou B'] = senkou_b_raw.shift(p_shift)
                 
-                # Lấy 100 nến gần nhất cho biểu đồ nhìn rõ nét, không bị nén chặt
+                # --- 📈 TÍNH TOÁN ĐƯỜNG TRUNG BÌNH KHỐI LƯỢNG VOLUME MA20 ---
+                df_sim['Vol_MA20'] = df_sim['volume'].rolling(window=20).mean()
+                # -------------------------------------------------------------
+                
+                # Lấy 100 nến gần nhất để biểu đồ cân đối, không bị quá dày
                 plot_df = df_sim.tail(100).copy()
                 
                 if 'time' in plot_df.columns:
                     plot_df['Ngay'] = pd.to_datetime(plot_df['time']).dt.strftime('%Y-%m-%d')
                     plot_df.set_index('Ngay', inplace=True)
                 
-                # --- 🚀 BẮT ĐẦU VẼ BIỂU ĐỒ BẰNG PLOTLY ---
+                # --- 🚀 KHỞI TẠO ĐỒ THỊ ĐA TẦNG BẰNG PLOTLY ---
                 import plotly.graph_objects as go
                 from plotly.subplots import make_subplots
                 
-                # 1. Tạo bộ khung 2 tầng: Tầng trên cho Giá + Mây (80%), Tầng dưới cho Volume (20%)
+                # Tạo 2 dòng: Tầng 1 vẽ Nến + Mây (80%), Tầng 2 vẽ Volume + MA20 (20%)
                 fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
                                     vertical_spacing=0.03, 
                                     row_heights=[0.8, 0.2])
                 
-                # 2. Thêm Nến Nhật (Candlestick)
+                # 2. Thêm Nến Nhật (Candlestick) vào tầng 1
                 fig.add_trace(go.Candlestick(x=plot_df.index,
                                              open=plot_df['open'], high=plot_df['high'],
                                              low=plot_df['low'], close=plot_df['close'],
@@ -225,46 +229,56 @@ with tab_simulation:
                                              increasing_line_color='#00C853', decreasing_line_color='#FF1744'),
                               row=1, col=1)
                 
-                # 3. Thêm Mây Ichimoku (Senkou A & B) có bôi màu vùng mây
+                # 3. Vẽ Mây Kumo (Tô màu giữa Senkou A và Senkou B)
                 fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Senkou A'], 
-                                         line=dict(color='rgba(0, 200, 83, 0.6)', width=1), 
+                                         line=dict(color='rgba(0, 200, 83, 0.4)', width=1), 
                                          name='Senkou A'), row=1, col=1)
                 fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Senkou B'], 
-                                         line=dict(color='rgba(255, 23, 68, 0.6)', width=1),
-                                         fill='tonexty', fillcolor='rgba(128, 128, 128, 0.15)', # Tô màu mây Kumo
-                                         name='Senkou B'), row=1, col=1)
+                                         line=dict(color='rgba(255, 23, 68, 0.4)', width=1),
+                                         fill='tonexty', fillcolor='rgba(128, 128, 128, 0.15)', 
+                                         name='Mây Kumo'), row=1, col=1)
                 
-                # 4. Thêm Tenkan (Màu xanh dương mảnh)
+                # 4. Thêm Tenkan (Xanh dương mảnh)
                 fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Tenkan'], 
                                          line=dict(color='#2962FF', width=1.5), 
                                          name='Tenkan (9)'), row=1, col=1)
                 
-                # 5. Thêm Kijun (ĐƯỜNG MÀU ĐỎ SẪM - IN ĐẬM NHƯ Ý BẠN)
+                # 5. Thêm Kijun (Màu đỏ sẫm - In đậm đường 129 như yêu cầu cũ)
                 fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Kijun'], 
                                          line=dict(color='darkred', width=3), 
                                          name=f'Kijun ({p_kijun})'), row=1, col=1)
                 
-                # 6. Thêm Volume (Tầng 2) tự động đổi màu xanh đỏ theo nến
+                # 6. Thêm các cột Volume (Tầng 2) - Đồng bộ màu sắc xanh đỏ theo nến
                 colors = ['#00C853' if row['close'] >= row['open'] else '#FF1744' for idx, row in plot_df.iterrows()]
-                fig.add_trace(go.Bar(x=plot_df.index, y=plot_df['volume'], marker_color=colors, name='Volume'), row=2, col=1)
+                fig.add_trace(go.Bar(x=plot_df.index, y=plot_df['volume'], 
+                                     marker_color=colors, name='Volume'), row=2, col=1)
                 
-                # 7. Tinh chỉnh giao diện hiển thị (Bỏ khoảng trống cuối tuần, làm mượt layout)
+                # --- 🔑 CHÌA KHÓA: VẼ ĐƯỜNG VOLUME MA20 MÀU CAM SẪM CHẠY ĐÈ LÊN TẦNG 2 ---
+                fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Vol_MA20'], 
+                                         line=dict(color='#FF6D00', width=2, shape='spline'), # Cấu hình spline để đường uốn lượn mượt mà
+                                         name='Volume MA20'), row=2, col=1)
+                # -----------------------------------------------------------------------
+                
+                # 7. Tinh chỉnh Layout tổng thể và bật tính năng kéo thả chỉnh đồ thị
                 fig.update_layout(
-                    title=f"<b>Phân Tích Đa Tầng: {sim_ticker}</b>",
-                    height=650, # Kéo dài biểu đồ ra cho to rõ
+                    title=f"<b>Phân Tích Đa Tầng Chuyên Sâu: {sim_ticker}</b>",
+                    height=680, 
                     margin=dict(l=10, r=10, t=40, b=10),
                     showlegend=True,
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                    xaxis_rangeslider_visible=False # Tắt thanh trượt dưới cùng cho đỡ vướng
+                    xaxis_rangeslider_visible=False,
+                    
+                    # KÍCH HOẠT CHẾ ĐỘ KÉO CHỈNH (DRAG/PAN/ZOOM) MẶC ĐỊNH
+                    dragmode='pan' # Thiết lập mặc định là bàn tay kéo (Pan), bạn có thể chuyển sang zoom góc bằng công cụ trên đồ thị
                 )
                 
-                # Ẩn những ngày nghỉ T7, CN trên trục X để nến không bị đứt quãng
+                # Cắt bỏ khoảng trống thứ 7, chủ nhật để nến liền mạch không bị đứt đoạn
                 fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
                 
-                # In biểu đồ xịn ra màn hình Streamlit
+                # In biểu đồ ra màn hình Streamlit
                 st.plotly_chart(fig, use_container_width=True)
                 
-                st.info(f"💡 **Mẹo thực chiến:** Mây Kumo đã được tô màu mờ. Đường Kijun ({p_kijun}) được in đậm màu đỏ sẫm. Nến và Volume hoàn toàn đồng bộ!")
+                st.info("💡 **Hướng dẫn tương tác:** Bạn có thể dùng chuột cuộn để phóng to/thu nhỏ nến. Click giữ chuột kéo sang trái/phải để di chuyển trục thời gian. Đường màu cam ở dưới chính là Volume MA20!")
             else:
                 st.error(f"⚠️ Không thể kết nối hoặc không tìm thấy dữ liệu lịch sử của mã '{sim_ticker}'. Vui lòng thử lại mã khác.")
 # Tích hợp Tab 4: Hệ thống Backtest Cổ Phiếu Khung Ngày (Daily) hoàn chỉnh
