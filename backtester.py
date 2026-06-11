@@ -118,4 +118,25 @@ def run_ichimoku_backtest_daily(df, initial_capital=100000000):
         capital = position * close
         profit_realized = (close - buy_price) / buy_price
         
-        trade_log[-1]["Ngày Bán"] = date.
+        trade_log[-1]["Ngày Bán"] = date.strftime('%Y-%m-%d') if isinstance(date, pd.Timestamp) else date
+        trade_log[-1]["Giá Bán"] = close
+        trade_log[-1]["Lợi Nhuận (%)"] = round(profit_realized * 100, 2)
+        trade_log[-1]["Lý Do Bán"] = "Tất toán cuối kỳ"
+
+    # Xử lý kết quả trả về
+    trade_df = pd.DataFrame(trade_log)
+    
+    net_profit_pct = ((capital - initial_capital) / initial_capital) * 100
+    win_rate = 0
+    if not trade_df.empty:
+        win_trades = len(trade_df[trade_df["Lợi Nhuận (%)"] > 0])
+        win_rate = (win_trades / len(trade_df)) * 100
+
+    stats = {
+        "Vốn ban đầu": f"{initial_capital:,.0f} đ",
+        "Vốn cuối kỳ": f"{capital:,.0f} đ",
+        "Lợi nhuận ròng": f"{net_profit_pct:.2f}%",
+        "Tỷ lệ Thắng (Win Rate)": f"{win_rate:.2f}%"
+    }
+
+    return stats, trade_df
