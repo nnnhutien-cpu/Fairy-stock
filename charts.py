@@ -8,6 +8,7 @@ def render_ichimoku_simulation_chart(df):
     [UX ĐỈNH CAO] Hàm vẽ biểu đồ kỹ thuật phân tầng chuyên nghiệp:
     - Khung trên (75%): Nến Nhật, Mây Kumo, Kijun đỏ sẫm, Mắt Thần (Tín hiệu Mua/Bán).
     - Khung dưới (25%): Volume dòng tiền, Đường trung bình Volume MA20.
+    - [TÍNH NĂNG MỚI]: Tự động Zoom hiển thị 6 tháng gần nhất trên nền dữ liệu 10 năm.
     """
     if df is None or df.empty:
         st.warning("⚠️ Không có dữ liệu để trực quan hóa biểu đồ.")
@@ -86,6 +87,11 @@ def render_ichimoku_simulation_chart(df):
                              line=dict(color='#FF6D00', width=2, shape='spline'), 
                              name='Volume MA20'), row=2, col=1)
 
+    # --- 🚀 THUẬT TOÁN TỰ ĐỘNG ZOOM VÀO 6 THÁNG GẦN NHẤT ---
+    # Tính toán mốc thời gian bắt đầu (lùi lại 150 nến) và mốc kết thúc (nến hiện tại)
+    zoom_start = df['time'].iloc[-150] if len(df) > 150 else df['time'].iloc[0]
+    zoom_end = df['time'].iloc[-1]
+    # --------------------------------------------------------
 
     # --- CẤU HÌNH GIAO DIỆN TINH TẾ (UX TỐI ƯU) ---
     fig.update_layout(
@@ -95,7 +101,10 @@ def render_ichimoku_simulation_chart(df):
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), 
         template="plotly_white",
         xaxis_rangeslider_visible=False, # Tắt dải kéo mặc định của nến Nhật để không bị vướng màn hình
-        dragmode='pan' # Chuyển con trỏ chuột thành hình bàn tay để kéo trái/phải dễ dàng
+        dragmode='pan', # Chuyển con trỏ chuột thành hình bàn tay để kéo trái/phải dễ dàng
+        
+        # 🔑 Kích hoạt vùng nhìn thấy giới hạn lúc khởi tạo biểu đồ
+        xaxis=dict(range=[zoom_start, zoom_end])
     )
     
     # Loại bỏ khoảng trống dữ liệu vào Thứ 7, Chủ Nhật để nến đứng sát nhau (Giống TradingView)
