@@ -34,35 +34,38 @@ def get_stock_data(ticker, days_back=3650):
         return None
 
 # Hàm 3: Lấy dữ liệu VN-INDEX dài hạn
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_vnindex_data(days_back=365):
-    end_date = datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+@st.cache_data(ttl=3600) # Lưu đệm 1 tiếng để web chạy mượt như chớp
+def get_stock_data(ticker, days_back=365):
     try:
-        df = stock_historical_data(symbol='VNINDEX', start_date=start_date, end_date=end_date, resolution="1D", type="index")
-        return df
-    except:
-        return None
-
-# Hàm 4: Lấy dữ liệu VN-INDEX trong ngày (Bản chuẩn ổn định)
-@st.cache_data(ttl=60, show_spinner=False) # Lưu cache 60 giây để tự động làm mới
-def get_intraday_vnindex():
-    try:
-        # Lấy lùi lại 5 ngày để luôn có sườn Hôm Qua và Hôm Nay
-        end_date = datetime.now().strftime('%Y-%m-%d')
-        start_date = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
+        # Gọi thẳng vào Supabase lấy dữ liệu của mã cổ phiếu
+        # Bạn có thể kết hợp thêm logic ngày tháng (days_back) ở đây nếu cần, 
+        # hoặc cứ lấy hết ra rồi Pandas sẽ tự xử lý.
+        response = supabase.table("stock_data").select("*").eq("ticker", ticker).execute()
         
-        df = stock_historical_data(
-            symbol='VNINDEX', 
-            start_date=start_date, 
-            end_date=end_date, 
-            resolution='1', 
-            type='index'
-        )
-        if df is not None and not df.empty:
-            df.columns = [str(c).lower().strip() for c in df.columns]
+        df = pd.DataFrame(response.data)
+        
+        if not df.empty:
+            # Xử lý lại cột thời gian cho chuẩn chỉ
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.sort_values('date')
+            
+            # Đổi tên cột cho khớp 100% với form code cũ của bạn
+            # Để main.py không bị bỡ ngỡ
+            df.rename(columns={
+                'close_price': 'close',
+                'volume': 'volume',
+                'date': 'time'
+            }, inplace=True)
+            
+            # Lọc theo số ngày (days_back)
+            if days_back:
+                 df = df.tail(days_back)
+                 
             return df
-    except Exception:
-        pass
-        
+        else:
+            return pd.DataFrame()
+            
+    except Exception as e:
+        st.error(f"Lỗi khi lấy dữ liệu Supabase mã {ticker}: {e}")
+        return pd.DataFrame()
     return pd.DataFrame()
