@@ -31,9 +31,6 @@ tab_market, tab_screener, tab_simulation, tab_backtest = st.tabs([
 # ==========================================
 # TAB 1: THỊ TRƯỜNG CHUNG
 # ==========================================
-# ==========================================
-# TAB 1: THỊ TRƯỜNG CHUNG
-# ==========================================
 with tab_market:
     # --- THÊM NÚT BẤM CẬP NHẬT REAL-TIME ---
     col_title, col_btn = st.columns([4, 1])
@@ -41,9 +38,8 @@ with tab_market:
         st.subheader("🌟 TỔNG QUAN THỊ TRƯỜNG REAL-TIME")
     with col_btn:
         if st.button("🔄 CẬP NHẬT DỮ LIỆU", type="primary", use_container_width=True):
-            # Lệnh này sẽ xóa riêng cache của hàm VN-INDEX, ép nó cào API mới nhất 100%
             get_intraday_vnindex.clear()
-            st.rerun() # Lệnh ép Streamlit tải lại trang ngay lập tức
+            st.rerun() 
     st.divider()
     # ---------------------------------------
 
@@ -70,6 +66,9 @@ with tab_market:
             intraday_df['time'] = pd.to_datetime(intraday_df['time'])
             intraday_df['date'] = intraday_df['time'].dt.date
             intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
+            
+            # ✂️ CHÌA KHÓA Ở ĐÂY: Chặt bỏ rác, chỉ lấy đúng giờ giao dịch (09:00 đến 15:15)
+            intraday_df = intraday_df[(intraday_df['hour_min'] >= '09:00') & (intraday_df['hour_min'] <= '15:15')]
             
             dates = intraday_df['date'].unique()
             if len(dates) >= 2:
