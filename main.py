@@ -333,6 +333,7 @@ with tab_backtest:
             else:
                 st.error("Lỗi: Không lấy được dữ liệu. Hãy kiểm tra lại mã cổ phiếu hoặc API đang bảo trì!") 
                 # ==========================================
+# ==========================================
 # TAB 5: ĐỒ THỊ TRADINGVIEW TRỰC TIẾP
 # ==========================================
 import streamlit.components.v1 as components
@@ -352,15 +353,16 @@ with tab_charts:
         # Định dạng chuẩn quốc tế của TradingView (Ví dụ: HOSE:HPG, HNX:CEO)
         tv_symbol = f"{exchange_tv}:{tv_ticker}"
         
-        # Nhúng mã nguồn Widget TradingView Advanced Chart
+        # 🔑 ĐÃ SỬA: Ép chiều cao cố định 700px và chiều rộng 100%
         tradingview_html = f"""
-        <div class="tradingview-widget-container" style="height:100%;width:100%">
-          <div id="tradingview_advanced_chart" style="height:calc(100% - 32px);width:100%"></div>
+        <div class="tradingview-widget-container">
+          <div id="tradingview_advanced_chart"></div>
           <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
           <script type="text/javascript">
           new TradingView.widget(
           {{
-            "autosize": true,
+            "width": "100%",
+            "height": "700",
             "symbol": "{tv_symbol}",
             "interval": "D",
             "timezone": "Asia/Ho_Chi_Minh",
@@ -385,5 +387,5 @@ with tab_charts:
         </div>
         """
         
-        # Bắn trực tiếp lên giao diện Tab 5 với chiều cao 680px cực rộng rãi
-        components.html(tradingview_html, height=680)
+        # 🔑 ĐÃ SỬA: Đặt khung chứa của Streamlit to hơn 1 chút (720px) để không bị viền cuộn (scrollbar)
+        components.html(tradingview_html, height=720)
