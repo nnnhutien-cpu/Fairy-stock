@@ -4,3 +4,4 @@ pandas
 numpy
 plotly
 beautifulsoup4
+supabase
