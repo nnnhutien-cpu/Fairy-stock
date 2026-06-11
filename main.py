@@ -32,7 +32,7 @@ tab_market, tab_screener, tab_simulation, tab_backtest = st.tabs([
 # TAB 1: THỊ TRƯỜNG CHUNG
 # ==========================================
 with tab_market:
-    # --- THÊM NÚT BẤM CẬP NHẬT REAL-TIME ---
+    # --- NÚT BẤM CẬP NHẬT REAL-TIME ---
     col_title, col_btn = st.columns([4, 1])
     with col_title:
         st.subheader("🌟 TỔNG QUAN THỊ TRƯỜNG REAL-TIME")
@@ -67,7 +67,7 @@ with tab_market:
             intraday_df['date'] = intraday_df['time'].dt.date
             intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
             
-            # ✂️ CHÌA KHÓA Ở ĐÂY: Chặt bỏ rác, chỉ lấy đúng giờ giao dịch (09:00 đến 15:15)
+            # ✂️ LƯỚI LỌC THỜI GIAN: Chặt bỏ rác, chỉ giữ đúng phiên giao dịch (09:00 - 15:15) cho toàn bộ tập dữ liệu
             intraday_df = intraday_df[(intraday_df['hour_min'] >= '09:00') & (intraday_df['hour_min'] <= '15:15')]
             
             dates = intraday_df['date'].unique()
@@ -81,12 +81,12 @@ with tab_market:
                 df_today['Vol_Hôm_Nay'] = df_today['volume'].cumsum()
                 df_yest['Vol_Hôm_Qua'] = df_yest['volume'].cumsum()
                 
-                # Lấy chỉ số chốt cuối cùng của dòng thời gian
+                # Lấy chỉ số chốt cuối cùng
                 current_index = df_today['close'].iloc[-1] if not df_today.empty else 0
                 prev_index = df_yest['close'].iloc[-1] if not df_yest.empty else current_index
                 index_change = current_index - prev_index
                 
-                # Lấy tổng khối lượng giao dịch cộng dồn đến thời điểm hiện tại
+                # Lấy tổng khối lượng: Hôm nay (tính đến hiện tại) so với Hôm qua (Chốt phiên 15:15)
                 current_vol = df_today['Vol_Hôm_Nay'].iloc[-1] if not df_today.empty else 0
                 prev_vol = df_yest['Vol_Hôm_Qua'].iloc[-1] if not df_yest.empty else 0
                 vol_change = current_vol - prev_vol
@@ -95,8 +95,9 @@ with tab_market:
                 m1, m2, m3 = st.columns(3)
                 m1.metric("📊 Chỉ số VN-INDEX", f"{current_index:,.2f} đ", f"{index_change:,.2f} đ")
                 m2.metric("💰 Thanh khoản Hôm Nay", f"{current_vol:,.0f} CP", f"{vol_change:,.0f} CP" if vol_change != 0 else None)
-                m3.metric("⏳ Thanh khoản Hôm Qua", f"{prev_vol:,.0f} CP")
+                m3.metric("⏳ Thanh khoản Hôm Qua (EOD)", f"{prev_vol:,.0f} CP")
                 
+                # Tạo bảng ghép chung 2 ngày để vẽ biểu đồ cắt nhau
                 chart_df = pd.merge(df_yest[['hour_min', 'Vol_Hôm_Qua']], 
                                     df_today[['hour_min', 'Vol_Hôm_Nay']], 
                                     on='hour_min', how='outer').sort_values('hour_min')
