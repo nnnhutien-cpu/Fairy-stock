@@ -28,6 +28,7 @@ tab_market, tab_screener, tab_simulation, tab_backtest, tab_charts = st.tabs([
     "🔮 MÔ PHỎNG ICHIMOKU",
     "🛠️ BACKTEST KHUNG 1DAY",
     "📈 CHARTS TRADINGVIEW"
+    ])
 # ==========================================
 # TAB 1: THỊ TRƯỜNG CHUNG (TỰ ĐỘNG KHỚP THEO API THỰC TẾ)
 # ==========================================
