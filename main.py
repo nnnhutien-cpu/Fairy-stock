@@ -28,11 +28,13 @@ tab_market, tab_screener, tab_simulation, tab_backtest = st.tabs([
     "🛠️ BACKTEST KHUNG 1DAY"
 ])
 
+# ==========================================
+# TAB 1: THỊ TRƯỜNG CHUNG
+# ==========================================
 with tab_market:
     intraday_df = get_intraday_vnindex()
     chart_df, df_today = None, None
 
-    # Bẫy lỗi: Đảm bảo có dữ liệu mới vẽ biểu đồ để không bị trắng bảng
     if intraday_df is not None and not intraday_df.empty:
         col_mapping = {}
         for col in intraday_df.columns:
@@ -46,8 +48,10 @@ with tab_market:
         
         intraday_df.rename(columns=col_mapping, inplace=True)
         
-        if 'time' in intraday_df.columns and 'volume' in intraday_df.columns:
+        # Đảm bảo có đủ 3 cột: time, volume và close
+        if 'time' in intraday_df.columns and 'volume' in intraday_df.columns and 'close' in intraday_df.columns:
             intraday_df['volume'] = pd.to_numeric(intraday_df['volume'], errors='coerce').fillna(0)
+            intraday_df['close'] = pd.to_numeric(intraday_df['close'], errors='coerce').fillna(0)
             intraday_df['time'] = pd.to_datetime(intraday_df['time'])
             intraday_df['date'] = intraday_df['time'].dt.date
             intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
@@ -62,6 +66,28 @@ with tab_market:
                 
                 df_today['Vol_Hôm_Nay'] = df_today['volume'].cumsum()
                 df_yest['Vol_Hôm_Qua'] = df_yest['volume'].cumsum()
+                
+                # --- PHẦN MỚI: TRÍCH XUẤT VÀ HIỂN THỊ SỐ LIỆU REAL-TIME ---
+                st.subheader("🌟 TỔNG QUAN THỊ TRƯỜNG REAL-TIME")
+                
+                # Lấy chỉ số chốt cuối cùng của dòng thời gian
+                current_index = df_today['close'].iloc[-1] if not df_today.empty else 0
+                prev_index = df_yest['close'].iloc[-1] if not df_yest.empty else current_index
+                index_change = current_index - prev_index
+                
+                # Lấy tổng khối lượng giao dịch cộng dồn đến thời điểm hiện tại
+                current_vol = df_today['Vol_Hôm_Nay'].iloc[-1] if not df_today.empty else 0
+                prev_vol = df_yest['Vol_Hôm_Qua'].iloc[-1] if not df_yest.empty else 0
+                vol_change = current_vol - prev_vol
+                
+                # In ra 3 khối Metric đẹp mắt
+                m1, m2, m3 = st.columns(3)
+                m1.metric("📊 Chỉ số VN-INDEX", f"{current_index:,.2f} đ", f"{index_change:,.2f} đ")
+                m2.metric("💰 Thanh khoản Hôm Nay", f"{current_vol:,.0f} CP", f"{vol_change:,.0f} CP" if vol_change != 0 else None)
+                m3.metric("⏳ Thanh khoản Hôm Qua", f"{prev_vol:,.0f} CP")
+                
+                st.divider()
+                # ---------------------------------------------------------
                 
                 chart_df = pd.merge(df_yest[['hour_min', 'Vol_Hôm_Qua']], 
                                     df_today[['hour_min', 'Vol_Hôm_Nay']], 
