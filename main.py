@@ -67,7 +67,7 @@ with tab_market:
             intraday_df['date'] = intraday_df['time'].dt.date
             intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
             
-            # ✂️ LƯỚI LỌC THỜI GIAN: Chặt bỏ rác, chỉ giữ đúng phiên giao dịch (09:00 - 15:15) cho toàn bộ tập dữ liệu
+            # ✂️ LƯỚI LỌC THỜI GIAN: Chặt bỏ rác, chỉ giữ đúng phiên giao dịch (09:00 - 15:15)
             intraday_df = intraday_df[(intraday_df['hour_min'] >= '09:00') & (intraday_df['hour_min'] <= '15:15')]
             
             dates = intraday_df['date'].unique()
@@ -86,24 +86,32 @@ with tab_market:
                 prev_index = df_yest['close'].iloc[-1] if not df_yest.empty else current_index
                 index_change = current_index - prev_index
                 
-                # Lấy tổng khối lượng: Hôm nay (tính đến hiện tại) so với Hôm qua (Chốt phiên 15:15)
+                # Lấy tổng khối lượng
                 current_vol = df_today['Vol_Hôm_Nay'].iloc[-1] if not df_today.empty else 0
                 prev_vol = df_yest['Vol_Hôm_Qua'].iloc[-1] if not df_yest.empty else 0
                 vol_change = current_vol - prev_vol
                 
-                # In ra 3 khối Metric đẹp mắt
+                # In ra 3 khối Metric
                 m1, m2, m3 = st.columns(3)
                 m1.metric("📊 Chỉ số VN-INDEX", f"{current_index:,.2f} đ", f"{index_change:,.2f} đ")
                 m2.metric("💰 Thanh khoản Hôm Nay", f"{current_vol:,.0f} CP", f"{vol_change:,.0f} CP" if vol_change != 0 else None)
                 m3.metric("⏳ Thanh khoản Hôm Qua (EOD)", f"{prev_vol:,.0f} CP")
                 
-                # Tạo bảng ghép chung 2 ngày để vẽ biểu đồ cắt nhau
+                # BẢN ĐỘ BIỂU ĐỒ CHUẨN XÁC:
                 chart_df = pd.merge(df_yest[['hour_min', 'Vol_Hôm_Qua']], 
                                     df_today[['hour_min', 'Vol_Hôm_Nay']], 
                                     on='hour_min', how='outer').sort_values('hour_min')
                 
                 chart_df['Vol_Hôm_Qua'] = chart_df['Vol_Hôm_Qua'].ffill()
                 chart_df['Vol_Hôm_Nay'] = chart_df['Vol_Hôm_Nay'].ffill()
+                
+                # --- 🔑 CHIÊU THỨC CHẶT ĐUÔI ĐƯỜNG MÀU XANH TƯƠNG LAI ---
+                if not df_today.empty:
+                    max_time_today = df_today['hour_min'].max()
+                    # Thay thế tất cả các giá trị Vol_Hôm_Nay sau giờ hiện tại thành None
+                    chart_df.loc[chart_df['hour_min'] > max_time_today, 'Vol_Hôm_Nay'] = None
+                # --------------------------------------------------------
+
                 chart_df.set_index('hour_min', inplace=True)
     else:
         st.warning("⚠️ Đang chờ dữ liệu VN-INDEX từ API. Vui lòng tải lại trang sau ít phút...")
