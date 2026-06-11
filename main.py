@@ -28,10 +28,8 @@ tab_market, tab_screener, tab_simulation, tab_backtest, tab_charts = st.tabs([
     "🔮 MÔ PHỎNG ICHIMOKU",
     "🛠️ BACKTEST KHUNG 1DAY",
     "📈 CHARTS TRADINGVIEW"
-])
-
 # ==========================================
-# TAB 1: THỊ TRƯỜNG CHUNG
+# TAB 1: THỊ TRƯỜNG CHUNG (TỰ ĐỘNG KHỚP THEO API THỰC TẾ)
 # ==========================================
 with tab_market:
     # --- NÚT BẤM CẬP NHẬT REAL-TIME ---
@@ -43,12 +41,12 @@ with tab_market:
             get_intraday_vnindex.clear()
             st.rerun() 
     st.divider()
-    # ---------------------------------------
 
     intraday_df = get_intraday_vnindex()
     chart_df, df_today = None, None
 
     if intraday_df is not None and not intraday_df.empty:
+        # Đồng bộ hóa tên cột từ API
         col_mapping = {}
         for col in intraday_df.columns:
             lower_col = str(col).lower().strip()
@@ -68,9 +66,11 @@ with tab_market:
             intraday_df['date'] = intraday_df['time'].dt.date
             intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
             
-            intraday_df = intraday_df[(intraday_df['hour_min'] >= '09:00') & (intraday_df['hour_min'] <= '15:15')]
+            # Lọc khung giờ hành chính chuẩn
+            intraday_df = intraday_df[(intraday_df['hour_min'] >= '09:00') & (intraday_df['hour_min'] <= '15:00')]
             
-            dates = intraday_df['date'].unique()
+            # 🔑 CHIÊU THỨC: Sắp xếp và lấy ngày tự động theo dữ liệu thực tế cào về
+            dates = sorted(intraday_df['date'].unique())
             if len(dates) >= 2:
                 today_date = dates[-1]
                 yest_date = dates[-2]
@@ -81,6 +81,7 @@ with tab_market:
                 df_today['Vol_Hôm_Nay'] = df_today['volume'].cumsum()
                 df_yest['Vol_Hôm_Qua'] = df_yest['volume'].cumsum()
                 
+                # Lấy chỉ số chốt dòng dữ liệu thực tế
                 current_index = df_today['close'].iloc[-1] if not df_today.empty else 0
                 prev_index = df_yest['close'].iloc[-1] if not df_yest.empty else current_index
                 index_change = current_index - prev_index
@@ -89,30 +90,33 @@ with tab_market:
                 prev_vol = df_yest['Vol_Hôm_Qua'].iloc[-1] if not df_yest.empty else 0
                 vol_change = current_vol - prev_vol
                 
+                # In ra 3 khối Metric
                 m1, m2, m3 = st.columns(3)
                 m1.metric("📊 Chỉ số VN-INDEX", f"{current_index:,.2f} đ", f"{index_change:,.2f} đ")
                 m2.metric("💰 Thanh khoản Hôm Nay", f"{current_vol:,.0f} CP", f"{vol_change:,.0f} CP" if vol_change != 0 else None)
                 m3.metric("⏳ Thanh khoản Hôm Qua (EOD)", f"{prev_vol:,.0f} CP")
                 
-                # --- 🔑 GIẢI PHÁP: TẠO KHUNG XƯƠNG THỜI GIAN NHÂN TẠO ---
-                # Sinh ra danh sách phút chuẩn từ 09:00 đến 11:30 và 13:00 đến 15:00
+                # Tạo khung xương thời gian
                 times_morning = pd.date_range("09:00", "11:30", freq="min").strftime('%H:%M').tolist()
                 times_afternoon = pd.date_range("13:00", "15:00", freq="min").strftime('%H:%M').tolist()
                 time_df = pd.DataFrame({'hour_min': times_morning + times_afternoon})
                 
-                # Gắn dữ liệu thật vào cái khung xương nhân tạo
-                chart_df = pd.merge(time_df, df_yest[['hour_min', 'Vol_Hôm_Qua']], on='hour_min', how='left')
-                chart_df = pd.merge(chart_df, df_today[['hour_min', 'Vol_Hôm_Nay']], on='hour_min', how='left')
+                df_yest_agg = df_yest.groupby('hour_min')['Vol_Hôm_Qua'].last().reset_index()
+                df_today_agg = df_today.groupby('hour_min')['Vol_Hôm_Nay'].last().reset_index()
                 
-                # Nối liền các đoạn đứt gãy (như giờ ATC 14:30 - 14:45) cho cả 2 ngày
+                chart_df = pd.merge(time_df, df_yest_agg, on='hour_min', how='left')
+                chart_df = pd.merge(chart_df, df_today_agg, on='hour_min', how='left')
+                
                 chart_df['Vol_Hôm_Qua'] = chart_df['Vol_Hôm_Qua'].ffill()
                 
+                # --- 🔑 TỰ ĐỘNG CHẶT ĐUÔI THEO PHÚT LỚN NHẤT CỦA API THỰC TẾ ---
                 if not df_today.empty:
-                    max_time_today = df_today['hour_min'].max()
+                    max_time_actual = df_today['hour_min'].max()
                     chart_df['Vol_Hôm_Nay'] = chart_df['Vol_Hôm_Nay'].ffill()
+                    chart_df.loc[chart_df['hour_min'] > max_time_actual, 'Vol_Hôm_Nay'] = None
                     
-                    # ✂️ Chặt đuôi tương lai: Chỉ hiện đường xanh đến số phút hiện tại
-                    chart_df.loc[chart_df['hour_min'] > max_time_today, 'Vol_Hôm_Nay'] = None
+                    # Hiện dòng trạng thái báo phút thực tế cho User biết
+                    st.info(f"🕒 Tình trạng luồng dữ liệu: API VN-INDEX đang trả số thực tế đến mốc **{max_time_actual}**")
                 
                 chart_df.set_index('hour_min', inplace=True)
     else:
