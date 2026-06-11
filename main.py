@@ -212,16 +212,16 @@ with tab_simulation:
                     plot_df['Ngay'] = pd.to_datetime(plot_df['time']).dt.strftime('%Y-%m-%d')
                     plot_df.set_index('Ngay', inplace=True)
                 
-                # --- 🚀 KHỞI TẠO ĐỒ THỊ ĐA TẦNG BẰNG PLOTLY ---
+                # --- 🚀 BẮT ĐẦU VẼ BIỂU ĐỒ BẰNG PLOTLY ---
                 import plotly.graph_objects as go
                 from plotly.subplots import make_subplots
                 
-                # Tạo 2 dòng: Tầng 1 vẽ Nến + Mây (80%), Tầng 2 vẽ Volume + MA20 (20%)
+                # 1. Tạo bộ khung 2 tầng
                 fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
                                     vertical_spacing=0.03, 
                                     row_heights=[0.8, 0.2])
                 
-                # 2. Thêm Nến Nhật (Candlestick) vào tầng 1
+                # 2. Thêm Nến Nhật (Candlestick)
                 fig.add_trace(go.Candlestick(x=plot_df.index,
                                              open=plot_df['open'], high=plot_df['high'],
                                              low=plot_df['low'], close=plot_df['close'],
@@ -229,7 +229,7 @@ with tab_simulation:
                                              increasing_line_color='#00C853', decreasing_line_color='#FF1744'),
                               row=1, col=1)
                 
-                # 3. Vẽ Mây Kumo (Tô màu giữa Senkou A và Senkou B)
+                # 3. Thêm Mây Ichimoku
                 fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Senkou A'], 
                                          line=dict(color='rgba(0, 200, 83, 0.4)', width=1), 
                                          name='Senkou A'), row=1, col=1)
@@ -238,49 +238,57 @@ with tab_simulation:
                                          fill='tonexty', fillcolor='rgba(128, 128, 128, 0.15)', 
                                          name='Mây Kumo'), row=1, col=1)
                 
-                # 4. Thêm Tenkan (Xanh dương mảnh)
+                # 4. Thêm Tenkan 
                 fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Tenkan'], 
-                                         line=dict(color='#2962FF', width=1.5), 
-                                         name='Tenkan (9)'), row=1, col=1)
+                                         line=dict(color='#2962FF', width=1.5), name='Tenkan (9)'), row=1, col=1)
                 
-                # 5. Thêm Kijun (Màu đỏ sẫm - In đậm đường 129 như yêu cầu cũ)
+                # 5. Thêm Kijun (Đường đậm)
                 fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Kijun'], 
-                                         line=dict(color='darkred', width=3), 
-                                         name=f'Kijun ({p_kijun})'), row=1, col=1)
+                                         line=dict(color='darkred', width=3), name=f'Kijun ({p_kijun})'), row=1, col=1)
                 
-                # 6. Thêm các cột Volume (Tầng 2) - Đồng bộ màu sắc xanh đỏ theo nến
+                # 6. Thêm Volume & MA20
                 colors = ['#00C853' if row['close'] >= row['open'] else '#FF1744' for idx, row in plot_df.iterrows()]
-                fig.add_trace(go.Bar(x=plot_df.index, y=plot_df['volume'], 
-                                     marker_color=colors, name='Volume'), row=2, col=1)
+                fig.add_trace(go.Bar(x=plot_df.index, y=plot_df['volume'], marker_color=colors, name='Volume'), row=2, col=1)
+                fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Vol_MA20'], line=dict(color='#FF6D00', width=2, shape='spline'), name='Volume MA20'), row=2, col=1)
                 
-                # --- 🔑 CHÌA KHÓA: VẼ ĐƯỜNG VOLUME MA20 MÀU CAM SẪM CHẠY ĐÈ LÊN TẦNG 2 ---
-                fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Vol_MA20'], 
-                                         line=dict(color='#FF6D00', width=2, shape='spline'), # Cấu hình spline để đường uốn lượn mượt mà
-                                         name='Volume MA20'), row=2, col=1)
-                # -----------------------------------------------------------------------
+                # ==============================================================
+                # 💎 7. VŨ KHÍ BÍ MẬT: TỰ ĐỘNG BẮN TÍN HIỆU MUA/BÁN LÊN ĐỒ THỊ
+                # ==============================================================
+                # Logic: MUA khi giá đóng cửa hôm nay vọt lên trên Kijun (hôm qua ở dưới)
+                #        BÁN khi giá đóng cửa hôm nay rớt xuống dưới Kijun (hôm qua ở trên)
+                plot_df['Prev_Close'] = plot_df['close'].shift(1)
+                plot_df['Prev_Kijun'] = plot_df['Kijun'].shift(1)
                 
-                # 7. Tinh chỉnh Layout tổng thể và bật tính năng kéo thả chỉnh đồ thị
+                buy_points = plot_df[(plot_df['Prev_Close'] <= plot_df['Prev_Kijun']) & (plot_df['close'] > plot_df['Kijun'])]
+                sell_points = plot_df[(plot_df['Prev_Close'] >= plot_df['Prev_Kijun']) & (plot_df['close'] < plot_df['Kijun'])]
+                
+                # Vẽ Mũi tên Xanh (MUA) ghim ngay dưới đáy cây nến
+                fig.add_trace(go.Scatter(x=buy_points.index, y=buy_points['low'] * 0.98,
+                                         mode='markers', marker=dict(symbol='triangle-up', size=14, color='rgba(0, 255, 0, 0.9)', line=dict(width=1, color='darkgreen')),
+                                         name='Bắn Tín Hiệu MUA'), row=1, col=1)
+                
+                # Vẽ Mũi tên Đỏ (BÁN) ghim ngay trên đỉnh cây nến
+                fig.add_trace(go.Scatter(x=sell_points.index, y=sell_points['high'] * 1.02,
+                                         mode='markers', marker=dict(symbol='triangle-down', size=14, color='rgba(255, 0, 0, 0.9)', line=dict(width=1, color='darkred')),
+                                         name='Bắn Tín Hiệu BÁN'), row=1, col=1)
+                # ==============================================================
+
+                # 8. Tinh chỉnh Layout tổng thể
                 fig.update_layout(
-                    title=f"<b>Phân Tích Đa Tầng Chuyên Sâu: {sim_ticker}</b>",
+                    title=f"<b>Phân Tích Đa Tầng Chuyên Sâu: {sim_ticker} (Đã bật Mắt Thần)</b>",
                     height=680, 
                     margin=dict(l=10, r=10, t=40, b=10),
                     showlegend=True,
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                     xaxis_rangeslider_visible=False,
-                    
-                    # KÍCH HOẠT CHẾ ĐỘ KÉO CHỈNH (DRAG/PAN/ZOOM) MẶC ĐỊNH
-                    dragmode='pan' # Thiết lập mặc định là bàn tay kéo (Pan), bạn có thể chuyển sang zoom góc bằng công cụ trên đồ thị
+                    dragmode='pan'
                 )
                 
-                # Cắt bỏ khoảng trống thứ 7, chủ nhật để nến liền mạch không bị đứt đoạn
                 fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
                 
-                # In biểu đồ ra màn hình Streamlit
+                # In biểu đồ ra màn hình
                 st.plotly_chart(fig, use_container_width=True)
-                
-                st.info("💡 **Hướng dẫn tương tác:** Bạn có thể dùng chuột cuộn để phóng to/thu nhỏ nến. Click giữ chuột kéo sang trái/phải để di chuyển trục thời gian. Đường màu cam ở dưới chính là Volume MA20!")
-            else:
-                st.error(f"⚠️ Không thể kết nối hoặc không tìm thấy dữ liệu lịch sử của mã '{sim_ticker}'. Vui lòng thử lại mã khác.")
+                # ... [Phần code báo lỗi ở dưới giữ nguyên] ...
 # Tích hợp Tab 4: Hệ thống Backtest Cổ Phiếu Khung Ngày (Daily) hoàn chỉnh
 with tab_backtest:
     st.subheader("🛠️ Hệ Thống Backtest Dài Hạn (Khung 1DAY)")
