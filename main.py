@@ -31,7 +31,22 @@ tab_market, tab_screener, tab_simulation, tab_backtest = st.tabs([
 # ==========================================
 # TAB 1: THỊ TRƯỜNG CHUNG
 # ==========================================
+# ==========================================
+# TAB 1: THỊ TRƯỜNG CHUNG
+# ==========================================
 with tab_market:
+    # --- THÊM NÚT BẤM CẬP NHẬT REAL-TIME ---
+    col_title, col_btn = st.columns([4, 1])
+    with col_title:
+        st.subheader("🌟 TỔNG QUAN THỊ TRƯỜNG REAL-TIME")
+    with col_btn:
+        if st.button("🔄 CẬP NHẬT DỮ LIỆU", type="primary", use_container_width=True):
+            # Lệnh này sẽ xóa riêng cache của hàm VN-INDEX, ép nó cào API mới nhất 100%
+            get_intraday_vnindex.clear()
+            st.rerun() # Lệnh ép Streamlit tải lại trang ngay lập tức
+    st.divider()
+    # ---------------------------------------
+
     intraday_df = get_intraday_vnindex()
     chart_df, df_today = None, None
 
@@ -67,9 +82,6 @@ with tab_market:
                 df_today['Vol_Hôm_Nay'] = df_today['volume'].cumsum()
                 df_yest['Vol_Hôm_Qua'] = df_yest['volume'].cumsum()
                 
-                # --- PHẦN MỚI: TRÍCH XUẤT VÀ HIỂN THỊ SỐ LIỆU REAL-TIME ---
-                st.subheader("🌟 TỔNG QUAN THỊ TRƯỜNG REAL-TIME")
-                
                 # Lấy chỉ số chốt cuối cùng của dòng thời gian
                 current_index = df_today['close'].iloc[-1] if not df_today.empty else 0
                 prev_index = df_yest['close'].iloc[-1] if not df_yest.empty else current_index
@@ -85,9 +97,6 @@ with tab_market:
                 m1.metric("📊 Chỉ số VN-INDEX", f"{current_index:,.2f} đ", f"{index_change:,.2f} đ")
                 m2.metric("💰 Thanh khoản Hôm Nay", f"{current_vol:,.0f} CP", f"{vol_change:,.0f} CP" if vol_change != 0 else None)
                 m3.metric("⏳ Thanh khoản Hôm Qua", f"{prev_vol:,.0f} CP")
-                
-                st.divider()
-                # ---------------------------------------------------------
                 
                 chart_df = pd.merge(df_yest[['hour_min', 'Vol_Hôm_Qua']], 
                                     df_today[['hour_min', 'Vol_Hôm_Nay']], 
