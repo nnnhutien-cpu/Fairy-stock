@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
 import concurrent.futures
+import streamlit.components.v1 as components #
 from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex
 from indicators import calculate_technical_signals
-from ui_layout import render_sidebar, render_market_tab, render_screener_results
+from ui_layout import render_sidebar, render_market_tab, render_screener_results, charts trading view
 from ux_components import setup_cache_clear_button, render_search_and_export # Gọi file UX
 import backtester as bt # [CẬP NHẬT] Nhập file backtest khung ngày (1DAY)
 
@@ -26,6 +27,7 @@ tab_market, tab_screener, tab_simulation, tab_backtest = st.tabs([
     "🚀 BỘ LỌC CỔ PHIẾU", 
     "🔮 MÔ PHỎNG ICHIMOKU",
     "🛠️ BACKTEST KHUNG 1DAY"
+    "📈 CHARTS TRADINGVIEW"
 ])
 
 # ==========================================
@@ -329,4 +331,59 @@ with tab_backtest:
                 else:
                     st.error("Dữ liệu quá ngắn, không đủ để tính toán đám mây Ichimoku!")
             else:
-                st.error("Lỗi: Không lấy được dữ liệu. Hãy kiểm tra lại mã cổ phiếu hoặc API đang bảo trì!")
+                st.error("Lỗi: Không lấy được dữ liệu. Hãy kiểm tra lại mã cổ phiếu hoặc API đang bảo trì!") 
+                # ==========================================
+# TAB 5: ĐỒ THỊ TRADINGVIEW TRỰC TIẾP
+# ==========================================
+import streamlit.components.v1 as components
+
+with tab_charts:
+    st.subheader("📊 Hệ Thống Đồ Thị TradingView Trực Tiếp (Bản Free)")
+    st.caption("Chart hỗ trợ đầy đủ full tính năng tương tác, lưu cấu hình, vẽ Trendline, Fibonacci và mọi chỉ báo kỹ thuật thị trường.")
+    
+    # Thiết kế bộ gõ mã khớp sàn để TradingView nhận diện 100% mã Việt Nam
+    col_ex, col_tk = st.columns([1, 3])
+    with col_ex:
+        exchange_tv = st.selectbox("Chọn Sàn:", ["HOSE", "HNX", "UPCOM"], key="tv_tab_exchange_select")
+    with col_tk:
+        tv_ticker = st.text_input("Nhập mã chứng khoán (Gõ xong nhấn Enter):", value="HPG", key="tv_tab_ticker_input").upper().strip()
+    
+    if tv_ticker:
+        # Định dạng chuẩn quốc tế của TradingView (Ví dụ: HOSE:HPG, HNX:CEO)
+        tv_symbol = f"{exchange_tv}:{tv_ticker}"
+        
+        # Nhúng mã nguồn Widget TradingView Advanced Chart
+        tradingview_html = f"""
+        <div class="tradingview-widget-container" style="height:100%;width:100%">
+          <div id="tradingview_advanced_chart" style="height:calc(100% - 32px);width:100%"></div>
+          <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+          <script type="text/javascript">
+          new TradingView.widget(
+          {{
+            "autosize": true,
+            "symbol": "{tv_symbol}",
+            "interval": "D",
+            "timezone": "Asia/Ho_Chi_Minh",
+            "theme": "dark",
+            "style": "1",
+            "locale": "vi_VN",
+            "enable_publishing": false,
+            "backgroundColor": "rgba(0, 0, 0, 1)",
+            "withdateranges": true,
+            "hide_side_toolbar": false,
+            "allow_symbol_change": true,
+            "details": true,
+            "hotlist": true,
+            "calendar": false,
+            "show_popup_button": true,
+            "popup_width": "1000",
+            "popup_height": "650",
+            "container_id": "tradingview_advanced_chart"
+          }}
+          );
+          </script>
+        </div>
+        """
+        
+        # Bắn trực tiếp lên giao diện Tab 5 với chiều cao 680px cực rộng rãi
+        components.html(tradingview_html, height=680)
