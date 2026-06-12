@@ -310,57 +310,74 @@ with tab_backtest:
                 st.error("Lỗi: Không lấy được dữ liệu. Hãy kiểm tra lại mã cổ phiếu hoặc API đang bảo trì!") 
                 # ==========================================
 # ==========================================
-# TAB 5: BÁO CÁO PHÂN TÍCH TỪ CÁC CTCK (VIETSTOCK)
+# ==========================================
+# TAB 5: BÁO CÁO PHÂN TÍCH CHUYÊN SÂU TỪ CTCK
 # ==========================================
 with tab_reports:
-    st.subheader("📑 Tổng Hợp Báo Cáo Phân Tích Cổ Phiếu")
-    st.caption("Tổng hợp khuyến nghị Mua/Bán và Giá mục tiêu từ các CTCK lớn (Kèm link PDF gốc).")
+    st.subheader("📑 Hệ Thống Phân Tích Định Giá Cổ Phiếu")
+    # Đã sửa lại phần giới thiệu cho đúng quy mô khủng của hệ thống
+    st.caption("Dữ liệu hệ thống tự động quét hàng ngày từ 15+ CTCK hàng đầu (SSI, VND, VCI, MBS, MAS, KIS, VCBS, KB, CTS, BSI...).")
     
-    rep_ticker = st.text_input("Nhập mã cổ phiếu để tra cứu báo cáo (Ví dụ: PVS, HPG):", value="PVS", key="report_ticker_input").upper().strip()
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        # Tích hợp bộ lọc Hành động
+        filter_action = st.selectbox("Lọc Khuyến Nghị:", ["Tất cả", "MUA", "NẮM GIỮ", "BÁN"])
+    with col2:
+        # ĐÃ SỬA: Để value="" (trống) để mặc định load toàn bộ thị trường ngay khi mở Tab
+        rep_ticker = st.text_input("Nhập mã cổ phiếu (Ví dụ: FPT, HPG) hoặc để trống để xem toàn thị trường:", value="", key="rep_ticker_db").upper().strip()
     
-    if rep_ticker:
-        with st.spinner(f"Đang trích xuất kho báo cáo phân tích cho {rep_ticker}..."):
+    with st.spinner("Đang truy vấn kho dữ liệu định giá..."):
+        try:
+            # Lấy dữ liệu trực tiếp từ Supabase
+            query = supabase.table("analyst_reports").select("*")
             
-            # --- HÀM KHUNG (BẠN SẼ THAY BẰNG DỮ LIỆU CÀO TỪ VIETSTOCK HOẶC SUPABASE SAU) ---
-            def get_analyst_reports(ticker):
-                data = {
-                    "Ngày": ["08/05/2026", "12/04/2026", "05/03/2026"],
-                    "Công Ty": ["VCI", "SSI", "VND"],
-                    "Hành Động": ["MUA", "MUA", "NẮM GIỮ"],
-                    "Giá Mua": [38000, 37500, 35000],
-                    "Giá Mục Tiêu": [45000, 44000, 40000],
-                    "Link Báo Cáo": [
-                        f"https://static1.vietstock.vn/edocs/20757/{ticker}_20260508_MUA.pdf",
-                        f"https://static1.vietstock.vn/edocs/19842/{ticker}_20260412_MUA.pdf",
-                        f"https://static1.vietstock.vn/edocs/18533/{ticker}_20260305_HOLD.pdf"
-                    ]
-                }
-                return pd.DataFrame(data)
+            # Nếu người dùng có gõ mã thì mới lọc, còn để trống thì lấy TẤT CẢ
+            if rep_ticker:
+                query = query.eq("ticker", rep_ticker)
             
-            # Gọi hàm lấy bảng dữ liệu
-            df_reports = get_analyst_reports(rep_ticker)
+            response = query.execute()
+            df_reports = pd.DataFrame(response.data)
             
             if not df_reports.empty:
-                # 💎 VŨ KHÍ BÍ MẬT: Tự động tính phần trăm Lợi Nhuận Kỳ Vọng (Upside)
-                df_reports['Kỳ Vọng (%)'] = ((df_reports['Giá Mục Tiêu'] - df_reports['Giá Mua']) / df_reports['Giá Mua'] * 100).round(2)
+                # Lọc theo hành động Mua/Bán
+                if filter_action != "Tất cả":
+                    df_reports = df_reports[df_reports['action'] == filter_action]
                 
-                # Sắp xếp lại thứ tự các cột cho logic
-                df_reports = df_reports[["Ngày", "Công Ty", "Hành Động", "Giá Mua", "Giá Mục Tiêu", "Kỳ Vọng (%)", "Link Báo Cáo"]]
-                
-                # --- IN BẢNG RA WEB (Dùng Column Config để ẩn URL xấu, biến thành nút tải PDF) ---
-                st.dataframe(
-                    df_reports,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Ngày": st.column_config.TextColumn("📅 Ngày"),
-                        "Công Ty": st.column_config.TextColumn("🏢 CTCK"),
-                        "Hành Động": st.column_config.TextColumn("⚡ Khuyến Nghị"),
-                        "Giá Mua": st.column_config.NumberColumn("💰 Giá Mua", format="%d ₫"),
-                        "Giá Mục Tiêu": st.column_config.NumberColumn("🎯 Mục Tiêu", format="%d ₫"),
-                        "Kỳ Vọng (%)": st.column_config.NumberColumn("🚀 Upside", format="%.2f %%"),
-                        "Link Báo Cáo": st.column_config.LinkColumn("📥 Tài Liệu (PDF)", display_text="Xem Báo Cáo") # Biến link dài thành nút click
-                    }
-                )
+                if not df_reports.empty:
+                    # Tính toán Upside (%)
+                    # Ép kiểu dữ liệu sang dạng số (numeric) để tránh lỗi tính toán nếu Supabase trả về chuỗi
+                    df_reports['target_price'] = pd.to_numeric(df_reports['target_price'], errors='coerce')
+                    df_reports['buy_price'] = pd.to_numeric(df_reports['buy_price'], errors='coerce')
+                    
+                    df_reports['Kỳ Vọng (%)'] = ((df_reports['target_price'] - df_reports['buy_price']) / df_reports['buy_price'] * 100).round(2)
+                    
+                    # Chuẩn hóa định dạng cột để in ra đẹp mắt
+                    df_reports = df_reports.sort_values(by='date', ascending=False)
+                    df_display = df_reports[['date', 'ticker', 'company', 'action', 'buy_price', 'target_price', 'Kỳ Vọng (%)', 'report_url']].copy()
+                    
+                    st.dataframe(
+                        df_display,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "date": st.column_config.DateColumn("📅 Ngày", format="DD/MM/YYYY"),
+                            "ticker": st.column_config.TextColumn("🏷️ Mã"),
+                            "company": st.column_config.TextColumn("🏢 CTCK"),
+                            "action": st.column_config.TextColumn("⚡ Khuyến Nghị"),
+                            "buy_price": st.column_config.NumberColumn("💰 Giá Khuyến Nghị", format="%d ₫"),
+                            "target_price": st.column_config.NumberColumn("🎯 Giá Mục Tiêu", format="%d ₫"),
+                            "Kỳ Vọng (%)": st.column_config.NumberColumn("🚀 Kỳ Vọng Upside", format="%.2f %%"),
+                            "report_url": st.column_config.LinkColumn("📥 Tải PDF", display_text="Xem Báo Cáo")
+                        }
+                    )
+                else:
+                    st.warning("Không có báo cáo nào khớp với bộ lọc của bạn.")
             else:
-                st.warning(f"⚠️ Không tìm thấy báo cáo nào cho mã {rep_ticker}.")
+                if rep_ticker:
+                    st.info(f"Hiện tại chưa có dữ liệu báo cáo cho mã {rep_ticker}. Bot cào dữ liệu sẽ tự động bổ sung vào sáng mai!")
+                else:
+                    st.info("Kho báo cáo hiện đang trống. Hãy đợi Bot tự động cào dữ liệu về nhé!")
+                
+        except Exception as e:
+            # Viết không dấu để chống lỗi ascii trên Streamlit Cloud
+            st.error(f"Loi ket noi hoac xu ly du lieu bao cao: {str(e)}")
