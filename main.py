@@ -27,7 +27,7 @@ tab_market, tab_screener, tab_simulation, tab_backtest, tab_charts = st.tabs([
     "🚀 BỘ LỌC CỔ PHIẾU", 
     "🔮 MÔ PHỎNG ICHIMOKU",
     "🛠️ BACKTEST KHUNG 1DAY",
-    "📈 CHARTS TRADINGVIEW"
+    "📑 BÁO CÁO PHÂN TÍCH"
     ])
 # ==========================================
 # TAB 1: THỊ TRƯỜNG CHUNG (TỰ ĐỘNG KHỚP THEO API THỰC TẾ)
@@ -310,58 +310,57 @@ with tab_backtest:
                 st.error("Lỗi: Không lấy được dữ liệu. Hãy kiểm tra lại mã cổ phiếu hoặc API đang bảo trì!") 
                 # ==========================================
 # ==========================================
-# TAB 5: ĐỒ THỊ TRADINGVIEW TRỰC TIẾP
+# TAB 5: BÁO CÁO PHÂN TÍCH TỪ CÁC CTCK (VIETSTOCK)
 # ==========================================
-import streamlit.components.v1 as components
-
-with tab_charts:
-    st.subheader("📊 Hệ Thống Đồ Thị TradingView Trực Tiếp (Bản Free)")
-    st.caption("Chart hỗ trợ đầy đủ full tính năng tương tác, lưu cấu hình, vẽ Trendline, Fibonacci và mọi chỉ báo kỹ thuật thị trường.")
+with tab_reports:
+    st.subheader("📑 Tổng Hợp Báo Cáo Phân Tích Cổ Phiếu")
+    st.caption("Tổng hợp khuyến nghị Mua/Bán và Giá mục tiêu từ các CTCK lớn (Kèm link PDF gốc).")
     
-    # Thiết kế bộ gõ mã khớp sàn để TradingView nhận diện 100% mã Việt Nam
-    col_ex, col_tk = st.columns([1, 3])
-    with col_ex:
-        exchange_tv = st.selectbox("Chọn Sàn:", ["HOSE", "HNX", "UPCOM"], key="tv_tab_exchange_select")
-    with col_tk:
-        tv_ticker = st.text_input("Nhập mã chứng khoán (Gõ xong nhấn Enter):", value="HPG", key="tv_tab_ticker_input").upper().strip()
+    rep_ticker = st.text_input("Nhập mã cổ phiếu để tra cứu báo cáo (Ví dụ: PVS, HPG):", value="PVS", key="report_ticker_input").upper().strip()
     
-    if tv_ticker:
-        # Định dạng chuẩn quốc tế của TradingView (Ví dụ: HOSE:HPG, HNX:CEO)
-        tv_symbol = f"{exchange_tv}:{tv_ticker}"
-        
-        # 🔑 ĐÃ SỬA: Ép chiều cao cố định 700px và chiều rộng 100%
-        tradingview_html = f"""
-        <div class="tradingview-widget-container">
-          <div id="tradingview_advanced_chart"></div>
-          <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-          <script type="text/javascript">
-          new TradingView.widget(
-          {{
-            "width": "100%",
-            "height": "700",
-            "symbol": "{tv_symbol}",
-            "interval": "D",
-            "timezone": "Asia/Ho_Chi_Minh",
-            "theme": "dark",
-            "style": "1",
-            "locale": "vi_VN",
-            "enable_publishing": false,
-            "backgroundColor": "rgba(0, 0, 0, 1)",
-            "withdateranges": true,
-            "hide_side_toolbar": false,
-            "allow_symbol_change": true,
-            "details": true,
-            "hotlist": true,
-            "calendar": false,
-            "show_popup_button": true,
-            "popup_width": "1000",
-            "popup_height": "650",
-            "container_id": "tradingview_advanced_chart"
-          }}
-          );
-          </script>
-        </div>
-        """
-        
-        # 🔑 ĐÃ SỬA: Đặt khung chứa của Streamlit to hơn 1 chút (720px) để không bị viền cuộn (scrollbar)
-        components.html(tradingview_html, height=720)
+    if rep_ticker:
+        with st.spinner(f"Đang trích xuất kho báo cáo phân tích cho {rep_ticker}..."):
+            
+            # --- HÀM KHUNG (BẠN SẼ THAY BẰNG DỮ LIỆU CÀO TỪ VIETSTOCK HOẶC SUPABASE SAU) ---
+            def get_analyst_reports(ticker):
+                data = {
+                    "Ngày": ["08/05/2026", "12/04/2026", "05/03/2026"],
+                    "Công Ty": ["VCI", "SSI", "VND"],
+                    "Hành Động": ["MUA", "MUA", "NẮM GIỮ"],
+                    "Giá Mua": [38000, 37500, 35000],
+                    "Giá Mục Tiêu": [45000, 44000, 40000],
+                    "Link Báo Cáo": [
+                        f"https://static1.vietstock.vn/edocs/20757/{ticker}_20260508_MUA.pdf",
+                        f"https://static1.vietstock.vn/edocs/19842/{ticker}_20260412_MUA.pdf",
+                        f"https://static1.vietstock.vn/edocs/18533/{ticker}_20260305_HOLD.pdf"
+                    ]
+                }
+                return pd.DataFrame(data)
+            
+            # Gọi hàm lấy bảng dữ liệu
+            df_reports = get_analyst_reports(rep_ticker)
+            
+            if not df_reports.empty:
+                # 💎 VŨ KHÍ BÍ MẬT: Tự động tính phần trăm Lợi Nhuận Kỳ Vọng (Upside)
+                df_reports['Kỳ Vọng (%)'] = ((df_reports['Giá Mục Tiêu'] - df_reports['Giá Mua']) / df_reports['Giá Mua'] * 100).round(2)
+                
+                # Sắp xếp lại thứ tự các cột cho logic
+                df_reports = df_reports[["Ngày", "Công Ty", "Hành Động", "Giá Mua", "Giá Mục Tiêu", "Kỳ Vọng (%)", "Link Báo Cáo"]]
+                
+                # --- IN BẢNG RA WEB (Dùng Column Config để ẩn URL xấu, biến thành nút tải PDF) ---
+                st.dataframe(
+                    df_reports,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Ngày": st.column_config.TextColumn("📅 Ngày"),
+                        "Công Ty": st.column_config.TextColumn("🏢 CTCK"),
+                        "Hành Động": st.column_config.TextColumn("⚡ Khuyến Nghị"),
+                        "Giá Mua": st.column_config.NumberColumn("💰 Giá Mua", format="%d ₫"),
+                        "Giá Mục Tiêu": st.column_config.NumberColumn("🎯 Mục Tiêu", format="%d ₫"),
+                        "Kỳ Vọng (%)": st.column_config.NumberColumn("🚀 Upside", format="%.2f %%"),
+                        "Link Báo Cáo": st.column_config.LinkColumn("📥 Tài Liệu (PDF)", display_text="Xem Báo Cáo") # Biến link dài thành nút click
+                    }
+                )
+            else:
+                st.warning(f"⚠️ Không tìm thấy báo cáo nào cho mã {rep_ticker}.")
