@@ -1,0 +1,28 @@
+name: Daily Report Scraper
+
+on:
+  schedule:
+    - cron: '0 23 * * *' # Chạy vào 6h00 sáng giờ VN (23h00 UTC)
+  workflow_dispatch: # Cho phép bạn bấm nút chạy bằng tay để test
+
+jobs:
+  scrape-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install requests pandas supabase
+
+      - name: Run Scraper Bot
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python auto_scraper.py
