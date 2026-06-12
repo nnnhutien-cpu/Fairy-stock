@@ -22,12 +22,12 @@ setup_cache_clear_button()
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 
 # [ĐỒNG BỘ CHUẨN] Đổi tên Tab thứ 4 thành Khung Ngày 1DAY theo đúng logic code
-tab_market, tab_screener, tab_simulation, tab_backtest, tab_charts = st.tabs([
+tab_market, tab_screener, tab_simulation, tab_backtest, tab_reports = st.tabs([
     "📊 TỔNG QUAN VN-INDEX", 
     "🚀 BỘ LỌC CỔ PHIẾU", 
     "🔮 MÔ PHỎNG ICHIMOKU",
     "🛠️ BACKTEST KHUNG 1DAY",
-    "📑 BÁO CÁO PHÂN TÍCH"
+    "📑 BÁO CÁO PHÂN TÍCH",
     ])
 # ==========================================
 # TAB 1: THỊ TRƯỜNG CHUNG (TỰ ĐỘNG KHỚP THEO API THỰC TẾ)
