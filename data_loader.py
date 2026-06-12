@@ -55,7 +55,7 @@ def get_stock_data(ticker, days_back=3650):
             return pd.DataFrame()
             
     except Exception as e:
-        st.error(f"Lỗi khi lấy dữ liệu Supabase mã {ticker}: {e}")
+        st.error(f"Loi lay du lieu Supabase ma {ticker}: {str(e)}")
         return pd.DataFrame()
 
 # HÀM 3: Lấy dữ liệu VN-INDEX dài hạn (Đã đổi tên thành get_vnindex_data cho đúng)
