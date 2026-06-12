@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import concurrent.futures
 import streamlit.components.v1 as components #
-from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex
+from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex, supabase
 from indicators import calculate_technical_signals
 from ui_layout import render_sidebar, render_market_tab, render_screener_results
 from ux_components import setup_cache_clear_button, render_search_and_export # Gọi file UX
