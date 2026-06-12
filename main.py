@@ -183,117 +183,90 @@ with tab_screener:
         st.caption(f"Hãy cấu hình thông số ở Sidebar trái và bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' để bắt đầu.")
 
 # ==========================================
-# ==========================================
-# TAB 3: MÔ PHỎNG ICHIMOKU (VIẾT LẠI TỪ ĐẦU)
+# TAB 3: MÔ PHỎNG ICHIMOKU (KHÔNG DÙNG NẾN)
 # ==========================================
 with tab_simulation:
-    st.subheader("🔮 Phòng Thí Nghiệm Chỉ Báo Kỹ Thuật Ichimoku")
-    st.caption("Đồ thị chuyên nghiệp: Hỗ trợ tương tác, Volume MA20 và Mắt Thần Báo Tín Hiệu.")
+    st.subheader("🔮 Mô Phỏng Ichimoku & Volume")
+    st.caption("Giao diện tối giản: Chỉ hiển thị Đường Giá (Line), Ichimoku và Volume MA20.")
     
-    # Ô nhập mã cổ phiếu
     sim_ticker = st.text_input("Nhập mã cổ phiếu (Gõ xong nhấn Enter):", value="HPG", key="sim_ticker_input").upper().strip()
     
     if sim_ticker:
-        with st.spinner(f"Đang dựng đồ thị chuyên nghiệp cho {sim_ticker}..."): 
-            # Gọi dữ liệu (từ Supabase/Vnstock thông qua data_loader)
+        with st.spinner(f"Đang xử lý dữ liệu {sim_ticker}..."): 
             df_sim = get_stock_data(sim_ticker)
             
             if df_sim is not None and not df_sim.empty:
-                # Ép tên cột về chữ thường để tránh lỗi gọi sai tên
                 df_sim.columns = [str(c).lower().strip() for c in df_sim.columns]
                 
-                # --- BƯỚC 1: TÍNH TOÁN CÁC ĐƯỜNG ICHIMOKU ---
-                # Tenkan-sen (Đường chuyển đổi - 9 phiên)
+                # Tính toán Ichimoku
                 df_sim['Tenkan'] = (df_sim['high'].rolling(window=p_tenkan).max() + df_sim['low'].rolling(window=p_tenkan).min()) / 2
-                
-                # Kijun-sen (Đường tiêu chuẩn - 26 phiên)
                 df_sim['Kijun'] = (df_sim['high'].rolling(window=p_kijun).max() + df_sim['low'].rolling(window=p_kijun).min()) / 2
                 
-                # Senkou Span A (Đường dẫn dắt A - Bị đẩy về tương lai 26 phiên)
                 senkou_a_raw = (df_sim['Tenkan'] + df_sim['Kijun']) / 2
                 df_sim['Senkou A'] = senkou_a_raw.shift(p_shift)
                 
-                # Senkou Span B (Đường dẫn dắt B - 52 phiên, bị đẩy về tương lai 26 phiên)
                 senkou_b_raw = (df_sim['high'].rolling(window=p_senkou_b).max() + df_sim['low'].rolling(window=p_senkou_b).min()) / 2
                 df_sim['Senkou B'] = senkou_b_raw.shift(p_shift)
                 
-                # Tính đường trung bình khối lượng 20 phiên (Volume MA20)
                 df_sim['Vol_MA20'] = df_sim['volume'].rolling(window=20).mean()
                 
-                # Lấy 100 nến gần nhất để biểu đồ không bị rác và kẹt
+                # Lấy 100 nến gần nhất
                 plot_df = df_sim.tail(100).copy()
                 
-                # Xử lý trục thời gian
                 if 'time' in plot_df.columns:
                     plot_df['Ngay'] = pd.to_datetime(plot_df['time']).dt.strftime('%Y-%m-%d')
                     plot_df.set_index('Ngay', inplace=True)
                 
-                # --- BƯỚC 2: VẼ BIỂU ĐỒ BẰNG PLOTLY ---
+                # Vẽ biểu đồ
                 import plotly.graph_objects as go
                 from plotly.subplots import make_subplots
                 
-                # Chia làm 2 khung: Nến ở trên (chiếm 80%), Volume ở dưới (chiếm 20%)
                 fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
                                     vertical_spacing=0.03, row_heights=[0.8, 0.2])
                 
-                # Vẽ nến Nhật
-                fig.add_trace(go.Candlestick(x=plot_df.index,
-                                             open=plot_df['open'], high=plot_df['high'],
-                                             low=plot_df['low'], close=plot_df['close'],
-                                             name='Nến Giá',
-                                             increasing_line_color='#00C853', decreasing_line_color='#FF1744'),
-                              row=1, col=1)
+                # 1. Vẽ ĐƯỜNG GIÁ (Thay cho Nến)
+                fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['close'], 
+                                         line=dict(color='white', width=2), name='Giá Đóng Cửa'), row=1, col=1)
                 
-                # Vẽ Mây Kumo (Phần tô màu giữa Senkou A và Senkou B)
+                # 2. Vẽ Mây Kumo
                 fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Senkou A'], 
                                          line=dict(color='rgba(0, 200, 83, 0.4)', width=1), name='Senkou A'), row=1, col=1)
                 fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Senkou B'], 
                                          line=dict(color='rgba(255, 23, 68, 0.4)', width=1),
                                          fill='tonexty', fillcolor='rgba(128, 128, 128, 0.15)', name='Mây Kumo'), row=1, col=1)
                 
-                # Vẽ Tenkan & Kijun
+                # 3. Vẽ Tenkan & Kijun
                 fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Tenkan'], line=dict(color='#2962FF', width=1.5), name=f'Tenkan ({p_tenkan})'), row=1, col=1)
                 fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Kijun'], line=dict(color='darkred', width=3), name=f'Kijun ({p_kijun})'), row=1, col=1)
                 
-                # Vẽ cột Volume và đường Vol MA20
+                # 4. Vẽ Volume
                 colors = ['#00C853' if row['close'] >= row['open'] else '#FF1744' for idx, row in plot_df.iterrows()]
                 fig.add_trace(go.Bar(x=plot_df.index, y=plot_df['volume'], marker_color=colors, name='Volume'), row=2, col=1)
                 fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Vol_MA20'], line=dict(color='#FF6D00', width=2, shape='spline'), name='Volume MA20'), row=2, col=1)
                 
-                # --- BƯỚC 3: MẮT THẦN TỰ ĐỘNG BẮN TÍN HIỆU MUA/BÁN ---
+                # Mắt thần (Giữ lại để biết điểm cắt Kijun)
                 plot_df['Prev_Close'] = plot_df['close'].shift(1)
                 plot_df['Prev_Kijun'] = plot_df['Kijun'].shift(1)
-                
-                # Logic MUA: Đóng cửa hôm trước thấp hơn Kijun, hôm nay vọt lên trên Kijun
                 buy_points = plot_df[(plot_df['Prev_Close'] <= plot_df['Prev_Kijun']) & (plot_df['close'] > plot_df['Kijun'])]
-                # Logic BÁN: Đóng cửa hôm trước cao hơn Kijun, hôm nay rớt xuống dưới Kijun
                 sell_points = plot_df[(plot_df['Prev_Close'] >= plot_df['Prev_Kijun']) & (plot_df['close'] < plot_df['Kijun'])]
                 
-                # Ghim mũi tên xanh (MUA)
-                fig.add_trace(go.Scatter(x=buy_points.index, y=buy_points['low'] * 0.98,
-                                         mode='markers', marker=dict(symbol='triangle-up', size=14, color='rgba(0, 255, 0, 0.9)', line=dict(width=1, color='darkgreen')),
-                                         name='Bắn Tín Hiệu MUA'), row=1, col=1)
-                
-                # Ghim mũi tên đỏ (BÁN)
-                fig.add_trace(go.Scatter(x=sell_points.index, y=sell_points['high'] * 1.02,
-                                         mode='markers', marker=dict(symbol='triangle-down', size=14, color='rgba(255, 0, 0, 0.9)', line=dict(width=1, color='darkred')),
-                                         name='Bắn Tín Hiệu BÁN'), row=1, col=1)
+                fig.add_trace(go.Scatter(x=buy_points.index, y=buy_points['close'] * 0.98,
+                                         mode='markers', marker=dict(symbol='triangle-up', size=14, color='lime'), name='Tín Hiệu MUA'), row=1, col=1)
+                fig.add_trace(go.Scatter(x=sell_points.index, y=sell_points['close'] * 1.02,
+                                         mode='markers', marker=dict(symbol='triangle-down', size=14, color='red'), name='Tín Hiệu BÁN'), row=1, col=1)
 
-                # --- BƯỚC 4: LÀM ĐẸP GIAO DIỆN ---
+                # Làm đẹp
                 fig.update_layout(
-                    title=f"<b>Phân Tích Đa Tầng Chuyên Sâu: {sim_ticker} (Đã bật Mắt Thần)</b>",
+                    title=f"<b>Phân Tích Ichimoku (Line Chart): {sim_ticker}</b>",
                     height=680, margin=dict(l=10, r=10, t=40, b=10),
                     showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                     xaxis_rangeslider_visible=False, dragmode='pan'
                 )
-                
-                # Ẩn những ngày cuối tuần không giao dịch để chart liền mạch
                 fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
                 
-                # Xuất biểu đồ ra web
                 st.plotly_chart(fig, use_container_width=True)
             else:
-                st.warning(f"⚠️ Không có dữ liệu cho mã {sim_ticker}. Hãy chắc chắn mã này đã được nạp vào kho Supabase!")
+                st.warning(f"⚠️ Không có dữ liệu cho mã {sim_ticker}. Hãy chắc chắn bạn đã bấm nút 'Bơm dữ liệu lên Supabase'!")
 # Tích hợp Tab 4: Hệ thống Backtest Cổ Phiếu Khung Ngày (Daily) hoàn chỉnh
 with tab_backtest:
     st.subheader("🛠️ Hệ Thống Backtest Dài Hạn (Khung 1DAY)")
