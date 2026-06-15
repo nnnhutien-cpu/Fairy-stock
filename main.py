@@ -310,7 +310,6 @@ with tab_backtest:
                 st.error("Lỗi: Không lấy được dữ liệu. Hãy kiểm tra lại mã cổ phiếu hoặc API đang bảo trì!") 
                 # ==========================================
 # ==========================================
-# ==========================================
 # TAB 5: BÁO CÁO PHÂN TÍCH CHUYÊN SÂU TỪ CTCK
 # ==========================================
 with tab_reports:
@@ -379,6 +378,6 @@ with tab_reports:
                     st.info("Kho báo cáo hiện đang trống. Hãy đợi Bot tự động cào dữ liệu về nhé!")
                 
         except Exception as e:
-            # Lọc sạch 100% ký tự có dấu (chữ 'ỗ'...) thành chuẩn ASCII không dấu để chống sập máy chủ
+            # Ép kiểu ASCII an toàn tuyệt đối để bóc tách các ký tự tiếng Việt gây sập môi trường Streamlit Cloud
             error_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
             st.error(f"Loi ket noi hoac xu ly du lieu bao cao: {error_msg}")
