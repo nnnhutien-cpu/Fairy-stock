@@ -379,8 +379,6 @@ with tab_reports:
                     st.info("Kho báo cáo hiện đang trống. Hãy đợi Bot tự động cào dữ liệu về nhé!")
                 
         except Exception as e:
-            # Ép kiểu utf-8 an toàn cho biến 'e' để bóc tách các ký tự tiếng Việt gây sập môi trường ASCII
-            error_msg = str(e).encode('utf-8', errors='ignore').decode('utf-8')
+            # Lọc sạch 100% ký tự có dấu (chữ 'ỗ'...) thành chuẩn ASCII không dấu để chống sập máy chủ
+            error_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
             st.error(f"Loi ket noi hoac xu ly du lieu bao cao: {error_msg}")
-            # Viết không dấu để chống lỗi ascii trên Streamlit Cloud
-            st.error(f"Loi ket noi hoac xu ly du lieu bao cao: {str(e)}")
