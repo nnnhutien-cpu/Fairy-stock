@@ -1,28 +1,38 @@
-name: Daily Report Scraper
+name: Daily Auto Scraper Pipeline
 
 on:
   schedule:
-    - cron: '0 23 * * *' # Chạy vào 6h00 sáng giờ VN (23h00 UTC)
-  workflow_dispatch: # Cho phép bạn bấm nút chạy bằng tay để test
-
+    # Chạy tự động vào lúc 16:00 chiều T2-T6 (Giờ VN)
+    - cron: '0 9 * * 1-5'
+  workflow_dispatch:
+  
 jobs:
-  scrape-data:
+  run-bots:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - name: Kéo code từ kho về
+      uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
+    - name: Cài đặt Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
 
-      - name: Install dependencies
-        run: |
-          pip install requests pandas supabase
+    - name: Cài đặt thư viện
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
 
-      - name: Run Scraper Bot
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python auto_scraper.py
+    # --- CHẠY BOT SỐ 1: LỌC CỔ PHIẾU ---
+    - name: Khởi động Bot Lọc RS & Thanh Khoản
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      run: python rs_worker.py
+
+    # --- CHẠY BOT SỐ 2: CÀO VIETSTOCK ---
+    - name: Khởi động Bot Cào Báo Cáo Vietstock
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      run: python bot_vietstock.py
