@@ -4,91 +4,80 @@ import time
 from oauth2client.service_account import ServiceAccountCredentials
 from vnstock import listing_companies, stock_historical_data
 from datetime import datetime, timedelta
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from tqdm import tqdm
 
-# ==========================================
-# CẤU HÌNH HỆ THỐNG
-# ==========================================
-SPREADSHEET_KEY = "1glhyGPKRsBwU0OXHB4gvr0dnntWn_dcw2VzI3_Z1fQc"  # Đã thay ID Google Sheet mới của bạn
+# --- CẤU HÌNH ---
+SPREADSHEET_KEY = "1glhyGPKRsBwU0OXHB4gvr0dnntWn_dcw2VzI3_Z1fQc"  # ID Google Sheet của bạn
 CREDENTIALS_FILE = "credentials.json"
-MAX_WORKERS = 5 # Giữ ở mức 5 luồng để API không bị sập
-
-def fetch_data(row):
-    ticker = row['ticker']
-    industry = row.get('industry', 'Chưa rõ')
-    
-    for attempt in range(3):
-        try:
-            end_date = datetime.now().strftime('%Y-%m-%d')
-            start_date = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
-            
-            # Cào dữ liệu từ vnstock
-            df_hist = stock_historical_data(ticker, start_date, end_date, resolution='1D', type='stock')
-            
-            if df_hist is not None and not df_hist.empty:
-                df_hist.columns = [str(c).lower().strip() for c in df_hist.columns]
-                
-                current_price = df_hist['close'].iloc[-1]
-                volume = df_hist['volume'].iloc[-1]
-                
-                # Ép giá về đơn vị VNĐ chuẩn
-                if current_price < 1000:
-                    current_price = current_price * 1000
-                    
-                # Trả về 1 dòng dữ liệu
-                return {
-                    "Mã CK": ticker,
-                    "Ngành": industry,
-                    "Giá Đóng Cửa": int(current_price),
-                    "Khối Lượng": int(volume),
-                    "Ngày Cập Nhật": end_date
-                }
-            break # Thành công thì thoát vòng lặp
-        except Exception:
-            time.sleep(1) # Bị chặn thì nghỉ 1 giây rồi thử lại
-            pass
-    return None
 
 def main():
-    print("🕵️ Đang cào dữ liệu Vnstock và đẩy lên Google Sheet...")
-    
+    print("🚀 Bắt đầu cào dữ liệu THUẦN TÚY từ vnstock...")
+
     # 1. Kết nối Google Sheet
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
         client = gspread.authorize(creds)
-        spreadsheet = client.open_by_key(SPREADSHEET_KEY)
-        sheet = spreadsheet.get_worksheet(0) # Ghi vào Sheet đầu tiên (Sheet1)
+        sheet = client.open_by_key(SPREADSHEET_KEY).sheet1
     except Exception as e:
         print(f"❌ Lỗi kết nối Google Sheet: {e}")
         return
 
-    # 2. Lấy danh sách công ty
+    # 2. Lấy toàn bộ danh sách mã CK trên thị trường
     df_companies = listing_companies()
     if df_companies is None or df_companies.empty:
         print("❌ Lỗi: Không lấy được danh sách mã CK!")
         return
         
-    records = df_companies.to_dict('records')
-    final_results = []
+    danh_sach_ma = df_companies['ticker'].tolist()
+    ket_qua = []
     
-    # 3. Quét tốc độ cao
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = {executor.submit(fetch_data, row): row for row in records[:50]} # TEST 50 MÃ ĐẦU TIÊN (Bạn có thể bỏ [:50] để quét toàn sàn)
-        for future in tqdm(as_completed(futures), total=len(futures), desc="Đang cào dữ liệu"):
-            res = future.result()
-            if res is not None:
-                final_results.append(res)
+    # Lấy dữ liệu lùi về 10 ngày để bao trọn cả cuối tuần lễ tết
+    end_date = datetime.now().strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=10)).strftime('%Y-%m-%d')
+
+    print(f"🕵️ Đang cào dữ liệu của {len(danh_sach_ma)} mã cổ phiếu...")
+
+    # 3. Lặp qua từng mã và cào dữ liệu (Lấy 50 mã đầu tiên test thử)
+    # LƯU Ý: Nếu muốn cào HẾT cả nghìn mã, bạn xóa chữ `[:50]` đi nhé!
+    for ma in danh_sach_ma[:50]:
+        try:
+            df_hist = stock_historical_data(ticker=ma, start_date=start_date, end_date=end_date, resolution='1D', type='stock')
+            
+            if df_hist is not None and not df_hist.empty:
+                # Ép tên cột viết thường để dễ gọi
+                df_hist.columns = [str(c).lower().strip() for c in df_hist.columns]
                 
-    # 4. Ghi đè dữ liệu lên Google Sheet
-    if final_results:
-        df_output = pd.DataFrame(final_results)
-        sheet.clear() # Xóa trắng dữ liệu cũ
-        sheet.update([df_output.columns.values.tolist()] + df_output.values.tolist()) # Đổ dữ liệu mới vào
+                # Bốc lấy dòng cuối cùng (phiên giao dịch mới nhất)
+                dong_cuoi = df_hist.iloc[-1]
+                
+                # Chỉnh lại giá nếu API vnstock chưa nhân 1000
+                gia_dong_cua = dong_cuoi['close']
+                if gia_dong_cua < 1000:
+                    gia_dong_cua = gia_dong_cua * 1000
+                
+                # Đóng gói dữ liệu
+                ket_qua.append({
+                    "Mã CK": ma,
+                    "Ngày": str(dong_cuoi['time']),
+                    "Giá Đóng Cửa": int(gia_dong_cua),
+                    "Khối Lượng": int(dong_cuoi['volume'])
+                })
+            
+            # Tuyệt chiêu: Ngủ 0.5 giây sau mỗi mã để web SSI không phát hiện là Bot
+            time.sleep(0.5) 
+            
+        except Exception as e:
+            # Mã nào lỗi (bị hủy niêm yết, chưa giao dịch) thì bỏ qua đi tiếp
+            pass
+
+    # 4. Ghi tất cả lên Sheet
+    if ket_qua:
+        df_output = pd.DataFrame(ket_qua)
+        sheet.clear() # Xóa sạch dữ liệu cũ
+        sheet.update([df_output.columns.values.tolist()] + df_output.values.tolist()) # Đổ dữ liệu mới
         print(f"✅ Đã đổ thành công {len(df_output)} dòng dữ liệu lên Google Sheet!")
     else:
-        print("⚠️ Không cào được dữ liệu nào.")
+        print("⚠️ Bảng rỗng, không cào được dữ liệu nào.")
 
 if __name__ == "__main__":
     main()
