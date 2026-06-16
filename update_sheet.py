@@ -1,78 +1,116 @@
-import os
-import json
 import pandas as pd
-import numpy as np
 import gspread
-from google.oauth2.service_account import Credentials # Thay thế an toàn cho oauth2client
+import time
+import os
+from oauth2client.service_account import ServiceAccountCredentials
 from vnstock import listing_companies, stock_historical_data
 from datetime import datetime, timedelta
-from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# 1. CẤU HÌNH KẾT NỐI GOOGLE SHEETS
-creds_json = os.environ.get('GCP_SA_KEY')
-if not creds_json:
-    raise ValueError("Không tìm thấy GCP_SA_KEY trong GitHub Secrets!")
+# --- CẤU HÌNH ---
+SPREADSHEET_KEY = "1glhyGPKRsBwU0OXHB4gvr0dnntWn_dcw2VzI3_Z1fQc"  # ID Google Sheet của bạn
 
-scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-creds_dict = json.loads(creds_json)
-creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-client = gspread.authorize(creds)
+def main():
+    print("🚀 Bắt đầu cào dữ liệu và tính toán tín hiệu kỹ thuật...")
 
-SHEET_ID = '1_RC7uZDEbnWpS7pOMSwMToJ2eVW4gj3Mmjrsglz7skY'
-sheet = client.open_by_key(SHEET_ID).sheet1
-
-print("🚀 Đang khởi động cỗ máy cào dữ liệu Đa Luồng từ vnstock...")
-
-# 2. LẤY DANH SÁCH MÃ CHỨNG KHOÁN (listing_companies)
-try:
-    df_listing = listing_companies()
-    # Lấy ra danh sách các mã trên sàn HOSE, HNX, UPCOM
-    all_tickers = df_listing['ticker'].tolist()
-    # Giới hạn lấy thử 50 mã đầu tiên để tránh bị quá tải API Google Sheet trong lần chạy đầu
-    tickers_to_fetch = all_tickers[:50] 
-    print(f"Bắt đầu quét {len(tickers_to_fetch)} mã cổ phiếu...")
-except Exception as e:
-    print(f"Lỗi khi lấy danh sách công ty: {e}")
-    tickers_to_fetch = []
-
-# Cài đặt thời gian: Lấy dữ liệu 30 ngày gần nhất
-end_date = datetime.now().strftime('%Y-%m-%d')
-start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
-
-# Hàm worker để chạy đa luồng
-def fetch_data_for_ticker(ticker):
+    # 1. Xác thực Google Sheet
     try:
-        # Dùng historical data của vnstock 0.2.8.2
-        df = stock_historical_data(symbol=ticker, start_date=start_date, end_date=end_date, resolution='1D', type='stock')
-        if df is not None and not df.empty:
-            df['Ticker'] = ticker # Thêm cột tên mã
-            return df
-    except:
-        pass
-    return pd.DataFrame()
+        secret_key = os.environ.get("GCP_SA_KEY")
+        if not secret_key:
+            raise ValueError("Không tìm thấy biến GCP_SA_KEY trong hệ thống!")
+        
+        # Tạo file JSON ảo để đăng nhập
+        with open("credentials.json", "w") as f:
+            f.write(secret_key)
+            
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(SPREADSHEET_KEY).sheet1
+        print("✅ Kết nối Google Sheet thành công!")
+    except Exception as e:
+        print(f"❌ Lỗi kết nối: {e}")
+        return
 
-# 3. CHẠY ĐA LUỒNG (ThreadPoolExecutor & tqdm)
-all_data_frames = []
-with ThreadPoolExecutor(max_workers=10) as executor:
-    # Giao việc cho các luồng và hiển thị thanh tiến trình tqdm
-    future_to_ticker = {executor.submit(fetch_data_for_ticker, ticker): ticker for ticker in tickers_to_fetch}
-    for future in tqdm(as_completed(future_to_ticker), total=len(tickers_to_fetch), desc="Đang tải dữ liệu"):
-        result_df = future.result()
-        if not result_df.empty:
-            all_data_frames.append(result_df)
+    # 2. Lấy danh sách toàn bộ mã CK
+    df_companies = listing_companies()
+    if df_companies is None or df_companies.empty:
+        print("❌ Lỗi: Không lấy được danh sách mã CK!")
+        return
+        
+    danh_sach_ma = df_companies['ticker'].tolist()
+    ket_qua = []
+    
+    # KÉO DỮ LIỆU 70 NGÀY (Để đảm bảo có đủ 40 phiên giao dịch thực tế trừ đi T7, CN)
+    end_date = datetime.now().strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=70)).strftime('%Y-%m-%d')
 
-# 4. GỘP DỮ LIỆU VÀ ĐẨY LÊN GOOGLE SHEETS
-if all_data_frames:
-    final_df = pd.concat(all_data_frames, ignore_index=True)
-    
-    # Xử lý NaN của numpy và ép kiểu string để Sheets không lỗi
-    final_df = final_df.replace({np.nan: ""}).astype(str)
-    
-    data_to_upload = [final_df.columns.values.tolist()] + final_df.values.tolist()
-    
-    sheet.clear()
-    sheet.update('A1', data_to_upload)
-    print(f"\n✅ Đã đẩy thành công {len(final_df)} dòng dữ liệu của {len(tickers_to_fetch)} mã lên Google Sheets!")
-else:
-    print("\n⚠️ Không thu thập được dữ liệu nào.")
+    print(f"🕵️ Đang xử lý {len(danh_sach_ma)} mã cổ phiếu...")
+
+    # 3. Quét từng mã (Đang để test 50 mã đầu tiên, chạy thật bạn xóa chữ `[:50]` đi nhé)
+    for ma in danh_sach_ma[:50]:
+        try:
+            df_hist = stock_historical_data(ticker=ma, start_date=start_date, end_date=end_date, resolution='1D', type='stock')
+            
+            # Cần ít nhất 40 phiên để tính toán MA và Volume 2 đợt
+            if df_hist is not None and len(df_hist) >= 40:
+                df_hist.columns = [str(c).lower().strip() for c in df_hist.columns]
+                
+                # --- LẤY GIÁ VÀ VOLUME GẦN NHẤT ---
+                dong_cuoi = df_hist.iloc[-1]
+                gia_hien_tai = dong_cuoi['close'] * 1000 if dong_cuoi['close'] < 1000 else dong_cuoi['close']
+                vol_hien_tai = dong_cuoi['volume']
+                
+                # --- TÍNH TOÁN KHỐI LƯỢNG TRUNG BÌNH ---
+                vol_20_ngay = df_hist['volume'].iloc[-20:].mean()          # 20 phiên gần nhất
+                vol_20_phien_truoc = df_hist['volume'].iloc[-40:-20].mean() # 20 phiên của tháng trước đó
+                
+                # --- ĐÁNH GIÁ ĐIỂM KỸ THUẬT NGẮN HẠN (Thang điểm 0 - 4) ---
+                # Mình dùng MA10 và MA20 để đánh giá sức mạnh xu hướng
+                ma10 = df_hist['close'].iloc[-10:].mean() * 1000 if df_hist['close'].iloc[-10:].mean() < 1000 else df_hist['close'].iloc[-10:].mean()
+                ma20 = df_hist['close'].iloc[-20:].mean() * 1000 if df_hist['close'].iloc[-20:].mean() < 1000 else df_hist['close'].iloc[-20:].mean()
+                
+                diem_kt = 0
+                if gia_hien_tai > ma10: diem_kt += 1      # Giá vượt MA10
+                if gia_hien_tai > ma20: diem_kt += 1      # Giá vượt MA20
+                if ma10 > ma20: diem_kt += 1              # MA nhỏ cắt lên MA lớn
+                if vol_hien_tai > vol_20_ngay: diem_kt += 1 # Volume nổ (vượt trung bình 20 ngày)
+                
+                # Xếp loại dựa trên điểm
+                if diem_kt == 4:
+                    xu_huong = "🔥 Rất Tích Cực"
+                elif diem_kt == 3:
+                    xu_huong = "🟢 Tích Cực"
+                elif diem_kt == 2:
+                    xu_huong = "🟡 Trung Lập"
+                else:
+                    xu_huong = "🔴 Tiêu Cực"
+                
+                # Đóng gói vào 1 dòng duy nhất cho mỗi mã
+                ket_qua.append({
+                    "Mã CK": ma,
+                    "Ngày Cập Nhật": str(dong_cuoi['time']),
+                    "Giá Hiện Tại": int(gia_hien_tai),
+                    "Khối Lượng": int(vol_hien_tai),
+                    "Vol TB 20 Ngày": int(vol_20_ngay),
+                    "Vol TB 20 Phiên Trước": int(vol_20_phien_truoc),
+                    "Điểm KT (0-4)": diem_kt,
+                    "Xu Hướng Ngắn Hạn": xu_huong
+                })
+            
+            # Ngủ 0.5s để API chứng khoán không khóa IP
+            time.sleep(0.5) 
+            
+        except Exception as e:
+            pass # Lỗi mã nào bỏ qua mã đó, chạy mã tiếp theo
+
+    # 4. Ghi toàn bộ lên Sheet (ĐẢM BẢO KHÔNG TRÙNG LẶP)
+    if ket_qua:
+        df_output = pd.DataFrame(ket_qua)
+        sheet.clear() # Tuyệt chiêu: Xóa sạch rác và dữ liệu cũ
+        sheet.update([df_output.columns.values.tolist()] + df_output.values.tolist()) # Đổ bảng mới 100% vào
+        print(f"✅ Đã cập nhật xong {len(df_output)} mã cổ phiếu lên Google Sheet!")
+    else:
+        print("⚠️ Bảng rỗng, không có dữ liệu để ghi.")
+
+if __name__ == "__main__":
+    main()
