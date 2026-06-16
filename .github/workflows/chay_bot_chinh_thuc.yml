@@ -30,6 +30,5 @@ jobs:
 
     - name: Kích hoạt code đẩy dữ liệu (với Secret Key)
       env:
-        # BƯỚC CHỐT HẠ: Biến GCP_SA_KEY của code Python sẽ nhận giá trị từ chiếc hộp GOOGLE_CREDENTIALS của GitHub
-        GCP_SA_KEY: ${{ secrets.GOOGLE_CREDENTIALS }}
+        GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
       run: python update_sheet.py
