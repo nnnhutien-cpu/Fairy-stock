@@ -19,14 +19,19 @@ jobs:
       with:
         python-version: '3.12' # ✅ ĐÃ NÂNG CẤP LÊN BẢN 3.12
 
-    - name: Cài đặt thư viện từ requirements.txt
+    - name: Cài đặt TẤT CẢ thư viện cần thiết
       run: |
-        pip install -r requirements.txt
-        # Cài thêm 2 thư viện bắt buộc cho Google Sheets phòng trường hợp quên
-        pip install gspread google-auth 
+        # Cài từ file requirements.txt (nếu có)
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        
+        # Bổ sung trực tiếp các "đồ nghề" hay bị thiếu để đảm bảo code chạy 100%
+        pip install vnstock gspread google-auth plotly pandas yfinance
 
     - name: Kích hoạt code đẩy dữ liệu (với Secret Key)
       env:
         # Máy chủ sẽ tự động lôi biến GCP_SA_KEY từ Settings -> Secrets ra đây
         GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+      
+      # LƯU Ý QUAN TRỌNG: Hãy đổi tên file dưới đây thành tên file bạn muốn chạy
+      # (VD: python bot_yfinance.py HOẶC python rs_worker.py HOẶC python update_sheet.py)
       run: python update_sheet.py
