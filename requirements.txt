@@ -6,3 +6,5 @@ plotly
 beautifulsoup4
 supabase
 requests
+gspread
+google-auth
