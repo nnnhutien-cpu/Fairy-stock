@@ -1,32 +1,32 @@
-name: Auto Fetch Stock Data 
+name: Bot Cập Nhật Dữ Liệu vnstock lên Google Sheets
 
-on: 
-  schedule: 
-    - cron: '0 9 * * 1-5'  # Chạy lúc 16h00 T2-T6
-  workflow_dispatch:       # Bật nút bấm thủ công
+on:
+  schedule:
+    # Chạy tự động vào lúc 16:00 chiều giờ Việt Nam (09:00 UTC) từ Thứ 2 đến Thứ 6
+    - cron: '0 9 * * 1-5'
+  workflow_dispatch: # Cho phép bạn bấm nút Run thủ công bất cứ lúc nào
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+jobs:
+  run-update:
+    runs-on: ubuntu-latest
 
-jobs: 
-  update-data: 
-    runs-on: ubuntu-latest 
-    steps: 
-    - uses: actions/checkout@v4 
-    
-    - name: Setup Python 
-      uses: actions/setup-python@v5 
-      with: 
-        python-version: '3.12' 
-        
-    - name: Install dependencies 
+    steps:
+    - name: Lấy mã nguồn từ GitHub
+      uses: actions/checkout@v3
+
+    - name: Cài đặt Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12' # ✅ ĐÃ NÂNG CẤP LÊN BẢN 3.12
+
+    - name: Cài đặt thư viện từ requirements.txt
       run: |
-        python -m pip install --upgrade pip
-        pip install pandas numpy gspread oauth2client vnstock==0.2.8.2 tqdm
-        
-    - name: Run Script 
-      env: 
-        GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }} 
-      run: |
-        echo "$GOOGLE_CREDENTIALS" > credentials.json
-        python rs_worker.py
+        pip install -r requirements.txt
+        # Cài thêm 2 thư viện bắt buộc cho Google Sheets phòng trường hợp quên
+        pip install gspread google-auth 
+
+    - name: Kích hoạt code đẩy dữ liệu (với Secret Key)
+      env:
+        # Máy chủ sẽ tự động lôi biến GCP_SA_KEY từ Settings -> Secrets ra đây
+        GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+      run: python update_sheet.py
