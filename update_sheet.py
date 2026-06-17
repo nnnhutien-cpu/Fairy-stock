@@ -3,17 +3,15 @@ import gspread
 import time
 import os
 import json
-from google.oauth2.service_account import Credentials # TUYỆT CHIÊU DÙNG THƯ VIỆN MỚI
+from google.oauth2.service_account import Credentials # DÙNG THƯ VIỆN MỚI
 from vnstock import listing_companies, stock_historical_data
 from datetime import datetime, timedelta
 
-# --- CẤU HÌNH ---
 SPREADSHEET_KEY = "1_RC7uZDEbnWpS7pOMSwMToJ2eVW4gj3Mmjrsglz7skY" 
 
 def main():
-    print("🚀 Bắt đầu cào dữ liệu: 1 Mã = 1 Hàng, Bỏ giá mở cửa...")
+    print("🚀 Bắt đầu cào dữ liệu: 1 Mã = 1 Hàng, 5 Cột chuẩn...")
 
-    # 1. Kết nối Google Sheet bằng google-auth
     try:
         secret_key = os.environ.get("GCP_SA_KEY")
         if not secret_key:
@@ -27,10 +25,9 @@ def main():
         sheet = client.open_by_key(SPREADSHEET_KEY).sheet1
         print("✅ Kết nối Google Sheet thành công!")
     except Exception as e:
-        print(f"❌ Lỗi kết nối Google Sheet: {e}")
+        print(f"❌ Lỗi kết nối: {e}")
         return
 
-    # 2. Lấy danh sách mã
     try:
         df_companies = listing_companies()
         danh_sach_ma = df_companies['ticker'].tolist()
@@ -44,14 +41,12 @@ def main():
 
     print(f"🕵️ Bắt đầu quét dữ liệu...")
 
-    # 3. QUÉT TỪNG MÃ
     for ma in danh_sach_ma[:50]:
         try:
             df_hist = stock_historical_data(ticker=ma, start_date=start_date, end_date=end_date, resolution='1D', type='stock')
             
             if df_hist is not None and len(df_hist) >= 20:
                 df_hist.columns = [str(c).lower().strip() for c in df_hist.columns]
-                
                 dong_cuoi = df_hist.iloc[-1]
                 
                 gia_goc = float(dong_cuoi['close'])
@@ -75,24 +70,18 @@ def main():
                 else: xu_huong = "🔴 Tiêu Cực"
                 
                 ket_qua.append([
-                    ma,
-                    int(gia_dong_cua),
-                    kltb_20n,
-                    xu_huong,
-                    diem_kt
+                    ma, int(gia_dong_cua), kltb_20n, xu_huong, diem_kt
                 ])
-                
             time.sleep(0.3)
         except Exception:
             continue
 
-    # 4. GHI LÊN SHEET 
     if ket_qua:
         print(f"🚀 Đang đẩy {len(ket_qua)} dòng lên Sheet...")
         sheet.clear() 
-        tieu_de = ["Mã CK", "Giá Đóng Cửa", "KLTB 20 Ngày", "Xu Hướng Hiện Tại", "Đánh Giá Điểm Số"]
+        tieu_de = ["Mã CK", "Giá Đóng Cửa", "KLTB 20 Ngày", "Xu Hướng Hiện Tại", "Điểm KT"]
         sheet.append_rows([tieu_de] + ket_qua)
-        print("🎉 XONG! Dữ liệu đã lên chuẩn xác từng hàng.")
+        print("🎉 XONG! Dữ liệu đã lên chuẩn xác.")
     else:
         print("⚠️ Không có dữ liệu để ghi.")
 
