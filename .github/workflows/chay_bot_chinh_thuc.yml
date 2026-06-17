@@ -2,12 +2,11 @@ name: Bot Cập Nhật Dữ Liệu vnstock lên Google Sheets
 
 on:
   schedule:
-    # Chạy tự động vào lúc 16:00 chiều giờ Việt Nam (09:00 UTC) từ Thứ 2 đến Thứ 6
     - cron: '0 9 * * 1-5'
-  workflow_dispatch: # Cho phép bạn bấm nút Run thủ công bất cứ lúc nào
+  workflow_dispatch: 
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true # Tuyệt chiêu tắt cảnh báo vàng của GitHub
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true 
 
 jobs:
   run-update:
@@ -15,20 +14,20 @@ jobs:
 
     steps:
     - name: Lấy mã nguồn từ GitHub
-      uses: actions/checkout@v4 # Đã nâng lên v4
+      uses: actions/checkout@v4 
 
     - name: Cài đặt Python
-      uses: actions/setup-python@v5 # Đã nâng lên v5
+      uses: actions/setup-python@v5 
       with:
-        python-version: '3.12' # Chạy Python 3.12 tốc độ cao
-
-    - name: Cài đặt TẤT CẢ thư viện cần thiết
-      run: |
-        python -m pip install --upgrade pip
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install vnstock gspread oauth2client google-auth plotly pandas yfinance
+        python-version: '3.12' 
 
     - name: Kích hoạt code đẩy dữ liệu (với Secret Key)
       env:
         GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-      run: python update_sheet.py
+      run: |
+        # 1. Ép máy chủ phải cài đặt oauth2client và các thư viện ngay tại đây
+        python -m pip install --upgrade pip
+        pip install vnstock gspread oauth2client google-auth plotly pandas yfinance
+        
+        # 2. Chạy file Python ngay sau khi cài xong
+        python update_sheet.py
