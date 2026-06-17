@@ -25,9 +25,7 @@ jobs:
       env:
         GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
       run: |
-        # 1. Ép máy chủ phải cài đặt oauth2client và các thư viện ngay tại đây
         python -m pip install --upgrade pip
-        pip install vnstock gspread oauth2client google-auth plotly pandas yfinance
-        
-        # 2. Chạy file Python ngay sau khi cài xong
+        # Cài đặt chính xác danh sách thư viện của bạn (Không có oauth2client)
+        pip install streamlit vnstock==0.2.8.2 pandas numpy plotly beautifulsoup4 supabase requests gspread google-auth tqdm
         python update_sheet.py
