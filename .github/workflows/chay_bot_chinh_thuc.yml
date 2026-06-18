@@ -11,21 +11,16 @@ env:
 jobs:
   run-update:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Lấy mã nguồn từ GitHub
-      uses: actions/checkout@v4 
-
-    - name: Cài đặt Python
-      uses: actions/setup-python@v5 
+    - uses: actions/checkout@v4 
+    - uses: actions/setup-python@v5 
       with:
         python-version: '3.12' 
-
-    - name: Kích hoạt code đẩy dữ liệu (với Secret Key)
+    - name: Cài đặt và Chạy Bot
       env:
         GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
       run: |
         python -m pip install --upgrade pip
-        # Cài đặt chính xác danh sách thư viện của bạn (Không có oauth2client)
-        pip install streamlit vnstock==0.2.8.2 pandas numpy plotly beautifulsoup4 supabase requests gspread google-auth tqdm
+        # Cài đặt trọn bộ thư viện an toàn
+        pip install vnstock==0.2.8.2 pandas numpy gspread google-auth oauth2client
         python update_sheet.py
