@@ -11,16 +11,121 @@ env:
 jobs:
   run-update:
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v4 
-    - uses: actions/setup-python@v5 
+    - name: Lấy mã nguồn từ GitHub
+      uses: actions/checkout@v4 
+
+    - name: Cài đặt Python
+      uses: actions/setup-python@v5 
       with:
         python-version: '3.12' 
-    - name: Cài đặt và Chạy Bot
+
+    - name: ÉP BUỘC CÀI THƯ VIỆN VÀ TỰ ĐẺ CODE PYTHON CHUẨN
       env:
         GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
       run: |
+        # 1. Cài đặt chính xác các thư viện bạn yêu cầu
         python -m pip install --upgrade pip
-        # Cài đặt trọn bộ thư viện an toàn
-        pip install vnstock==0.2.8.2 pandas numpy gspread google-auth oauth2client
+        pip install streamlit vnstock==0.2.8.2 pandas numpy plotly beautifulsoup4 supabase requests gspread google-auth tqdm
+
+        # 2. THẦN CHÚ: Tự động tạo ra file update_sheet.py mới tinh ngay trên máy chủ
+        cat << 'EOF' > update_sheet.py
+        import pandas as pd
+        import gspread
+        import time
+        import os
+        import json
+        from google.oauth2.service_account import Credentials # Dùng bộ mới, loại bỏ hoàn toàn oauth2client
+        from vnstock import listing_companies, stock_historical_data
+        from datetime import datetime, timedelta
+
+        # Đúng ID Google Sheet mới của bạn
+        SPREADSHEET_KEY = "1_RC7uZDEbnWpS7pOMSwMToJ2eVW4gj3Mmjrsglz7skY" 
+
+        def main():
+            print("🚀 Bot đang bốc dữ liệu 5 cột chuẩn...")
+
+            try:
+                secret_key = os.environ.get("GCP_SA_KEY")
+                if not secret_key:
+                    raise ValueError("Không tìm thấy chìa khóa GCP_SA_KEY!")
+                
+                creds_dict = json.loads(secret_key)
+                scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+                creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+                client = gspread.authorize(creds)
+                sheet = client.open_by_key(SPREADSHEET_KEY).sheet1
+                print("✅ Kết nối Google Sheet thành công!")
+            except Exception as e:
+                print(f"❌ Lỗi kết nối Google Sheet: {e}")
+                return
+
+            try:
+                df_companies = listing_companies()
+                danh_sach_ma = df_companies['ticker'].tolist()
+            except Exception:
+                print("❌ Lỗi lấy danh sách mã")
+                return
+
+            end_date = datetime.now().strftime('%Y-%m-%d')
+            start_date = (datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d')
+            ket_qua = []
+
+            # Quét 50 mã để test nhanh, chạy ngon lành bạn xóa chữ [:50] đi là được
+            for ma in danh_sach_ma[:50]:
+                try:
+                    df_hist = stock_historical_data(ticker=ma, start_date=start_date, end_date=end_date, resolution='1D', type='stock')
+                    
+                    if df_hist is not None and not df_hist.empty and len(df_hist) >= 20:
+                        df_hist.columns = [str(c).lower().strip() for c in df_hist.columns]
+                        
+                        # CHỐT CHẶN: Chỉ lấy 1 hàng cuối cùng duy nhất của ngày hôm nay
+                        dong_cuoi = df_hist.iloc[-1]
+                        
+                        # 1. Mã & 2. Giá đóng cửa
+                        gia_goc = float(dong_cuoi['close'])
+                        gia_dong_cua = int(gia_goc * 1000 if gia_goc < 1000 else gia_goc)
+                        
+                        # 3. Volume ngày & 4. Volume trung bình 20 ngày
+                        vol_ngay = int(dong_cuoi['volume'])
+                        vol_tb_20_ngay = int(df_hist['volume'].iloc[-20:].mean())
+                        
+                        # Tính toán xu hướng ngắn hạn bằng điểm kỹ thuật nội bộ
+                        ma10 = float(df_hist['close'].iloc[-10:].mean()) * 1000 if df_hist['close'].iloc[-10:].mean() < 1000 else float(df_hist['close'].iloc[-10:].mean())
+                        ma20 = float(df_hist['close'].iloc[-20:].mean()) * 1000 if df_hist['close'].iloc[-20:].mean() < 1000 else float(df_hist['close'].iloc[-20:].mean())
+                        
+                        diem = 0
+                        if gia_dong_cua > ma10: diem += 1
+                        if gia_dong_cua > ma20: diem += 1
+                        if ma10 > ma20: diem += 1
+                        if vol_ngay > vol_tb_20_ngay: diem += 1
+                        
+                        # 5. Đánh giá xu hướng ngắn hạn
+                        if diem == 4: xu_huong = "🔥 Rất Tích Cực"
+                        elif diem == 3: xu_huong = "🟢 Tích Cực"
+                        elif diem == 2: xu_huong = "🟡 Trung Lập"
+                        else: xu_huong = "🔴 Tiêu Cực"
+                        
+                        # Trả về đúng 5 cột bạn yêu cầu gãy gọn
+                        ket_qua.append([ma, gia_dong_cua, vol_ngay, vol_tb_20_ngay, xu_huong])
+                        
+                    time.sleep(0.3)
+                except Exception:
+                    continue
+
+            if ket_qua:
+                print(f"🚀 Đang đẩy {len(ket_qua)} dòng lên Sheet...")
+                sheet.clear() # Quét sạch rác cũ
+                tieu_de = ["Mã Chứng khoán", "Giá đóng cửa", "Volume ngày", "Volume trung bình 20 ngày", "Đánh giá xu hướng"]
+                sheet.append_rows([tieu_de] + ket_qua)
+                print("🎉 XONG! Bảng dữ liệu 5 cột sạch sẽ đã lên sàn!")
+            else:
+                print("⚠️ Không có dữ liệu.")
+
+        if __name__ == "__main__":
+            main()
+        EOF
+
+        # 3. Chạy file Python chuẩn vừa được đẻ ra ở trên
         python update_sheet.py
