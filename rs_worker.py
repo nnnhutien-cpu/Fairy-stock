@@ -1,124 +1,118 @@
 import pandas as pd
+import numpy as np
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from vnstock import stock_historical_data, listing_companies
+from vnstock import listing_companies, stock_historical_data
 from datetime import datetime, timedelta
-import time
+from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ==========================================
-# 1. CẤU HÌNH CƠ BẢN
+# CẤU HÌNH BỘ LỌC VÀ HỆ THỐNG
 # ==========================================
-SHEET_NAME = "Stock Fairy"  # Tên Google Sheet đích
-TAB_NAME = "data"           # Tên tab con
+MIN_LIQUIDITY = 1.0  # Tối thiểu 1 tỷ VNĐ/phiên
+MIN_PRICE = 2.0      # Tối thiểu giá 2,000 VNĐ (trên bảng điện là 2.0)
+SHEET_ID = "1_RC7uZDEbnWpS7pOMSwMToJ2eVW4gj3Mmjrsglz7skY"
 CREDENTIALS_FILE = "credentials.json"
+MAX_WORKERS = 10     # Số luồng chạy song song
 
-# ==========================================
-# 2. HÀM CÀO DỮ LIỆU (QUÉT TOÀN THỊ TRƯỜNG ~1600 MÃ)
-# ==========================================
-def get_market_data():
-    print("🚀 Đang lấy danh sách toàn bộ mã chứng khoán trên 3 sàn...")
+# --- TẦNG 1 & 2: LỌC THANH KHOẢN VÀ GIÁ ---
+def process_ticker(ticker, industry):
     try:
-        # Tự động lấy danh sách tất cả các mã (HOSE, HNX, UPCOM)
-        df_listing = listing_companies()
-        TICKERS = df_listing['ticker'].tolist()
-        print(f"✅ Đã tìm thấy {len(TICKERS)} mã cổ phiếu đang niêm yết.")
-    except Exception as e:
-        print(f"❌ Lỗi khi lấy danh sách mã: {e}")
-        return pd.DataFrame()
-
-    print(f"🚀 Bắt đầu luồng cào dữ liệu cho {len(TICKERS)} mã...")
-    
-    # Lấy lùi lại 7 ngày để đảm bảo luôn quét trúng phiên giao dịch gần nhất
-    end_date = datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d') 
-    
-    try:
-        # Dùng VNINDEX làm thước đo kiểm tra ngày giao dịch hợp lệ gần nhất
-        vnindex = stock_historical_data(symbol="VNINDEX", start_date=start_date, end_date=end_date, resolution="1D", type="index")
+        # Lấy dữ liệu 20 ngày gần nhất để tính trung bình thanh khoản
+        end_date = datetime.now().strftime('%Y-%m-%d')
+        start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
         
-        if vnindex is None or vnindex.empty:
-            print("⚠️ API vnstock hiện không trả về dữ liệu. Dừng cào để bảo vệ Sheet!")
-            return pd.DataFrame()
+        # Lấy dữ liệu lịch sử của mã
+        df = stock_historical_data(symbol=ticker, start_date=start_date, end_date=end_date, resolution='1D', type='stock')
+        
+        if df is None or df.empty or len(df) == 0:
+            return None
             
-        last_trading_date = str(vnindex['time'].iloc[-1])[:10]
-        print(f"📅 Ngày giao dịch hợp lệ gần nhất là: {last_trading_date}")
-
-        all_data = []
+        # --- TÍNH TOÁN DỮ LIỆU ---
+        # Giá hiện tại (chốt phiên gần nhất)
+        current_price = df['close'].iloc[-1]
         
-        # Bắt đầu vòng lặp cào từng mã cổ phiếu trong 1600 mã
-        for ticker in TICKERS:
-            try:
-                df_hist = stock_historical_data(symbol=ticker, start_date=start_date, end_date=end_date, resolution='1D', type='stock')
-                
-                if not df_hist.empty:
-                    # Bốc dòng cuối cùng (ứng với phiên giao dịch mới nhất)
-                    latest = df_hist.iloc[-1]
-                    
-                    # Đóng gói đúng định dạng 7 cột
-                    row_data = {
-                        'symbol': ticker,
-                        'date': str(latest['time'])[:10],
-                        'high': latest['high'],
-                        'low': latest['low'],
-                        'open': latest['open'],
-                        'close': latest['close'],
-                        'volume': latest['volume']
-                    }
-                    all_data.append(row_data)
-                    print(f"   + Cào thành công: {ticker}")
-                
-                # NGHỈ 0.2 GIÂY: Vẫn đảm bảo không bị chặn IP mà không bắt Bot chờ quá lâu
-                time.sleep(0.2)
-                
-            except Exception as e:
-                # Bỏ qua các mã rác, mã hủy niêm yết không có dữ liệu
-                # print(f"⚠️ Bỏ qua mã {ticker}") 
-                continue
-
-        return pd.DataFrame(all_data)
-
+        # Tính thanh khoản (Giá trị giao dịch)
+        # vnstock trả về 'close' theo đơn vị nghìn VNĐ, 'volume' là số cổ phiếu.
+        # Công thức Tỷ VNĐ = (Giá * Volume * 1000) / 1,000,000,000 = (Giá * Volume) / 1,000,000
+        df['value_ty'] = (df['close'] * df['volume']) / 1_000_000
+        
+        # Thanh khoản trung bình 20 phiên
+        avg_value_ty = df['value_ty'].tail(20).mean()
+        
+        # BỘ LỌC
+        if current_price < MIN_PRICE:
+            return None
+            
+        if avg_value_ty < MIN_LIQUIDITY:
+            return None
+            
+        # Trả về format từ điển chuẩn theo yêu cầu của bạn
+        return {
+            "Mã CK": ticker,
+            "Ngành": industry,
+            "Giá": round(current_price, 2),
+            "Thanh_Khoản_Tỷ": round(avg_value_ty, 2)
+        }
     except Exception as e:
-        print(f"❌ Lỗi tổng trong quá trình cào dữ liệu: {e}")
-        return pd.DataFrame()
+        return None
 
-# ==========================================
-# 3. HÀM ĐẨY LÊN GOOGLE SHEETS
-# ==========================================
-def update_google_sheet(df):
-    if df is None or df.empty:
-        print("⚠️ Không có dữ liệu để cập nhật. Đã hủy lệnh ghi đè để bảo vệ bảng tính!")
+def run_pipeline():
+    print("1. Đang lấy danh sách mã và nhóm ngành từ Vnstock...")
+    try:
+        companies_df = listing_companies()
+        # Lấy đúng 2 cột cần thiết và loại bỏ dữ liệu rỗng
+        companies_df = companies_df[['ticker', 'industry']].dropna()
+        tickers_and_industries = companies_df.values.tolist()
+    except Exception as e:
+        print(f"Lỗi lấy danh sách công ty: {e}")
         return
 
+    print(f"2. Khởi động {MAX_WORKERS} luồng cào dữ liệu cho {len(tickers_and_industries)} mã...")
+    results = []
+    
+    # Chạy đa luồng để cào nhanh hơn
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        # Giao việc cho các luồng
+        future_to_ticker = {
+            executor.submit(process_ticker, item[0], item[1]): item 
+            for item in tickers_and_industries
+        }
+        
+        # Thu thập kết quả
+        for future in tqdm(as_completed(future_to_ticker), total=len(tickers_and_industries)):
+            res = future.result()
+            if res is not None:
+                results.append(res)
+                
+    if not results:
+        print("Cảnh báo: Không có mã nào vượt qua được bộ lọc!")
+        return
+        
+    # Tạo bảng dữ liệu và sắp xếp cho đẹp (Từ thanh khoản cao nhất xuống thấp nhất)
+    df_results = pd.DataFrame(results)
+    df_results = df_results.sort_values(by="Thanh_Khoản_Tỷ", ascending=False)
+    
+    print(f"✅ Đã lọc thành công {len(df_results)} mã. Bắt đầu đẩy lên Google Sheets...")
+    
+    # Đẩy lên Sheet
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
         client = gspread.authorize(creds)
-        print("✅ Kết nối Google Sheet thành công!")
-
-        try:
-            sheet = client.open(SHEET_NAME).worksheet(TAB_NAME)
-        except gspread.exceptions.SpreadsheetNotFound:
-            print(f"❌ Lỗi: Không tìm thấy file '{SHEET_NAME}'. Nhớ share file cho email bot nhé!")
-            return
-        except gspread.exceptions.WorksheetNotFound:
-            print(f"❌ Lỗi: Tìm thấy file nhưng không thấy tab tên là '{TAB_NAME}'.")
-            return
-
-        # Xóa sạch dữ liệu cũ và ghi đè dữ liệu mới
+        
+        # Kết nối bằng ID file của bạn
+        sheet = client.open_by_key(SHEET_ID).sheet1
         sheet.clear()
-        data_to_upload = [df.columns.values.tolist()] + df.values.tolist()
         
-        # Đẩy lên từ ô A1
-        sheet.update('A1', data_to_upload)
+        # Đẩy tiêu đề cột và nội dung dữ liệu
+        data_to_upload = [df_results.columns.values.tolist()] + df_results.values.tolist()
+        sheet.update(data_to_upload)
         
-        print(f"🎉 HOÀN TẤT! Đã đẩy thành công {len(df)} hàng dữ liệu lên Google Sheets.")
-
+        print("🚀 BÙM! Dữ liệu đã được ném thẳng vào Google Sheets thành công!")
     except Exception as e:
-        print(f"❌ Lỗi kết nối hoặc ghi Google Sheets: {e}")
+        print(f"Lỗi khi đẩy dữ liệu lên Google Sheets: {e}")
 
-# ==========================================
-# 4. KÍCH HOẠT CHẠY CHƯƠNG TRÌNH
-# ==========================================
 if __name__ == "__main__":
-    df_data = get_market_data()
-    update_google_sheet(df_data)
+    run_pipeline()
