@@ -14,7 +14,7 @@ import time
 MIN_LIQUIDITY = 1.0  # Tối thiểu 1 tỷ VNĐ/phiên
 MIN_PRICE = 2.0      # Tối thiểu giá 2,000 VNĐ
 SHEET_NAME = "Stock Fairy"
-TAB_NAME = "sheet 1"
+TAB_NAME = "Sheet1"
 SHEET_ID = "1_RC7uZDEbnWpS7pOMSwMToJ2eVW4gj3Mmjrsglz7skY"
 CREDENTIALS_FILE = "credentials.json"
 MAX_WORKERS = 5      # Giảm xuống 5 luồng để tránh bị nhà cung cấp dữ liệu chặn IP (gây rỗng bảng)
