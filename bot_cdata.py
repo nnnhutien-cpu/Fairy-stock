@@ -1,85 +1,81 @@
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from vnstock import listing_companies, stock_historical_data
+from vnstock import stock_historical_data
 from datetime import datetime, timedelta
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import sys
 
 # ==========================================
-# CẤU HÌNH CƠ BẢN
+# 1. CẤU HÌNH KẾT NỐI BẰNG ID (CHỐNG LỖI 100%)
 # ==========================================
-# ID Google Sheets của bạn:
 SHEET_ID = "1r0cokW2bV7L-x8i1HWS0Cg3nOVak8VYN0vkzR5FgzNI"
-CREDENTIALS_FILE = "credentials.json"
-MAX_WORKERS = 3 
+SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
-def process_ticker(ticker, industry):
-    try:
-        end_date = datetime.now().strftime('%Y-%m-%d')
-        start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
-        
-        df = stock_historical_data(symbol=ticker, start_date=start_date, end_date=end_date, resolution='1D', type='stock')
-        
-        if df is None or df.empty:
-            return None
-            
-        current_price = df['close'].iloc[-1]
-        
-        df['value_ty'] = (df['close'] * df['volume']) / 1_000_000
-        avg_value_ty = df['value_ty'].tail(20).mean()
-        
-        if current_price < 2.0 or avg_value_ty < 1.0:
-            return None
-            
-        return {
-            "Mã CK": ticker,
-            "Ngành": industry,
-            "Giá": round(current_price, 2),
-            "Thanh Khoản (Tỷ)": round(avg_value_ty, 2)
-        }
-    except Exception:
-        return None
+# Đảm bảo file credentials.json nằm cùng thư mục
+CREDS = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", SCOPE)
+client = gspread.authorize(CREDS)
 
-def run_bot():
-    print("1. Đang lấy danh sách mã...")
+try:
+    # DÙNG ID THAY VÌ TÊN ĐỂ KHÔNG BAO GIỜ SỢ ĐỔI TÊN BỊ LỖI
+    worksheet = client.open_by_key(SHEET_ID).worksheet("data")
+    print("✅ Đã kết nối thành công tới Sheet 'data'!")
+except Exception as e:
+    print(f"❌ Lỗi kết nối Google Sheets: {e}")
+    sys.exit(1) # Báo lỗi đỏ cho GitHub biết để dừng lại
+
+# ==========================================
+# 2. DANH SÁCH MÃ CẦN CÀO & THỜI GIAN
+# ==========================================
+tickers = ['PLX', 'VNM', 'FPT', 'SSI', 'HPG', 'MWG', 'TCB', 'VPB', 'VCB']
+print(f"⏳ Đang tiến hành cào {len(tickers)} mã cổ phiếu...")
+
+all_data = []
+# Lấy lùi lại 7 ngày để đảm bảo luôn quét trúng phiên giao dịch gần nhất
+end_date = datetime.now().strftime("%Y-%m-%d")
+start_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+# ==========================================
+# 3. TIẾN HÀNH CÀO VÀ LỌC DỮ LIỆU
+# ==========================================
+for ticker in tickers:
     try:
-        companies_df = listing_companies()
-        tickers_and_industries = companies_df[['ticker', 'industry']].dropna().values.tolist()
+        df_hist = stock_historical_data(symbol=ticker, start_date=start_date, end_date=end_date, resolution='1D', type='stock')
+        
+        if df_hist is not None and not df_hist.empty:
+            latest = df_hist.iloc[-1]
+            
+            row_data = {
+                'symbol': ticker,
+                'date': str(latest['time'])[:10], # Chỉ lấy YYYY-MM-DD
+                'high': latest['high'],
+                'low': latest['low'],
+                'open': latest['open'],
+                'close': latest['close'],
+                'volume': latest['volume']
+            }
+            all_data.append(row_data)
+            print(f"   + Cào thành công: {ticker}")
+            
+        time.sleep(0.5) # Nghỉ nửa giây chống block IP
+        
     except Exception as e:
-        print("Lỗi lấy danh sách:", e)
-        return
+        print(f"⚠️ Lỗi khi cào mã {ticker}: {e}")
+        continue
 
-    print("2. Bắt đầu cào dữ liệu (đợi khoảng vài phút)...")
-    results = []
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        future_to_ticker = {executor.submit(process_ticker, item[0], item[1]): item for item in tickers_and_industries}
-        
-        for future in as_completed(future_to_ticker):
-            res = future.result()
-            if res is not None:
-                results.append(res)
-                
-    if not results:
-        print("Không có dữ liệu hợp lệ!")
-        return
-
-    df_results = pd.DataFrame(results).sort_values(by="Thanh Khoản (Tỷ)", ascending=False)
+# ==========================================
+# 4. ĐẨY LÊN GOOGLE SHEETS
+# ==========================================
+if all_data:
+    df_final = pd.DataFrame(all_data)
+    worksheet.clear()
     
-    print("3. Đang đẩy lên Google Sheets...")
-    try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
-        client = gspread.authorize(creds)
-        
-        sheet = client.open_by_key(SHEET_ID).sheet1
-        sheet.clear()
-        
-        data_to_upload = [df_results.columns.values.tolist()] + df_results.values.tolist()
-        sheet.update(data_to_upload)
-        print(f"✅ Xong! Đã đẩy {len(df_results)} mã lên Google Sheets thành công!")
-    except Exception as e:
-        print("Lỗi khi đẩy lên Google Sheets:", e)
-
-if __name__ == "__main__":
-    run_bot()
+    data_to_upload = [df_final.columns.values.tolist()] + df_final.values.tolist()
+    
+    # Đẩy lên Google Sheet chuẩn phiên bản mới
+    worksheet.update(values=data_to_upload, range_name='A1')
+    
+    print(f"🎉 HOÀN TẤT! Đã đẩy {len(df_final)} hàng dữ liệu lên Google Sheets.")
+else:
+    print("❌ Không có dữ liệu nào được cào về.")
+    sys.exit(1)
