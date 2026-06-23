@@ -20,7 +20,7 @@ jobs:
     - name: Cai dat thu vien
       run: |
         python -m pip install --upgrade pip
-        pip install pandas numpy gspread oauth2client vnstock tqdm
+        pip install pandas numpy gspread oauth2client vnstock==0.2.8.2 tqdm
 
     - name: Tao file Credentials
       env:
