@@ -12,7 +12,28 @@ import backtester as bt
 
 # --- 1b. GIAO DIỆN: TÍM ĐẬM SANG TRỌNG + FONT + HÒA HEADER ---
 st.markdown("""
-    /* --- FULL MÀN HÌNH, KHÔNG GIỚI HẠN BỀ NGANG --- */
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');
+    html, body, [class*="css"], .stMarkdown, .stButton, .stTextInput, .stSelectbox, .stDataFrame {
+        font-family: 'Sora', sans-serif !important;
+    }
+
+    .stApp {
+        background: linear-gradient(180deg, #0f0a1f 0%, #16112e 100%);
+        color: #dcd6ec;
+    }
+
+    header[data-testid="stHeader"] { background: #0f0a1f !important; }
+    header[data-testid="stHeader"] a, header[data-testid="stToolbar"] * { color: #b9aee0 !important; }
+
+    h1 { font-size: 2rem !important; line-height: 1.25 !important; }
+    h2, .stSubheader { font-size: 1.4rem !important; }
+    h3 { font-size: 1.15rem !important; }
+    h1, h2, h3, .stSubheader { color: #a394d4 !important; font-weight: 700 !important; letter-spacing: .2px; }
+
+    section[data-testid="stSidebar"] { background: #120d26; border-right: 1px solid #241a45; }
+    section[data-testid="stSidebar"] .block-container { padding-left: 1rem !important; padding-right: 1rem !important; }
+
     .block-container {
         padding-top: 2.5rem !important;
         padding-bottom: 2rem !important;
@@ -21,81 +42,6 @@ st.markdown("""
         max-width: 100% !important;
     }
 
-    /* --- ĐỔI MÀU CÁC NÚT MẶC ĐỊNH CỦA STREAMLIT --- */
-
-    /* Toolbar trên cùng (Share, sao, bút, github) hòa nền */
-    header[data-testid="stHeader"] {
-        background: #0f0a1f !important;
-    }
-    header[data-testid="stHeader"] a,
-    header[data-testid="stToolbar"] * {
-        color: #b9aee0 !important;
-    }
-
-    /* Nút Deploy / Manage app (góc phải dưới) */
-    [data-testid="stAppDeployButton"] button,
-    .stDeployButton button,
-    button[title="Manage app"] {
-        background: linear-gradient(90deg, #4c1d95, #6d28d9) !important;
-        color: #efe9ff !important;
-        border: none !important;
-        border-radius: 8px !important;
-        font-weight: 600 !important;
-    }
-
-    /* Nút menu ba chấm (hamburger) */
-    #MainMenu button, [data-testid="stMainMenu"] button {
-        color: #b9aee0 !important;
-    }
-    #MainMenu button:hover { background: #2c2151 !important; }
-
-    /* Nút thu/mở sidebar (mũi tên «) */
-    [data-testid="stSidebarCollapseButton"] button,
-    [data-testid="collapsedControl"] button {
-        color: #b9aee0 !important;
-        background: #1a1436 !important;
-        border-radius: 8px !important;
-    }
-
-    /* Nút phóng to chart (fullscreen) khi hover vào biểu đồ */
-    [data-testid="StyledFullScreenButton"] {
-        color: #b9aee0 !important;
-    }
-
-    /* Icon/nút trong ô nhập liệu, slider handle */
-    .stSlider [role="slider"] { background: #6d28d9 !important; }
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');
-    html, body, [class*="css"], .stMarkdown, .stButton, .stTextInput, .stSelectbox, .stDataFrame {
-        font-family: 'Sora', sans-serif !important;
-    }
-
-    /* Nền tím than sâu, dịu mắt */
-    .stApp {
-        background: linear-gradient(180deg, #0f0a1f 0%, #16112e 100%);
-        color: #dcd6ec;
-    }
-
-    /* HÒA THANH HEADER ĐEN TRÊN CÙNG với nền */
-    header[data-testid="stHeader"] {
-        background: #0f0a1f !important;
-    }
-    header[data-testid="stHeader"] * { color: #b9aee0 !important; }
-
-    /* Tiêu đề: tím lavender dịu (không chói) */
-    h1, h2, h3, .stSubheader {
-        color: #a394d4 !important;
-        font-weight: 700 !important;
-        letter-spacing: .2px;
-    }
-
-    /* Sidebar */
-    section[data-testid="stSidebar"] {
-        background: #120d26;
-        border-right: 1px solid #241a45;
-    }
-
-    /* Khối Metric */
     div[data-testid="stMetric"] {
         background: #1a1436;
         border: 1px solid #2c2151;
@@ -103,45 +49,34 @@ st.markdown("""
         padding: 16px 18px;
         box-shadow: 0 4px 14px rgba(40,25,80,.35);
     }
-    div[data-testid="stMetricValue"] { color: #f2eeff; font-weight: 700; }
-    div[data-testid="stMetricLabel"] { color: #a99fcf; }
+    div[data-testid="stMetricValue"] { color: #f2eeff; font-weight: 700; font-size: 1.5rem !important; }
+    div[data-testid="stMetricLabel"] { color: #a99fcf; font-size: .85rem !important; }
 
-    /* Nút bấm: tím đậm mờ, không lóa */
     .stButton > button {
-        border-radius: 10px;
-        font-weight: 600;
-        border: 1px solid #4a3a7a;
-        transition: all .15s ease;
+        border-radius: 10px; font-weight: 600; border: 1px solid #4a3a7a; transition: all .15s ease;
     }
     .stButton > button[kind="primary"] {
-        background: linear-gradient(90deg, #4c1d95, #6d28d9);
-        color: #efe9ff;
-        border: none;
+        background: linear-gradient(90deg, #4c1d95, #6d28d9); color: #efe9ff; border: none;
     }
     .stButton > button:hover { transform: translateY(-1px); filter: brightness(1.12); }
 
-    /* Thanh tab */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 6px;
-        background: #120d26;
-        padding: 6px;
-        border-radius: 12px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 8px;
-        padding: 8px 18px;
-        color: #a99fcf;
-        font-weight: 600;
-    }
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(90deg, #4c1d95, #6d28d9) !important;
-        color: #ffffff !important;
-    }
+    .stTabs [data-baseweb="tab-list"] { gap: 6px; background: #120d26; padding: 6px; border-radius: 12px; }
+    .stTabs [data-baseweb="tab"] { border-radius: 8px; padding: 6px 14px; color: #a99fcf; font-weight: 600; font-size: .9rem; }
+    .stTabs [aria-selected="true"] { background: linear-gradient(90deg, #4c1d95, #6d28d9) !important; color: #ffffff !important; }
 
-    /* Ô nhập liệu & bảng */
-    .stTextInput input, .stSelectbox div[data-baseweb="select"] {
-        background: #1a1436; color: #dcd6ec; border-radius: 8px;
+    [data-testid="stAppDeployButton"] button, .stDeployButton button, button[title="Manage app"] {
+        background: linear-gradient(90deg, #4c1d95, #6d28d9) !important; color: #efe9ff !important;
+        border: none !important; border-radius: 8px !important; font-weight: 600 !important;
     }
+    #MainMenu button, [data-testid="stMainMenu"] button { color: #b9aee0 !important; }
+    #MainMenu button:hover { background: #2c2151 !important; }
+    [data-testid="stSidebarCollapseButton"] button, [data-testid="collapsedControl"] button {
+        color: #b9aee0 !important; background: #1a1436 !important; border-radius: 8px !important;
+    }
+    [data-testid="StyledFullScreenButton"] { color: #b9aee0 !important; }
+    .stSlider [role="slider"] { background: #6d28d9 !important; }
+
+    .stTextInput input, .stSelectbox div[data-baseweb="select"] { background: #1a1436; color: #dcd6ec; border-radius: 8px; }
     .stDataFrame { border-radius: 12px; overflow: hidden; }
 </style>
 """, unsafe_allow_html=True)
