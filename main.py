@@ -12,6 +12,58 @@ import backtester as bt
 
 # --- 1b. GIAO DIỆN: TÍM ĐẬM SANG TRỌNG + FONT + HÒA HEADER ---
 st.markdown("""
+    /* --- FULL MÀN HÌNH, KHÔNG GIỚI HẠN BỀ NGANG --- */
+    .block-container {
+        padding-top: 2.5rem !important;
+        padding-bottom: 2rem !important;
+        padding-left: 2.5rem !important;
+        padding-right: 2.5rem !important;
+        max-width: 100% !important;
+    }
+
+    /* --- ĐỔI MÀU CÁC NÚT MẶC ĐỊNH CỦA STREAMLIT --- */
+
+    /* Toolbar trên cùng (Share, sao, bút, github) hòa nền */
+    header[data-testid="stHeader"] {
+        background: #0f0a1f !important;
+    }
+    header[data-testid="stHeader"] a,
+    header[data-testid="stToolbar"] * {
+        color: #b9aee0 !important;
+    }
+
+    /* Nút Deploy / Manage app (góc phải dưới) */
+    [data-testid="stAppDeployButton"] button,
+    .stDeployButton button,
+    button[title="Manage app"] {
+        background: linear-gradient(90deg, #4c1d95, #6d28d9) !important;
+        color: #efe9ff !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+    }
+
+    /* Nút menu ba chấm (hamburger) */
+    #MainMenu button, [data-testid="stMainMenu"] button {
+        color: #b9aee0 !important;
+    }
+    #MainMenu button:hover { background: #2c2151 !important; }
+
+    /* Nút thu/mở sidebar (mũi tên «) */
+    [data-testid="stSidebarCollapseButton"] button,
+    [data-testid="collapsedControl"] button {
+        color: #b9aee0 !important;
+        background: #1a1436 !important;
+        border-radius: 8px !important;
+    }
+
+    /* Nút phóng to chart (fullscreen) khi hover vào biểu đồ */
+    [data-testid="StyledFullScreenButton"] {
+        color: #b9aee0 !important;
+    }
+
+    /* Icon/nút trong ô nhập liệu, slider handle */
+    .stSlider [role="slider"] { background: #6d28d9 !important; }
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');
     html, body, [class*="css"], .stMarkdown, .stButton, .stTextInput, .stSelectbox, .stDataFrame {
