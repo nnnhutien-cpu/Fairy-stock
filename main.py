@@ -1,12 +1,12 @@
 import streamlit as st
 import pandas as pd
 import concurrent.futures
-import streamlit.components.v1 as components #
+import streamlit.components.v1 as components 
 from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex, supabase
 from indicators import calculate_technical_signals
 from ui_layout import render_sidebar, render_market_tab, render_screener_results
-from ux_components import setup_cache_clear_button, render_search_and_export # Gọi file UX
-import backtester as bt # [CẬP NHẬT] Nhập file backtest khung ngày (1DAY)
+from ux_components import setup_cache_clear_button, render_search_and_export
+import backtester as bt 
 
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
@@ -28,7 +28,8 @@ tab_market, tab_screener, tab_simulation, tab_backtest, tab_reports = st.tabs([
     "🔮 MÔ PHỎNG ICHIMOKU",
     "🛠️ BACKTEST KHUNG 1DAY",
     "📑 BÁO CÁO PHÂN TÍCH",
-    ])
+])
+
 # ==========================================
 # TAB 1: THỊ TRƯỜNG CHUNG (TỰ ĐỘNG KHỚP THEO API THỰC TẾ)
 # ==========================================
@@ -125,6 +126,9 @@ with tab_market:
             
     render_market_tab(chart_df, df_today)
 
+# ==========================================
+# TAB 2: BỘ LỌC CỔ PHIẾU
+# ==========================================
 with tab_screener:
     st.subheader(f"Danh Sách Quét Sàn {exchange_choice} (>20 Tỷ VNĐ)")
     scan_button = st.button("🚀 KÍCH HOẠT QUÉT TOÀN DIỆN", use_container_width=True, type="primary")
@@ -267,7 +271,10 @@ with tab_simulation:
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.warning(f"⚠️ Không có dữ liệu cho mã {sim_ticker}. Hãy chắc chắn bạn đã bấm nút 'Bơm dữ liệu lên Supabase'!")
-# Tích hợp Tab 4: Hệ thống Backtest Cổ Phiếu Khung Ngày (Daily) hoàn chỉnh
+
+# ==========================================
+# TAB 4: HỆ THỐNG BACKTEST
+# ==========================================
 with tab_backtest:
     st.subheader("🛠️ Hệ Thống Backtest Dài Hạn (Khung 1DAY)")
     st.caption("Thuật toán Quant: Tự động bắt Râu nến để Stoploss (-7%) hoặc Take Profit (+15%). Chặn bán nếu gãy trend Kumo.")
@@ -308,7 +315,7 @@ with tab_backtest:
                     st.error("Dữ liệu quá ngắn, không đủ để tính toán đám mây Ichimoku!")
             else:
                 st.error("Lỗi: Không lấy được dữ liệu. Hãy kiểm tra lại mã cổ phiếu hoặc API đang bảo trì!") 
-                # ==========================================
+
 # ==========================================
 # TAB 5: BÁO CÁO PHÂN TÍCH CHUYÊN SÂU TỪ CTCK
 # ==========================================
