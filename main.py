@@ -13,65 +13,79 @@ import backtester as bt
 # --- 1. CẤU HÌNH TRANG (Lệnh này bắt buộc phải nằm đầu tiên) ---
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
-# --- 1b. GIAO DIỆN: MÀU SẮC & PHÔNG CHỮ ---
+# --- 1b. GIAO DIỆN: MÀU SẮC & PHÔNG CHỮ (TÍM SANG TRỌNG) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap');
     html, body, [class*="css"], .stMarkdown, .stButton, .stTextInput, .stSelectbox {
         font-family: 'Be Vietnam Pro', sans-serif !important;
     }
+
+    /* Nền tổng thể tím than sâu */
     .stApp {
-        background: linear-gradient(180deg, #0b1120 0%, #111a2e 100%);
-        color: #e6edf3;
+        background: linear-gradient(180deg, #120b2e 0%, #1b1240 100%);
+        color: #e9e4ff;
     }
+
+    /* Tiêu đề: tím sáng ánh kim */
     h1, h2, h3, .stSubheader {
-        color: #f5d67b !important;
+        color: #b79bff !important;
         font-weight: 700 !important;
         letter-spacing: .3px;
     }
+
+    /* Sidebar */
     section[data-testid="stSidebar"] {
-        background: #0d1526;
-        border-right: 1px solid #1e2b45;
+        background: #150d33;
+        border-right: 1px solid #2e2159;
     }
+
+    /* Các khối Metric */
     div[data-testid="stMetric"] {
-        background: #131d33;
-        border: 1px solid #22314f;
+        background: #1e1547;
+        border: 1px solid #362a6b;
         border-radius: 14px;
         padding: 16px 18px;
-        box-shadow: 0 4px 14px rgba(0,0,0,.35);
+        box-shadow: 0 4px 16px rgba(90,50,180,.28);
     }
     div[data-testid="stMetricValue"] { color: #ffffff; font-weight: 700; }
-    div[data-testid="stMetricLabel"] { color: #9fb3d1; }
+    div[data-testid="stMetricLabel"] { color: #b3a5e0; }
+
+    /* Nút bấm */
     .stButton > button {
         border-radius: 10px;
         font-weight: 600;
-        border: 1px solid #2b6cff;
+        border: 1px solid #7c5cff;
         transition: all .15s ease;
     }
     .stButton > button[kind="primary"] {
-        background: linear-gradient(90deg, #2b6cff, #1e9e6a);
+        background: linear-gradient(90deg, #7c3aed, #a855f7);
         color: #fff;
         border: none;
     }
-    .stButton > button:hover { transform: translateY(-1px); filter: brightness(1.08); }
+    .stButton > button:hover { transform: translateY(-1px); filter: brightness(1.1); }
+
+    /* Thanh tab */
     .stTabs [data-baseweb="tab-list"] {
         gap: 6px;
-        background: #0d1526;
+        background: #150d33;
         padding: 6px;
         border-radius: 12px;
     }
     .stTabs [data-baseweb="tab"] {
         border-radius: 8px;
         padding: 8px 18px;
-        color: #9fb3d1;
+        color: #b3a5e0;
         font-weight: 600;
     }
     .stTabs [aria-selected="true"] {
-        background: linear-gradient(90deg, #2b6cff, #1e9e6a) !important;
+        background: linear-gradient(90deg, #7c3aed, #a855f7) !important;
         color: #ffffff !important;
     }
+
+    /* Ô nhập liệu & bảng */
     .stTextInput input, .stSelectbox div[data-baseweb="select"] {
-        background: #131d33; color: #e6edf3; border-radius: 8px;
+        background: #1e1547; color: #e9e4ff; border-radius: 8px;
     }
     .stDataFrame { border-radius: 12px; overflow: hidden; }
 </style>
