@@ -10,82 +10,85 @@ from ui_layout import render_sidebar, render_market_tab, render_screener_results
 from ux_components import setup_cache_clear_button, render_search_and_export
 import backtester as bt
 
-# --- 1. CẤU HÌNH TRANG (Lệnh này bắt buộc phải nằm đầu tiên) ---
-st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
-
-# --- 1b. GIAO DIỆN: MÀU SẮC & PHÔNG CHỮ (TÍM SANG TRỌNG) ---
+# --- 1b. GIAO DIỆN: TÍM ĐẬM SANG TRỌNG + FONT + HÒA HEADER ---
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap');
-    html, body, [class*="css"], .stMarkdown, .stButton, .stTextInput, .stSelectbox {
-        font-family: 'Be Vietnam Pro', sans-serif !important;
+    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');
+    html, body, [class*="css"], .stMarkdown, .stButton, .stTextInput, .stSelectbox, .stDataFrame {
+        font-family: 'Sora', sans-serif !important;
     }
 
-    /* Nền tổng thể tím than sâu */
+    /* Nền tím than sâu, dịu mắt */
     .stApp {
-        background: linear-gradient(180deg, #120b2e 0%, #1b1240 100%);
-        color: #e9e4ff;
+        background: linear-gradient(180deg, #0f0a1f 0%, #16112e 100%);
+        color: #dcd6ec;
     }
 
-    /* Tiêu đề: tím sáng ánh kim */
+    /* HÒA THANH HEADER ĐEN TRÊN CÙNG với nền */
+    header[data-testid="stHeader"] {
+        background: #0f0a1f !important;
+    }
+    header[data-testid="stHeader"] * { color: #b9aee0 !important; }
+
+    /* Tiêu đề: tím lavender dịu (không chói) */
     h1, h2, h3, .stSubheader {
-        color: #b79bff !important;
+        color: #a394d4 !important;
         font-weight: 700 !important;
-        letter-spacing: .3px;
+        letter-spacing: .2px;
     }
 
     /* Sidebar */
     section[data-testid="stSidebar"] {
-        background: #150d33;
-        border-right: 1px solid #2e2159;
+        background: #120d26;
+        border-right: 1px solid #241a45;
     }
 
-    /* Các khối Metric */
+    /* Khối Metric */
     div[data-testid="stMetric"] {
-        background: #1e1547;
-        border: 1px solid #362a6b;
+        background: #1a1436;
+        border: 1px solid #2c2151;
         border-radius: 14px;
         padding: 16px 18px;
-        box-shadow: 0 4px 16px rgba(90,50,180,.28);
+        box-shadow: 0 4px 14px rgba(40,25,80,.35);
     }
-    div[data-testid="stMetricValue"] { color: #ffffff; font-weight: 700; }
-    div[data-testid="stMetricLabel"] { color: #b3a5e0; }
+    div[data-testid="stMetricValue"] { color: #f2eeff; font-weight: 700; }
+    div[data-testid="stMetricLabel"] { color: #a99fcf; }
 
-    /* Nút bấm */
+    /* Nút bấm: tím đậm mờ, không lóa */
     .stButton > button {
         border-radius: 10px;
         font-weight: 600;
-        border: 1px solid #7c5cff;
+        border: 1px solid #4a3a7a;
         transition: all .15s ease;
     }
     .stButton > button[kind="primary"] {
-        background: linear-gradient(90deg, #7c3aed, #a855f7);
-        color: #fff;
+        background: linear-gradient(90deg, #4c1d95, #6d28d9);
+        color: #efe9ff;
         border: none;
     }
-    .stButton > button:hover { transform: translateY(-1px); filter: brightness(1.1); }
+    .stButton > button:hover { transform: translateY(-1px); filter: brightness(1.12); }
 
     /* Thanh tab */
     .stTabs [data-baseweb="tab-list"] {
         gap: 6px;
-        background: #150d33;
+        background: #120d26;
         padding: 6px;
         border-radius: 12px;
     }
     .stTabs [data-baseweb="tab"] {
         border-radius: 8px;
         padding: 8px 18px;
-        color: #b3a5e0;
+        color: #a99fcf;
         font-weight: 600;
     }
     .stTabs [aria-selected="true"] {
-        background: linear-gradient(90deg, #7c3aed, #a855f7) !important;
+        background: linear-gradient(90deg, #4c1d95, #6d28d9) !important;
         color: #ffffff !important;
     }
 
     /* Ô nhập liệu & bảng */
     .stTextInput input, .stSelectbox div[data-baseweb="select"] {
-        background: #1e1547; color: #e9e4ff; border-radius: 8px;
+        background: #1a1436; color: #dcd6ec; border-radius: 8px;
     }
     .stDataFrame { border-radius: 12px; overflow: hidden; }
 </style>
