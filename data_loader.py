@@ -59,15 +59,39 @@ def get_stock_data(ticker, days_back=3650):
         return pd.DataFrame()
 
 # HÀM 3: Lấy dữ liệu VN-INDEX dài hạn (Đã đổi tên thành get_vnindex_data cho đúng)
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_vnindex_data(days_back=365):
-    end_date = datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+@st.cache_data(ttl=3600, show_spinner=False) 
+def get_stock_data(ticker, days_back=3650): 
     try:
-        df = stock_historical_data(symbol='VNINDEX', start_date=start_date, end_date=end_date, resolution="1D", type="index")
+        # Lấy từ Supabase
+        response = supabase.table("stock_data").select("*").eq("ticker", ticker).execute()
+        
+        # --- [BẪY LỖI MỚI Ở ĐÂY] ---
+        if response.data is None or len(response.data) == 0:
+            print(f"Kho Supabase trống, chưa có dữ liệu cho mã {ticker}")
+            return pd.DataFrame() # Trả về bảng trống, không gây lỗi web
+        
+        df = pd.DataFrame(response.data)
+        
+        # Kiểm tra nếu sau khi load mà DataFrame vẫn không có cột cần thiết (date)
+        if 'date' not in df.columns:
+            return pd.DataFrame()
+
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values('date')
+        
+        # Đổi tên cột
+        df.rename(columns={'close_price': 'close', 'volume': 'volume', 'date': 'time'}, inplace=True)
+        
+        if days_back:
+             df = df.tail(days_back)
+             
         return df
+            
     except Exception as e:
-        return None
+        # Ép kiểu an toàn (đã bọc áo giáp)
+        safe_error = str(e).encode('ascii', errors='ignore').decode('ascii')
+        print(f"Loi lay du lieu Supabase ma {ticker}: {safe_error}")
+        return pd.DataFrame() # Trả về bảng trống để main.py xử lý bằng st.warning
 
 # HÀM 4: Lấy dữ liệu VN-INDEX trong ngày (Thêm vào để main.py không bị lỗi ImportError)
 @st.cache_data(ttl=60, show_spinner=False)
