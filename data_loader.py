@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-# Bổ sung import từ vnstock
 from vnstock import listing_companies, stock_historical_data
 from supabase import create_client, Client
 
@@ -58,9 +57,9 @@ def get_stock_data(ticker, days_back=3650):
         st.error(f"Loi lay du lieu Supabase ma {ticker}: {str(e)}")
         return pd.DataFrame()
 
-# HÀM 3: Lấy dữ liệu VN-INDEX dài hạn (Đã đổi tên thành get_vnindex_data cho đúng)
+# HÀM 3: Lấy dữ liệu VN-INDEX dài hạn (ĐÃ SỬA CHÍNH XÁC TÊN HÀM)
 @st.cache_data(ttl=3600, show_spinner=False) 
-def get_stock_data(ticker, days_back=3650): 
+def get_vnindex_data(ticker="VNINDEX", days_back=3650): 
     try:
         # Lấy từ Supabase
         response = supabase.table("stock_data").select("*").eq("ticker", ticker).execute()
