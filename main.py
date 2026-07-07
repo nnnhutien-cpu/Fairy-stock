@@ -1,24 +1,7 @@
-import streamlit as st
-import pandas as pd
-import concurrent.futures
-import streamlit.components.v1 as components 
-
-from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex, supabase
-from indicators import calculate_technical_signals
-from ui_layout import render_sidebar, render_market_tab, render_screener_results
-from ux_components import setup_cache_clear_button, render_search_and_export
-import backtester as bt 
-
-st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
-
-if 'scan_results' not in st.session_state:
-    st.session_state['scan_results'] = []
-
-# Đọc các thông số Ichimoku động từ Sidebar bên trái
-exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift = render_sidebar()
-
-# [GỌI HÀM UX] Tạo nút xóa Cache
-setup_cache_clear_button()
+ImportError: This app has encountered an error. The original error message is redacted to prevent data leaks. Full error details have been recorded in the logs (if you're on Streamlit Cloud, click on 'Manage app' in the lower right of your app).
+Traceback:
+File "/mount/src/fairy-stock/main.py", line 6, in <module>
+    from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex, supabase
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 
