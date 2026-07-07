@@ -1,18 +1,37 @@
-ImportError: This app has encountered an error. The original error message is redacted to prevent data leaks. Full error details have been recorded in the logs (if you're on Streamlit Cloud, click on 'Manage app' in the lower right of your app).
-Traceback:
-File "/mount/src/fairy-stock/main.py", line 6, in <module>
-    from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex, supabase
+import streamlit as st
+import pandas as pd
+import concurrent.futures
+import streamlit.components.v1 as components 
+from supabase import create_client # [MỚI] Gọi thư viện Supabase trực tiếp ở đây
 
-st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
+# [ĐÃ SỬA] Đã xóa chữ 'supabase' ở cuối dòng này để tránh lỗi ImportError
+from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex
+from indicators import calculate_technical_signals
+from ui_layout import render_sidebar, render_market_tab, render_screener_results
+from ux_components import setup_cache_clear_button, render_search_and_export
+import backtester as bt 
 
-# [ĐỒNG BỘ CHUẨN] Đổi tên Tab thứ 4 thành Khung Ngày 1DAY theo đúng logic code
-tab_market, tab_screener, tab_simulation, tab_backtest, tab_reports = st.tabs([
-    "📊 TỔNG QUAN VN-INDEX", 
-    "🚀 BỘ LỌC CỔ PHIẾU", 
-    "🔮 MÔ PHỎNG ICHIMOKU",
-    "🛠️ BACKTEST KHUNG 1DAY",
-    "📑 BÁO CÁO PHÂN TÍCH",
-])
+# --- 1. CẤU HÌNH TRANG (Lệnh này bắt buộc phải nằm đầu tiên) ---
+st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
+
+# --- 2. KẾT NỐI SUPABASE TRỰC TIẾP (Dành riêng để nuôi Tab 5 Báo Cáo) ---
+@st.cache_resource
+def init_connection():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
+
+supabase = init_connection()
+
+# --- 3. KHỞI TẠO BIẾN CHO GIAO DIỆN ---
+if 'scan_results' not in st.session_state:
+    st.session_state['scan_results'] = []
+
+# Đọc các thông số Ichimoku động từ Sidebar bên trái
+exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift = render_sidebar()
+
+# [GỌI HÀM UX] Tạo nút xóa Cache
+setup_cache_clear_button()
 
 # ==========================================
 # TAB 1: THỊ TRƯỜNG CHUNG (TỰ ĐỘNG KHỚP THEO API THỰC TẾ)
