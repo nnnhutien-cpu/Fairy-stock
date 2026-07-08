@@ -3,6 +3,7 @@ import pandas as pd
 import concurrent.futures
 import streamlit.components.v1 as components
 from supabase import create_client
+import traceback
 
 from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex
 from indicators import calculate_technical_signals
@@ -227,8 +228,7 @@ with tab_market:
         st.warning("⚠️ Đang chờ dữ liệu VN-INDEX từ API. Vui lòng tải lại trang sau ít phút...")
 
     render_market_tab(chart_df, df_today)
-
-# ==========================================
+    # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU
 # ==========================================
 with tab_screener:
@@ -415,65 +415,3 @@ with tab_backtest:
 # ==========================================
 with tab_reports:
     st.subheader("📑 Hệ Thống Phân Tích Định Giá Cổ Phiếu")
-
-    if supabase is None:
-        st.warning("⚠️ Chưa cấu hình SUPABASE_URL / SUPABASE_KEY trong Secrets. Tab Báo Cáo tạm thời chưa dùng được.")
-        st.stop()
-
-    st.caption("Dữ liệu hệ thống tự động quét hàng ngày từ 15+ CTCK hàng đầu (SSI, VND, VCI, MBS, MAS, KIS, VCBS, KB, CTS, BSI...).")
-
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        filter_action = st.selectbox("Lọc Khuyến Nghị:", ["Tất cả", "MUA", "NẮM GIỮ", "BÁN"])
-    with col2:
-        rep_ticker = st.text_input("Nhập mã cổ phiếu (Ví dụ: FPT, HPG) hoặc để trống để xem toàn thị trường:", value="", key="rep_ticker_db").upper().strip()
-
-    with st.spinner("Đang truy vấn kho dữ liệu định giá..."):
-        try:
-            query = supabase.table("analyst_reports").select("*")
-
-            if rep_ticker:
-                query = query.eq("ticker", rep_ticker)
-
-            response = query.execute()
-            df_reports = pd.DataFrame(response.data)
-
-            if not df_reports.empty:
-                if filter_action != "Tất cả":
-                    df_reports = df_reports[df_reports['action'] == filter_action]
-
-                if not df_reports.empty:
-                    df_reports['target_price'] = pd.to_numeric(df_reports['target_price'], errors='coerce')
-                    df_reports['buy_price'] = pd.to_numeric(df_reports['buy_price'], errors='coerce')
-
-                    df_reports['Kỳ Vọng (%)'] = ((df_reports['target_price'] - df_reports['buy_price']) / df_reports['buy_price'] * 100).round(2)
-
-                    df_reports = df_reports.sort_values(by='date', ascending=False)
-                    df_display = df_reports[['date', 'ticker', 'company', 'action', 'buy_price', 'target_price', 'Kỳ Vọng (%)', 'report_url']].copy()
-
-                    st.dataframe(
-                        df_display,
-                        use_container_width=True,
-                        hide_index=True,
-                        column_config={
-                            "date": st.column_config.DateColumn("📅 Ngày", format="DD/MM/YYYY"),
-                            "ticker": st.column_config.TextColumn("🏷️ Mã"),
-                            "company": st.column_config.TextColumn("🏢 CTCK"),
-                            "action": st.column_config.TextColumn("⚡ Khuyến Nghị"),
-                            "buy_price": st.column_config.NumberColumn("💰 Giá Khuyến Nghị", format="%d ₫"),
-                            "target_price": st.column_config.NumberColumn("🎯 Giá Mục Tiêu", format="%d ₫"),
-                            "Kỳ Vọng (%)": st.column_config.NumberColumn("🚀 Kỳ Vọng Upside", format="%.2f %%"),
-                            "report_url": st.column_config.LinkColumn("📥 Tải PDF", display_text="Xem Báo Cáo")
-                        }
-                    )
-                else:
-                    st.warning("Không có báo cáo nào khớp với bộ lọc của bạn.")
-            else:
-                if rep_ticker:
-                    st.info(f"Hiện tại chưa có dữ liệu báo cáo cho mã {rep_ticker}. Bot cào dữ liệu sẽ tự động bổ sung vào sáng mai!")
-                else:
-                    st.info("Kho báo cáo hiện đang trống. Hãy đợi Bot tự động cào dữ liệu về nhé!")
-
-        except Exception as e:
-            error_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
-            st.error(f"Loi ket noi hoac xu ly du lieu bao cao: {error_msg}")
