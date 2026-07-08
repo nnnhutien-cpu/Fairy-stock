@@ -5,8 +5,8 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from vnstock import Vnstock
 
 FALLBACK_TICKERS = ["HPG", "SSI", "VND", "FPT", "TCB", "MBB", "MWG", "VIC", "VHM", "VNM"]
-SOURCES = ['KBS', 'VCI']
-_API_TIMEOUT = 8   # giây tối đa chờ mỗi nguồn
+SOURCES = ['KBS']   # VCI 403 Forbidden → bỏ. Fallback: Yahoo Finance
+_API_TIMEOUT = 5   # KBS hoạt động tốt → 5s đủ
 
 
 def _normalize(df):
