@@ -1,86 +1,118 @@
+import time
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-from vnstock import listing_companies, stock_historical_data
-
-# ĐÃ XÓA TOÀN BỘ KẾT NỐI SUPABASE THEO YÊU CẦU
+from vnstock import Vnstock
 
 FALLBACK_TICKERS = ["HPG", "SSI", "VND", "FPT", "TCB", "MBB", "MWG", "VIC", "VHM", "VNM"]
+SOURCE = 'VCI'   # nguồn free ổn định nhất; đổi 'TCBS' nếu VCI lỗi
 
 
 def _normalize(df):
-    """Chuẩn hóa tên cột + kiểu dữ liệu cho khớp form code cũ."""
-    if df is None or df.empty:
+    """Chuẩn hóa tên cột + kiểu dữ liệu cho khớp toàn hệ thống."""
+    if df is None or len(df) == 0:
         return pd.DataFrame()
+    df = df.copy()
     df.columns = [str(c).lower().strip() for c in df.columns]
     if 'date' in df.columns and 'time' not in df.columns:
         df.rename(columns={'date': 'time'}, inplace=True)
     if 'time' in df.columns:
         df['time'] = pd.to_datetime(df['time'], errors='coerce')
-    # Ép các cột giá/khối lượng về số để tránh lỗi tính toán
     for col in ['open', 'high', 'low', 'close', 'volume']:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
-    df = df.dropna(subset=['time']).sort_values('time').reset_index(drop=True)
+    if 'time' in df.columns:
+        df = df.dropna(subset=['time']).sort_values('time').reset_index(drop=True)
     return df
 
 
-# HÀM 1: Danh sách mã (cache 1 ngày)
+def _match_exchange(val, target):
+    """So khớp sàn, coi HOSE và HSX là một."""
+    val = str(val).upper()
+    target = str(target).upper()
+    if target in ('HOSE', 'HSX'):
+        return val in ('HOSE', 'HSX')
+    return val == target
+
+
+# HÀM 1: Danh sách mã theo sàn (đã loại mã hủy niêm yết + phi cổ phiếu)
 @st.cache_data(ttl=86400)
 def get_all_tickers(exchange='all'):
     try:
-        df = listing_companies()
+        listing = Vnstock().stock(symbol='ACB', source=SOURCE).listing
+        df = listing.symbols_by_exchange()
         df.columns = [str(c).lower().strip() for c in df.columns]
-        if 'ticker' not in df.columns:
-            return FALLBACK_TICKERS
-        # Chỉ giữ 3 sàn chính, loại dòng rác/không có mã
-        if 'comgroupcode' in df.columns:
-            df = df[df['comgroupcode'].isin(['HOSE', 'HNX', 'UPCOM'])]
+
+        # Chỉ giữ cổ phiếu (loại trái phiếu, CCQ, phái sinh...)
+        if 'type' in df.columns:
+            df = df[df['type'].astype(str).str.upper() == 'STOCK']
+
+        # Chỉ giữ 3 sàn đang giao dịch (loại DELISTED = đã hủy niêm yết)
+        if 'exchange' in df.columns:
+            df = df[df['exchange'].astype(str).str.upper().isin(['HOSE', 'HSX', 'HNX', 'UPCOM'])]
             if exchange != 'all':
-                df = df[df['comgroupcode'] == exchange]
-        tickers = [str(t).strip().upper() for t in df['ticker'].dropna().tolist() if str(t).strip()]
+                df = df[df['exchange'].apply(lambda x: _match_exchange(x, exchange))]
+
+        col = 'symbol' if 'symbol' in df.columns else ('ticker' if 'ticker' in df.columns else None)
+        if col is None:
+            return FALLBACK_TICKERS
+
+        tickers = [str(t).strip().upper() for t in df[col].dropna().tolist() if str(t).strip()]
         return tickers if tickers else FALLBACK_TICKERS
     except Exception:
         return FALLBACK_TICKERS
 
 
-# HÀM 2: Dữ liệu cổ phiếu (cache 1 giờ)
+# HÀM 2: Dữ liệu cổ phiếu (retry 3 lần, chỉ cache khi có data thật)
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_stock_data(ticker, days_back=3650):
-    try:
-        end_date = datetime.now().strftime('%Y-%m-%d')
-        start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
-        df = stock_historical_data(symbol=ticker, start_date=start_date,
-                                   end_date=end_date, resolution='1D', type='stock')
-        return _normalize(df)
-    except Exception:
-        return pd.DataFrame()
+    end_date = datetime.now().strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+    for _ in range(3):
+        try:
+            stock = Vnstock().stock(symbol=ticker, source=SOURCE)
+            df = stock.quote.history(start=start_date, end=end_date, interval='1D')
+            norm = _normalize(df)
+            if not norm.empty:
+                return norm
+        except Exception:
+            pass
+        time.sleep(0.4)
+    return pd.DataFrame()
 
 
-# HÀM 3: Dữ liệu VN-INDEX dài hạn (cache 1 giờ)
+# HÀM 3: VN-INDEX dài hạn
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_vnindex_data(ticker="VNINDEX", days_back=3650):
-    try:
-        end_date = datetime.now().strftime('%Y-%m-%d')
-        start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
-        df = stock_historical_data(symbol='VNINDEX', start_date=start_date,
-                                   end_date=end_date, resolution='1D', type='index')
-        return _normalize(df)
-    except Exception:
-        return pd.DataFrame()
+    end_date = datetime.now().strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+    for _ in range(3):
+        try:
+            idx = Vnstock().stock(symbol='VNINDEX', source=SOURCE)
+            df = idx.quote.history(start=start_date, end=end_date, interval='1D')
+            norm = _normalize(df)
+            if not norm.empty:
+                return norm
+        except Exception:
+            pass
+        time.sleep(0.4)
+    return pd.DataFrame()
 
 
-# HÀM 4: VN-INDEX trong ngày (cache 60 giây)
+# HÀM 4: VN-INDEX trong ngày (nến 1 phút)
 @st.cache_data(ttl=60, show_spinner=False)
 def get_intraday_vnindex():
-    try:
-        end_date = datetime.now().strftime('%Y-%m-%d')
-        start_date = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
-        df = stock_historical_data(symbol='VNINDEX', start_date=start_date,
-                                   end_date=end_date, resolution='1', type='index')
-        if df is not None and not df.empty:
-            df.columns = [str(c).lower().strip() for c in df.columns]
-            return df
-    except Exception:
-        pass
+    end_date = datetime.now().strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
+    for _ in range(3):
+        try:
+            idx = Vnstock().stock(symbol='VNINDEX', source=SOURCE)
+            df = idx.quote.history(start=start_date, end=end_date, interval='1m')
+            if df is not None and len(df) > 0:
+                df = df.copy()
+                df.columns = [str(c).lower().strip() for c in df.columns]
+                return df
+        except Exception:
+            pass
+        time.sleep(0.4)
     return pd.DataFrame()
