@@ -423,4 +423,29 @@ with tab_reports:
                     df_reports = df_reports.sort_values(by='date', ascending=False)
                     df_display = df_reports[['date', 'ticker', 'company', 'action', 'buy_price', 'target_price', 'Kỳ Vọng (%)', 'report_url']].copy()
 
-                    st.dataf
+                    st.dataframe(
+                        df_display,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "date": st.column_config.DateColumn("📅 Ngày", format="DD/MM/YYYY"),
+                            "ticker": st.column_config.TextColumn("🏷️ Mã"),
+                            "company": st.column_config.TextColumn("🏢 CTCK"),
+                            "action": st.column_config.TextColumn("⚡ Khuyến Nghị"),
+                            "buy_price": st.column_config.NumberColumn("💰 Giá Khuyến Nghị", format="%d ₫"),
+                            "target_price": st.column_config.NumberColumn("🎯 Giá Mục Tiêu", format="%d ₫"),
+                            "Kỳ Vọng (%)": st.column_config.NumberColumn("🚀 Kỳ Vọng Upside", format="%.2f %%"),
+                            "report_url": st.column_config.LinkColumn("📥 Tải PDF", display_text="Xem Báo Cáo")
+                        }
+                    )
+                else:
+                    st.warning("Không có báo cáo nào khớp với bộ lọc của bạn.")
+            else:
+                if rep_ticker:
+                    st.info(f"Hiện tại chưa có dữ liệu báo cáo cho mã {rep_ticker}. Bot cào dữ liệu sẽ tự động bổ sung vào sáng mai!")
+                else:
+                    st.info("Kho báo cáo hiện đang trống. Hãy đợi Bot tự động cào dữ liệu về nhé!")
+
+        except Exception as e:
+            error_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
+            st.error(f"Loi ket noi hoac xu ly du lieu bao cao: {error_msg}")
