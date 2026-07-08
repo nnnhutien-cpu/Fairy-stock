@@ -257,7 +257,7 @@ with tab_screener:
         else:
             tickers_to_scan = tickers[:max_scan]
 
-            with st.status(f"Đang dùng 15 Luồng an toàn quét {len(tickers_to_scan)} mã (Dữ liệu Daily 365 ngày)...", expanded=True) as status:
+            with st.status(f"Đang dùng 8 Luồng quét {len(tickers_to_scan)} mã (Dữ liệu Daily 200 ngày)...", expanded=True) as status:
                 progress_bar = st.progress(0)
                 results = []
                 total = len(tickers_to_scan)
@@ -268,7 +268,7 @@ with tab_screener:
                     if ticker in BLACKLIST:
                         return None
 
-                    df = get_stock_data(ticker, days_back=365)
+                    df = get_stock_data(ticker, days_back=200)
                     if df is None or df.empty:
                         return None
 
@@ -284,7 +284,7 @@ with tab_screener:
 
                     return calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
 
-                with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
                     future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
                     for future in concurrent.futures.as_completed(future_to_ticker):
                         processed += 1
