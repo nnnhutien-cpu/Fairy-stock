@@ -215,47 +215,72 @@ with tab_screener:
             st.error("⚠️ Lỗi mạng: Không lấy được danh sách mã chứng khoán!")
         else:
             tickers_to_scan = tickers[:max_scan]
+            
+            if len(tickers_to_scan) == 0:
+                st.warning("⚠️ Không có mã nào để quét.")
+            else:
+                with st.status(f"Đang quét {len(tickers_to_scan)} mã (Dữ liệu Daily 200 ngày)...", expanded=True) as status:
+                    progress_bar = st.progress(0)
+                    results = []
+                    total = len(tickers_to_scan)
+                    processed = 0
 
-            with st.status(f"Đang quét {len(tickers_to_scan)} mã (Dữ liệu Daily 200 ngày)...", expanded=True) as status:
-                progress_bar = st.progress(0)
-                results = []
-                total = len(tickers_to_scan)
-                processed = 0
-
-                def process_ticker(ticker):
-                    if ticker in BLACKLIST:
-                        return None
-                    df = get_stock_data(ticker, days_back=200)
-                    if df is None or df.empty:
-                        return None
-                    try:
-                        last_date = pd.to_datetime(df['time']).max().normalize()
-                        days_stale = (pd.Timestamp.now().normalize() - last_date).days
-                        if days_stale > 7:
+                    def process_ticker(ticker):
+                        if ticker in BLACKLIST:
                             return None
-                    except Exception:
-                        return None
-                    return calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
+                        
+                        df = get_stock_data(ticker, days_back=200)
+                        if df is None or df.empty:
+                            return None
+                        
+                        # --- FIX LỖI TIMEZONE & SO SÁNH NGÀY ---
+                        try:
+                            # Tìm cột thời gian linh hoạt (trường hợp API đổi tên cột)
+                            time_col = 'time' if 'time' in df.columns else ('date' if 'date' in df.columns else None)
+                            
+                            if time_col:
+                                last_date = pd.to_datetime(df[time_col]).max()
+                                # Xóa timezone (UTC, +7...) để so sánh đồng nhất với now()
+                                if last_date.tzinfo is not None:
+                                    last_date = last_date.tz_localize(None)
+                                
+                                days_stale = (pd.Timestamp.now().normalize() - last_date.normalize()).days
+                                
+                                # Nới lỏng lên 15 ngày để tránh bị kẹt data sau những đợt nghỉ lễ dài (như Tết Âm)
+                                if days_stale > 15: 
+                                    return None
+                        except Exception:
+                            # Bỏ qua lỗi check ngày, BẮT BUỘC cho đi tiếp thay vì return None để không bị kẹt trắng data
+                            pass 
 
-                with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
-                    future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
-                    try:
-                        for future in concurrent.futures.as_completed(future_to_ticker, timeout=28):
-                            processed += 1
-                            try:
-                                res = future.result()
-                                if res is not None:
-                                    results.append(res)
-                            except Exception:
-                                pass
-                            progress_bar.progress(min(processed / total, 1.0))
-                    except concurrent.futures.TimeoutError:
-                        progress_bar.progress(1.0)
+                        try:
+                            return calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
+                        except Exception:
+                            return None
 
-                status.update(label=f"✅ Đã quét xong {len(results)} mã hợp lệ (đã loại mã đình chỉ / dữ liệu cũ)!", state="complete", expanded=False)
-            st.session_state['scan_results'] = results
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+                        future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
+                        try:
+                            # Tăng timeout lên 60s để API có đủ thời gian trả về dữ liệu hàng loạt
+                            for future in concurrent.futures.as_completed(future_to_ticker, timeout=60):
+                                processed += 1
+                                try:
+                                    res = future.result()
+                                    if res is not None:
+                                        results.append(res)
+                                except Exception:
+                                    pass
+                                progress_bar.progress(min(processed / total, 1.0))
+                        except concurrent.futures.TimeoutError:
+                            progress_bar.progress(1.0)
+                            st.warning("⚠️ Vượt quá thời gian chờ mạng. Đang hiển thị kết quả các mã đã quét được...")
 
-    if st.session_state['scan_results']:
+                    status.update(label=f"✅ Đã quét xong {len(results)} mã hợp lệ (đã loại mã đình chỉ / dữ liệu cũ)!", state="complete", expanded=False)
+                
+                st.session_state['scan_results'] = results
+
+    # Dùng st.session_state.get để an toàn, phòng ngừa key chưa khởi tạo
+    if st.session_state.get('scan_results', []):
         st.divider()
         raw_df = pd.DataFrame(st.session_state['scan_results'])
         df_display = render_search_and_export(raw_df)
