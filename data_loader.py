@@ -1,10 +1,12 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from vnstock import Vnstock
 
 FALLBACK_TICKERS = ["HPG", "SSI", "VND", "FPT", "TCB", "MBB", "MWG", "VIC", "VHM", "VNM"]
-SOURCES = ['KBS', 'VCI']   # KBS ưu tiên; VCI dự phòng
+SOURCES = ['KBS', 'VCI']
+_API_TIMEOUT = 8   # giây tối đa chờ mỗi nguồn
 
 
 def _normalize(df):
@@ -24,14 +26,20 @@ def _normalize(df):
     return df
 
 
+def _call_vnstock(symbol, src, start, end, interval):
+    """Chạy trong thread — có thể bị cancel từ ngoài."""
+    return Vnstock().stock(symbol=symbol, source=src).quote.history(
+        start=start, end=end, interval=interval)
+
+
 def _fetch_yahoo(symbol, start, end):
     try:
         import yfinance as yf
-        df = yf.download(f"{symbol}.VN", start=start, end=end, progress=False, auto_adjust=True)
+        df = yf.download(f"{symbol}.VN", start=start, end=end,
+                         progress=False, auto_adjust=True)
         if df is None or df.empty:
             return pd.DataFrame()
         df = df.reset_index()
-        # Flatten MultiIndex columns nếu có
         df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
         df.columns = [str(c).lower().strip() for c in df.columns]
         df.rename(columns={'date': 'time'}, inplace=True)
@@ -41,14 +49,15 @@ def _fetch_yahoo(symbol, start, end):
 
 
 def _fetch(symbol, start, end, interval):
-    # 1. Thử vnstock: KBS -> VCI
+    # 1. Thử KBS rồi VCI, mỗi nguồn có hard timeout _API_TIMEOUT giây
     for src in SOURCES:
         try:
-            df = Vnstock().stock(symbol=symbol, source=src).quote.history(
-                start=start, end=end, interval=interval)
-            if df is not None and len(df) > 0:
-                return _normalize(df)
-        except Exception:
+            with ThreadPoolExecutor(max_workers=1) as ex:
+                fut = ex.submit(_call_vnstock, symbol, src, start, end, interval)
+                raw = fut.result(timeout=_API_TIMEOUT)
+            if raw is not None and len(raw) > 0:
+                return _normalize(raw)
+        except (FuturesTimeout, Exception):
             continue
     # 2. Yahoo Finance fallback (chỉ daily)
     if interval == '1D':
@@ -62,18 +71,27 @@ def _fetch(symbol, start, end, interval):
 def get_all_tickers(exchange='all'):
     for src in SOURCES:
         try:
-            df = Vnstock().stock(symbol='ACB', source=src).listing.symbols_by_exchange()
+            with ThreadPoolExecutor(max_workers=1) as ex:
+                fut = ex.submit(
+                    lambda s=src: Vnstock().stock(symbol='ACB', source=s)
+                    .listing.symbols_by_exchange()
+                )
+                df = fut.result(timeout=15)
             df.columns = [str(c).lower().strip() for c in df.columns]
             if 'type' in df.columns:
                 df = df[df['type'].astype(str).str.upper() == 'STOCK']
             if 'exchange' in df.columns:
-                df = df[df['exchange'].astype(str).str.upper().isin(['HOSE', 'HSX', 'HNX', 'UPCOM'])]
+                df = df[df['exchange'].astype(str).str.upper()
+                        .isin(['HOSE', 'HSX', 'HNX', 'UPCOM'])]
                 if exchange != 'all':
-                    tgt = ['HOSE', 'HSX'] if str(exchange).upper() in ('HOSE', 'HSX') else [str(exchange).upper()]
+                    tgt = (['HOSE', 'HSX'] if str(exchange).upper()
+                           in ('HOSE', 'HSX') else [str(exchange).upper()])
                     df = df[df['exchange'].astype(str).str.upper().isin(tgt)]
-            col = 'symbol' if 'symbol' in df.columns else ('ticker' if 'ticker' in df.columns else None)
+            col = ('symbol' if 'symbol' in df.columns
+                   else ('ticker' if 'ticker' in df.columns else None))
             if col:
-                lst = [str(t).strip().upper() for t in df[col].dropna().tolist() if str(t).strip()]
+                lst = [str(t).strip().upper()
+                       for t in df[col].dropna().tolist() if str(t).strip()]
                 if lst:
                     return lst
         except Exception:
@@ -82,14 +100,14 @@ def get_all_tickers(exchange='all'):
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_stock_data(ticker, days_back=3650):
+def get_stock_data(ticker, days_back=365):
     end_date = datetime.now().strftime('%Y-%m-%d')
     start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
     return _fetch(ticker, start_date, end_date, '1D')
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_vnindex_data(ticker="VNINDEX", days_back=3650):
+def get_vnindex_data(ticker="VNINDEX", days_back=365):
     end_date = datetime.now().strftime('%Y-%m-%d')
     start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
     return _fetch('VNINDEX', start_date, end_date, '1D')
