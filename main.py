@@ -109,35 +109,35 @@ exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
 setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
-# --- TEST KBS & FMP (2 nguồn vnstock CHƯA thử) ---
-with st.expander("🔧 TEST KBS & FMP", expanded=True):
+# --- TEST NGUỒN DỮ LIỆU (CHỈ DÙNG NGUỒN ỔN ĐỊNH) ---
+with st.expander("🔧 TEST NGUỒN DỮ LIỆU", expanded=False):
     from vnstock import Vnstock
-    for src in ['KBS', 'FMP']:
-        st.write(f"**Nguồn {src}:**")
-        try:
-            _df = Vnstock().stock(symbol='HPG', source=src).quote.history(
-                start='2025-01-01', end='2025-06-01', interval='1D')
-            if _df is not None and len(_df) > 0:
-                st.success(f"✅ {src} CHẠY ĐƯỢC — {len(_df)} dòng! DÙNG NGUỒN NÀY.")
-            else:
-                st.warning(f"⚠️ {src} trả rỗng.")
-        except Exception as e:
-            st.error(f"❌ {src}: {str(e)[:200]}")
+    import yfinance as yf
 
-    st.write("**2. Gọi thử API trực tiếp (bỏ qua cache):**")
+    # Test 1: KBS (KB Securities - vnstock)
+    st.write("**1️⃣ Nguồn KBS (KB Securities):**")
     try:
-        from vnstock import Vnstock
-        _df = Vnstock().stock(symbol='HPG', source='VCI').quote.history(
+        _df_kbs = Vnstock().stock(symbol='HPG', source='KBS').quote.history(
             start='2025-01-01', end='2025-06-01', interval='1D')
-        if _df is not None and len(_df) > 0:
-            st.success(f"✅ Lấy được {len(_df)} dòng dữ liệu HPG!")
-            st.write("Tên các cột trả về:", list(_df.columns))
-            st.dataframe(_df.tail(3))
+        if _df_kbs is not None and len(_df_kbs) > 0:
+            st.success(f"✅ KBS: {len(_df_kbs)} dòng - NGUỒN CHÍNH!")
         else:
-            st.warning("API trả về RỖNG (không lỗi, nhưng 0 dòng).")
-    except Exception:
-        st.error("❌ API NÉM LỖI — đây là nguyên nhân thật:")
-        st.code(traceback.format_exc())
+            st.warning("⚠️ KBS trả rỗng.")
+    except Exception as e:
+        st.error(f"❌ KBS: {str(e)[:200]}")
+
+    # Test 2: Yahoo Finance (dự phòng)
+    st.write("**2️⃣ Nguồn Yahoo Finance (dự phòng):**")
+    try:
+        _df_yf = yf.download('HPG.VN', start='2025-01-01', end='2025-06-01', progress=False)
+        if _df_yf is not None and len(_df_yf) > 0:
+            st.success(f"✅ Yahoo Finance: {len(_df_yf)} dòng - Dự phòng OK!")
+        else:
+            st.warning("⚠️ Yahoo Finance trả rỗng.")
+    except Exception as e:
+        st.error(f"❌ Yahoo Finance: {str(e)[:200]}")
+
+    st.info("💡 **Kết luận:** Dùng KBS làm nguồn chính, Yahoo Finance làm dự phòng.")
 # --- 4. TẠO 5 TAB ---
 tab_market, tab_screener, tab_simulation, tab_backtest, tab_reports = st.tabs([
     "🌟 Thị Trường", "🔍 Bộ Lọc", "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo"
@@ -228,7 +228,8 @@ with tab_market:
         st.warning("⚠️ Đang chờ dữ liệu VN-INDEX từ API. Vui lòng tải lại trang sau ít phút...")
 
     render_market_tab(chart_df, df_today)
-    # ==========================================
+
+# ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU
 # ==========================================
 with tab_screener:
@@ -415,3 +416,65 @@ with tab_backtest:
 # ==========================================
 with tab_reports:
     st.subheader("📑 Hệ Thống Phân Tích Định Giá Cổ Phiếu")
+
+    if supabase is None:
+        st.warning("⚠️ Chưa cấu hình SUPABASE_URL / SUPABASE_KEY trong Secrets. Tab Báo Cáo tạm thời chưa dùng được.")
+        st.stop()
+
+    st.caption("Dữ liệu hệ thống tự động quét hàng ngày từ 15+ CTCK hàng đầu (SSI, VND, VCI, MBS, MAS, KIS, VCBS, KB, CTS, BSI...).")
+
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        filter_action = st.selectbox("Lọc Khuyến Nghị:", ["Tất cả", "MUA", "NẮM GIỮ", "BÁN"])
+    with col2:
+        rep_ticker = st.text_input("Nhập mã cổ phiếu (Ví dụ: FPT, HPG) hoặc để trống để xem toàn thị trường:", value="", key="rep_ticker_db").upper().strip()
+
+    with st.spinner("Đang truy vấn kho dữ liệu định giá..."):
+        try:
+            query = supabase.table("analyst_reports").select("*")
+
+            if rep_ticker:
+                query = query.eq("ticker", rep_ticker)
+
+            response = query.execute()
+            df_reports = pd.DataFrame(response.data)
+
+            if not df_reports.empty:
+                if filter_action != "Tất cả":
+                    df_reports = df_reports[df_reports['action'] == filter_action]
+
+                if not df_reports.empty:
+                    df_reports['target_price'] = pd.to_numeric(df_reports['target_price'], errors='coerce')
+                    df_reports['buy_price'] = pd.to_numeric(df_reports['buy_price'], errors='coerce')
+
+                    df_reports['Kỳ Vọng (%)'] = ((df_reports['target_price'] - df_reports['buy_price']) / df_reports['buy_price'] * 100).round(2)
+
+                    df_reports = df_reports.sort_values(by='date', ascending=False)
+                    df_display = df_reports[['date', 'ticker', 'company', 'action', 'buy_price', 'target_price', 'Kỳ Vọng (%)', 'report_url']].copy()
+
+                    st.dataframe(
+                        df_display,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "date": st.column_config.DateColumn("📅 Ngày", format="DD/MM/YYYY"),
+                            "ticker": st.column_config.TextColumn("🏷️ Mã"),
+                            "company": st.column_config.TextColumn("🏢 CTCK"),
+                            "action": st.column_config.TextColumn("⚡ Khuyến Nghị"),
+                            "buy_price": st.column_config.NumberColumn("💰 Giá Khuyến Nghị", format="%d ₫"),
+                            "target_price": st.column_config.NumberColumn("🎯 Giá Mục Tiêu", format="%d ₫"),
+                            "Kỳ Vọng (%)": st.column_config.NumberColumn("🚀 Kỳ Vọng Upside", format="%.2f %%"),
+                            "report_url": st.column_config.LinkColumn("📥 Tải PDF", display_text="Xem Báo Cáo")
+                        }
+                    )
+                else:
+                    st.warning("Không có báo cáo nào khớp với bộ lọc của bạn.")
+            else:
+                if rep_ticker:
+                    st.info(f"Hiện tại chưa có dữ liệu báo cáo cho mã {rep_ticker}. Bot cào dữ liệu sẽ tự động bổ sung vào sáng mai!")
+                else:
+                    st.info("Kho báo cáo hiện đang trống. Hãy đợi Bot tự động cào dữ liệu về nhé!")
+
+        except Exception as e:
+            error_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
+            st.error(f"Loi ket noi hoac xu ly du lieu bao cao: {error_msg}")
