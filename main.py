@@ -10,6 +10,9 @@ from ui_layout import render_sidebar, render_market_tab, render_screener_results
 from ux_components import setup_cache_clear_button, render_search_and_export
 import backtester as bt
 
+# --- 1. CẤU HÌNH TRANG ---
+st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
+
 # --- 1b. GIAO DIỆN: TÍM ĐẬM SANG TRỌNG + FONT + HÒA HEADER ---
 st.markdown("""
 <style>
@@ -92,6 +95,9 @@ def init_connection():
         return None
 
 supabase = init_connection()
+
+# --- Danh sách mã bị đình chỉ / hạn chế giao dịch (tự bổ sung khi phát hiện) ---
+BLACKLIST = {"BCG", "HBC", "HNG", "POM", "HAG", "ITA", "TGG", "TTB"}
 
 # --- 3. KHỞI TẠO BIẾN CHO GIAO DIỆN ---
 if 'scan_results' not in st.session_state:
@@ -217,9 +223,24 @@ with tab_screener:
                 processed = 0
 
                 def process_ticker(ticker):
+                    # Lớp 1: chặn mã đã biết bị đình chỉ / hạn chế GD
+                    if ticker in BLACKLIST:
+                        return None
+
                     df = get_stock_data(ticker, days_back=365)
                     if df is None or df.empty:
                         return None
+
+                    # Lớp 2: VƯỢT BẪY DỮ LIỆU CŨ — loại mã không có phiên mới trong 7 ngày
+                    # (mã đình chỉ / hủy niêm yết / ngừng GD sẽ có phiên cuối cách xa hôm nay)
+                    try:
+                        last_date = pd.to_datetime(df['time']).max().normalize()
+                        days_stale = (pd.Timestamp.now().normalize() - last_date).days
+                        if days_stale > 7:
+                            return None
+                    except Exception:
+                        return None
+
                     return calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
@@ -234,7 +255,7 @@ with tab_screener:
                             pass
                         progress_bar.progress(processed / total)
 
-                status.update(label="✅ Đã quét xong siêu tốc và an toàn!", state="complete", expanded=False)
+                status.update(label=f"✅ Đã quét xong {len(results)} mã hợp lệ (đã loại mã đình chỉ / dữ liệu cũ)!", state="complete", expanded=False)
             st.session_state['scan_results'] = results
 
     if st.session_state['scan_results']:
@@ -285,7 +306,7 @@ with tab_simulation:
                                     vertical_spacing=0.03, row_heights=[0.8, 0.2])
 
                 fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['close'],
-                                         line=dict(color='white', width=2), name='Giá Đóng Cửa'), row=1, col=1)
+                                         line=dict(color='#c4b5fd', width=2), name='Giá Đóng Cửa'), row=1, col=1)
 
                 fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Senkou A'],
                                          line=dict(color='rgba(0, 200, 83, 0.4)', width=1), name='Senkou A'), row=1, col=1)
@@ -314,7 +335,8 @@ with tab_simulation:
                     title=f"<b>Phân Tích Ichimoku (Line Chart): {sim_ticker}</b>",
                     height=680, margin=dict(l=10, r=10, t=40, b=10),
                     showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                    xaxis_rangeslider_visible=False, dragmode='pan'
+                    xaxis_rangeslider_visible=False, dragmode='pan',
+                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='#dcd6ec')
                 )
                 fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
 
@@ -401,29 +423,4 @@ with tab_reports:
                     df_reports = df_reports.sort_values(by='date', ascending=False)
                     df_display = df_reports[['date', 'ticker', 'company', 'action', 'buy_price', 'target_price', 'Kỳ Vọng (%)', 'report_url']].copy()
 
-                    st.dataframe(
-                        df_display,
-                        use_container_width=True,
-                        hide_index=True,
-                        column_config={
-                            "date": st.column_config.DateColumn("📅 Ngày", format="DD/MM/YYYY"),
-                            "ticker": st.column_config.TextColumn("🏷️ Mã"),
-                            "company": st.column_config.TextColumn("🏢 CTCK"),
-                            "action": st.column_config.TextColumn("⚡ Khuyến Nghị"),
-                            "buy_price": st.column_config.NumberColumn("💰 Giá Khuyến Nghị", format="%d ₫"),
-                            "target_price": st.column_config.NumberColumn("🎯 Giá Mục Tiêu", format="%d ₫"),
-                            "Kỳ Vọng (%)": st.column_config.NumberColumn("🚀 Kỳ Vọng Upside", format="%.2f %%"),
-                            "report_url": st.column_config.LinkColumn("📥 Tải PDF", display_text="Xem Báo Cáo")
-                        }
-                    )
-                else:
-                    st.warning("Không có báo cáo nào khớp với bộ lọc của bạn.")
-            else:
-                if rep_ticker:
-                    st.info(f"Hiện tại chưa có dữ liệu báo cáo cho mã {rep_ticker}. Bot cào dữ liệu sẽ tự động bổ sung vào sáng mai!")
-                else:
-                    st.info("Kho báo cáo hiện đang trống. Hãy đợi Bot tự động cào dữ liệu về nhé!")
-
-        except Exception as e:
-            error_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
-            st.error(f"Loi ket noi hoac xu ly du lieu bao cao: {error_msg}")
+                    st.dataf
