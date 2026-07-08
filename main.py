@@ -108,24 +108,26 @@ exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
 setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
-# --- TEST QUYẾT ĐỊNH: TCBS trực tiếp (đường khác VCI) ---
-with st.expander("🔧 TEST TCBS TRỰC TIẾP", expanded=True):
+# --- TEST TCBS: thử nhiều endpoint để tìm URL đúng ---
+with st.expander("🔧 TEST TCBS (nhiều URL)", expanded=True):
     import requests
-    try:
-        r = requests.get(
-            "https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term",
-            params={"ticker": "HPG", "type": "stock", "resolution": "D", "countBack": 50},
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=15,
-        )
-        st.write(f"HTTP status: **{r.status_code}**")
-        if r.status_code == 200:
-            n = len(r.json().get("data", []))
-            st.success(f"✅ TCBS TRỰC TIẾP CHẠY ĐƯỢC — {n} dòng. CỨU ĐƯỢC APP!")
-        else:
-            st.error(f"❌ TCBS chặn: {r.status_code}. Nội dung: {r.text[:150]}")
-    except Exception as e:
-        st.error(f"❌ TCBS lỗi kết nối: {str(e)[:200]}")
+    from datetime import datetime
+    to_ts = int(datetime.now().timestamp())
+    urls = [
+        ("v1/bars-long-term", f"https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=HPG&type=stock&resolution=D&to={to_ts}&countBack=50"),
+        ("v1/bars",           f"https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars?ticker=HPG&type=stock&resolution=D&to={to_ts}&countBack=50"),
+        ("v2/bars-long-term", f"https://apipubaws.tcbs.com.vn/stock-insight/v2/stock/bars-long-term?ticker=HPG&type=stock&resolution=D&to={to_ts}&countBack=50"),
+    ]
+    for name, u in urls:
+        try:
+            r = requests.get(u, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+            if r.status_code == 200:
+                n = len(r.json().get("data", []))
+                st.success(f"✅ {name} → HTTP 200, {n} dòng. DÙNG URL NÀY!")
+            else:
+                st.warning(f"⚠️ {name} → HTTP {r.status_code}: {r.text[:100]}")
+        except Exception as e:
+            st.error(f"❌ {name} → {str(e)[:100]}")
 
     st.write("**2. Gọi thử API trực tiếp (bỏ qua cache):**")
     try:
