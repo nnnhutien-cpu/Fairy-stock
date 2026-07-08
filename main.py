@@ -108,19 +108,22 @@ exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
 setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
-# --- KHỐI CHẨN ĐOÁN (xóa sau khi fix xong) ---
-with st.expander("🔧 CHẨN ĐOÁN LỖI DỮ LIỆU — bấm để xem", expanded=True):
+# --- CHẨN ĐOÁN: TEST 3 NGUỒN ---
+with st.expander("🔧 TEST NGUỒN DỮ LIỆU", expanded=True):
     import traceback
-    import sys
+    from vnstock import Vnstock
 
-    st.write("**1. Phiên bản Python & vnstock:**")
-    try:
-        st.code(f"Python: {sys.version}")
-        import vnstock
-        st.code(f"vnstock: {getattr(vnstock, '__version__', 'không rõ')}")
-    except Exception:
-        st.error("KHÔNG import được vnstock!")
-        st.code(traceback.format_exc())
+    for src in ['VCI', 'TCBS', 'MSN']:
+        st.write(f"**Nguồn {src}:**")
+        try:
+            _df = Vnstock().stock(symbol='HPG', source=src).quote.history(
+                start='2025-01-01', end='2025-06-01', interval='1D')
+            if _df is not None and len(_df) > 0:
+                st.success(f"✅ {src} CHẠY ĐƯỢC — {len(_df)} dòng. DÙNG NGUỒN NÀY!")
+            else:
+                st.warning(f"⚠️ {src} trả rỗng.")
+        except Exception as e:
+            st.error(f"❌ {src} lỗi: {str(e)[:150]}")
 
     st.write("**2. Gọi thử API trực tiếp (bỏ qua cache):**")
     try:
