@@ -108,22 +108,24 @@ exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
 setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
-# --- CHẨN ĐOÁN: TEST 3 NGUỒN ---
-with st.expander("🔧 TEST NGUỒN DỮ LIỆU", expanded=True):
-    import traceback
-    from vnstock import Vnstock
-
-    for src in ['VCI', 'TCBS', 'MSN']:
-        st.write(f"**Nguồn {src}:**")
-        try:
-            _df = Vnstock().stock(symbol='HPG', source=src).quote.history(
-                start='2025-01-01', end='2025-06-01', interval='1D')
-            if _df is not None and len(_df) > 0:
-                st.success(f"✅ {src} CHẠY ĐƯỢC — {len(_df)} dòng. DÙNG NGUỒN NÀY!")
-            else:
-                st.warning(f"⚠️ {src} trả rỗng.")
-        except Exception as e:
-            st.error(f"❌ {src} lỗi: {str(e)[:150]}")
+# --- TEST QUYẾT ĐỊNH: TCBS trực tiếp (đường khác VCI) ---
+with st.expander("🔧 TEST TCBS TRỰC TIẾP", expanded=True):
+    import requests
+    try:
+        r = requests.get(
+            "https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term",
+            params={"ticker": "HPG", "type": "stock", "resolution": "D", "countBack": 50},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=15,
+        )
+        st.write(f"HTTP status: **{r.status_code}**")
+        if r.status_code == 200:
+            n = len(r.json().get("data", []))
+            st.success(f"✅ TCBS TRỰC TIẾP CHẠY ĐƯỢC — {n} dòng. CỨU ĐƯỢC APP!")
+        else:
+            st.error(f"❌ TCBS chặn: {r.status_code}. Nội dung: {r.text[:150]}")
+    except Exception as e:
+        st.error(f"❌ TCBS lỗi kết nối: {str(e)[:200]}")
 
     st.write("**2. Gọi thử API trực tiếp (bỏ qua cache):**")
     try:
