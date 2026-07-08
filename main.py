@@ -201,93 +201,100 @@ with tab_market:
     render_market_tab(chart_df, df_today)
 
 # ==========================================
-# TAB 2: BỘ LỌC CỔ PHIẾU
+# TAB 2: BỘ LỌC CỔ PHIẾU (BẢN TRUY VẾT LỖI X-QUANG)
 # ==========================================
 with tab_screener:
-    st.subheader(f"Danh Sách Quét Sàn {exchange_choice} (>20 Tỷ VNĐ)")
+    st.subheader(f"Danh Sách Quét Sàn {exchange_choice}")
     scan_button = st.button("🚀 KÍCH HOẠT QUÉT TOÀN DIỆN", use_container_width=True, type="primary")
 
     if scan_button:
         ex_code = 'all' if exchange_choice == "Tất cả 3 sàn" else exchange_choice
+        
+        # 1. KIỂM TRA SỐ LƯỢNG MÃ THỰC TẾ
         tickers = get_all_tickers(ex_code)
-
+        
         if tickers is None or len(tickers) == 0:
-            st.error("⚠️ Lỗi mạng: Không lấy được danh sách mã chứng khoán!")
+            st.error("⚠️ Lỗi từ data_loader.py: Hàm `get_all_tickers` trả về danh sách rỗng!")
         else:
+            st.info(f"📊 Hệ thống đã lấy thành công danh sách **{len(tickers)}** mã từ API (Chuẩn thực tế ~1525 mã).")
+            
             tickers_to_scan = tickers[:max_scan]
             
-            if len(tickers_to_scan) == 0:
-                st.warning("⚠️ Không có mã nào để quét.")
-            else:
-                with st.status(f"Đang quét {len(tickers_to_scan)} mã (Dữ liệu Daily 200 ngày)...", expanded=True) as status:
-                    progress_bar = st.progress(0)
-                    results = []
-                    total = len(tickers_to_scan)
-                    processed = 0
+            with st.status(f"Đang quét {len(tickers_to_scan)} mã...", expanded=True) as status:
+                progress_bar = st.progress(0)
+                results = []
+                error_logs = [] # Rổ chứa nguyên nhân kẹt data
+                total = len(tickers_to_scan)
+                processed = 0
 
-                    def process_ticker(ticker):
-                        if ticker in BLACKLIST:
-                            return None
-                        
+                def process_ticker(ticker):
+                    if ticker in BLACKLIST:
+                        return {"status": "skip"}
+                    
+                    try:
+                        # Bước 1: Lấy data
                         df = get_stock_data(ticker, days_back=200)
                         if df is None or df.empty:
-                            return None
+                            return {"status": "error", "msg": f"{ticker}: Hàm get_stock_data không lấy được data (trả về None/Empty)."}
                         
-                        # --- FIX LỖI TIMEZONE & SO SÁNH NGÀY ---
+                        # Bước 2: Tính toán chỉ báo
                         try:
-                            # Tìm cột thời gian linh hoạt (trường hợp API đổi tên cột)
-                            time_col = 'time' if 'time' in df.columns else ('date' if 'date' in df.columns else None)
+                            res = calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
+                            if res is None:
+                                return {"status": "error", "msg": f"{ticker}: Hàm calculate_technical_signals trả về None."}
+                            return {"status": "success", "data": res}
+                        
+                        except Exception as e:
+                            # Bắt lỗi cú pháp hoặc tính toán trong file indicators.py
+                            return {"status": "error", "msg": f"{ticker}: Lỗi bên indicators.py -> {str(e)}"}
                             
-                            if time_col:
-                                last_date = pd.to_datetime(df[time_col]).max()
-                                # Xóa timezone (UTC, +7...) để so sánh đồng nhất với now()
-                                if last_date.tzinfo is not None:
-                                    last_date = last_date.tz_localize(None)
-                                
-                                days_stale = (pd.Timestamp.now().normalize() - last_date.normalize()).days
-                                
-                                # Nới lỏng lên 15 ngày để tránh bị kẹt data sau những đợt nghỉ lễ dài (như Tết Âm)
-                                if days_stale > 15: 
-                                    return None
-                        except Exception:
-                            # Bỏ qua lỗi check ngày, BẮT BUỘC cho đi tiếp thay vì return None để không bị kẹt trắng data
-                            pass 
+                    except Exception as e:
+                        # Bắt lỗi kết nối bên file data_loader.py
+                        return {"status": "error", "msg": f"{ticker}: Lỗi bên data_loader.py -> {str(e)}"}
 
+                # Chạy đa luồng
+                with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+                    future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
+                    
+                    for future in concurrent.futures.as_completed(future_to_ticker):
+                        processed += 1
                         try:
-                            return calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
-                        except Exception:
-                            return None
+                            outcome = future.result()
+                            if outcome["status"] == "success":
+                                results.append(outcome["data"])
+                            elif outcome["status"] == "error":
+                                error_logs.append(outcome["msg"])
+                        except Exception as e:
+                            error_logs.append(f"Lỗi luồng ThreadPool: {str(e)}")
+                            
+                        progress_bar.progress(min(processed / total, 1.0))
 
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
-                        future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
-                        try:
-                            # Tăng timeout lên 60s để API có đủ thời gian trả về dữ liệu hàng loạt
-                            for future in concurrent.futures.as_completed(future_to_ticker, timeout=60):
-                                processed += 1
-                                try:
-                                    res = future.result()
-                                    if res is not None:
-                                        results.append(res)
-                                except Exception:
-                                    pass
-                                progress_bar.progress(min(processed / total, 1.0))
-                        except concurrent.futures.TimeoutError:
-                            progress_bar.progress(1.0)
-                            st.warning("⚠️ Vượt quá thời gian chờ mạng. Đang hiển thị kết quả các mã đã quét được...")
+                # 2. XỬ LÝ GIAO DIỆN KHI CÓ LỖI
+                if len(results) > 0:
+                    status.update(label=f"✅ Quét xong {len(results)} mã hợp lệ!", state="complete", expanded=False)
+                else:
+                    status.update(label=f"❌ Quét thất bại toàn bộ! Xin xem chi tiết lỗi bên dưới.", state="error", expanded=True)
 
-                    status.update(label=f"✅ Đã quét xong {len(results)} mã hợp lệ (đã loại mã đình chỉ / dữ liệu cũ)!", state="complete", expanded=False)
-                
-                st.session_state['scan_results'] = results
+            # --- IN RA BỆNH ÁN NẾU BỊ KẸT ---
+            if len(error_logs) > 0 and len(results) == 0:
+                st.error("🚨 APP BỊ KẸT VÌ CÁC LỖI DƯỚI ĐÂY (Vui lòng gửi lại lỗi này để tôi fix tiếp):")
+                with st.expander("MỞ RỘNG ĐỂ XEM CHI TIẾT LỖI NGẦM", expanded=True):
+                    # In ra 10 lỗi đầu tiên để biết nguyên nhân
+                    for err in error_logs[:10]:
+                        st.code(err)
+                    if len(error_logs) > 10:
+                        st.write(f"... và {len(error_logs) - 10} mã khác bị lỗi y hệt.")
+            
+            st.session_state['scan_results'] = results
 
-    # Dùng st.session_state.get để an toàn, phòng ngừa key chưa khởi tạo
+    # Dùng list rỗng [] làm mặc định để không văng lỗi KeyError
     if st.session_state.get('scan_results', []):
         st.divider()
         raw_df = pd.DataFrame(st.session_state['scan_results'])
         df_display = render_search_and_export(raw_df)
         render_screener_results(df_display, signal_filter)
-    else:
+    elif not scan_button:
         st.caption("Hãy cấu hình thông số ở Sidebar trái và bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' để bắt đầu.")
-
 # ==========================================
 # TAB 3: MÔ PHỎNG ICHIMOKU
 # ==========================================
