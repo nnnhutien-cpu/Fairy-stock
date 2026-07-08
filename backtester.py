@@ -1,12 +1,15 @@
+import time
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from vnstock import stock_historical_data
+from vnstock import Vnstock
+
+SOURCE = 'VCI'   # phải TRÙNG với SOURCE trong data_loader.py
 
 
 def _normalize(df):
-    """Chuẩn hóa cột + kiểu dữ liệu cho khớp toàn hệ thống."""
-    if df is None or df.empty:
+    """Chuẩn hóa cột + kiểu dữ liệu — giống hệt data_loader.py."""
+    if df is None or len(df) == 0:
         return None
     df = df.copy()
     df.columns = [str(c).lower().strip() for c in df.columns]
@@ -14,25 +17,29 @@ def _normalize(df):
         df.rename(columns={'date': 'time'}, inplace=True)
     if 'time' in df.columns:
         df['time'] = pd.to_datetime(df['time'], errors='coerce')
-    # Ép giá/khối lượng về số — tránh lỗi rolling khi API trả chuỗi
     for col in ['open', 'high', 'low', 'close', 'volume']:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
     if 'time' in df.columns:
         df = df.dropna(subset=['time']).sort_values('time').reset_index(drop=True)
-    return df
+    return df if not df.empty else None
 
 
-# 1. Cào dữ liệu Khung Ngày (1D)
+# 1. Cào dữ liệu Khung Ngày (1D) — API vnstock 4.0
 def get_daily_data(ticker, years_back):
     end_date = datetime.now().strftime('%Y-%m-%d')
     start_date = (datetime.now() - timedelta(days=years_back * 365)).strftime('%Y-%m-%d')
-    try:
-        df = stock_historical_data(symbol=ticker, start_date=start_date,
-                                   end_date=end_date, resolution="1D", type="stock")
-        return _normalize(df)
-    except Exception:
-        return None
+    for _ in range(3):
+        try:
+            stock = Vnstock().stock(symbol=ticker, source=SOURCE)
+            df = stock.quote.history(start=start_date, end=end_date, interval='1D')
+            norm = _normalize(df)
+            if norm is not None:
+                return norm
+        except Exception:
+            pass
+        time.sleep(0.4)
+    return None
 
 
 # 2. Tính Mây Ichimoku & Volume
@@ -139,7 +146,6 @@ def run_ichimoku_backtest_daily(df, initial_capital=100000000):
     win_rate = 0
     total_trades = 0
     if not trade_df.empty:
-        # Chỉ tính lệnh đã đóng (có lợi nhuận), tránh lỗi so sánh None
         closed = trade_df[trade_df["Lợi Nhuận (%)"].notna()]
         total_trades = len(closed)
         if total_trades > 0:
