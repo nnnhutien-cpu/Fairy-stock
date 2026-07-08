@@ -237,17 +237,20 @@ with tab_screener:
                         return None
                     return calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
 
-                with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
                     future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
-                    for future in concurrent.futures.as_completed(future_to_ticker):
-                        processed += 1
-                        try:
-                            res = future.result()
-                            if res is not None:
-                                results.append(res)
-                        except Exception:
-                            pass
-                        progress_bar.progress(processed / total)
+                    try:
+                        for future in concurrent.futures.as_completed(future_to_ticker, timeout=28):
+                            processed += 1
+                            try:
+                                res = future.result()
+                                if res is not None:
+                                    results.append(res)
+                            except Exception:
+                                pass
+                            progress_bar.progress(min(processed / total, 1.0))
+                    except concurrent.futures.TimeoutError:
+                        progress_bar.progress(1.0)
 
                 status.update(label=f"✅ Đã quét xong {len(results)} mã hợp lệ (đã loại mã đình chỉ / dữ liệu cũ)!", state="complete", expanded=False)
             st.session_state['scan_results'] = results
