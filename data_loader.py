@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from vnstock import Vnstock
 
 FALLBACK_TICKERS = ["HPG", "SSI", "VND", "FPT", "TCB", "MBB", "MWG", "VIC", "VHM", "VNM"]
-SOURCES = ['KBS', 'VCI']   # KBS chạy được -> ưu tiên; VCI dự phòng
+SOURCES = ['KBS', 'VCI']   # KBS ưu tiên; VCI dự phòng
 
 
 def _normalize(df):
@@ -24,7 +24,24 @@ def _normalize(df):
     return df
 
 
+def _fetch_yahoo(symbol, start, end):
+    try:
+        import yfinance as yf
+        df = yf.download(f"{symbol}.VN", start=start, end=end, progress=False, auto_adjust=True)
+        if df is None or df.empty:
+            return pd.DataFrame()
+        df = df.reset_index()
+        # Flatten MultiIndex columns nếu có
+        df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
+        df.columns = [str(c).lower().strip() for c in df.columns]
+        df.rename(columns={'date': 'time'}, inplace=True)
+        return _normalize(df)
+    except Exception:
+        return pd.DataFrame()
+
+
 def _fetch(symbol, start, end, interval):
+    # 1. Thử vnstock: KBS -> VCI
     for src in SOURCES:
         try:
             df = Vnstock().stock(symbol=symbol, source=src).quote.history(
@@ -33,6 +50,11 @@ def _fetch(symbol, start, end, interval):
                 return _normalize(df)
         except Exception:
             continue
+    # 2. Yahoo Finance fallback (chỉ daily)
+    if interval == '1D':
+        df = _fetch_yahoo(symbol, start, end)
+        if not df.empty:
+            return df
     return pd.DataFrame()
 
 
