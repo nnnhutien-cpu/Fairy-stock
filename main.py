@@ -108,7 +108,34 @@ exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
 setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
+# --- KHỐI CHẨN ĐOÁN (xóa sau khi fix xong) ---
+with st.expander("🔧 CHẨN ĐOÁN LỖI DỮ LIỆU — bấm để xem", expanded=True):
+    import traceback
+    import sys
 
+    st.write("**1. Phiên bản Python & vnstock:**")
+    try:
+        st.code(f"Python: {sys.version}")
+        import vnstock
+        st.code(f"vnstock: {getattr(vnstock, '__version__', 'không rõ')}")
+    except Exception:
+        st.error("KHÔNG import được vnstock!")
+        st.code(traceback.format_exc())
+
+    st.write("**2. Gọi thử API trực tiếp (bỏ qua cache):**")
+    try:
+        from vnstock import Vnstock
+        _df = Vnstock().stock(symbol='HPG', source='VCI').quote.history(
+            start='2025-01-01', end='2025-06-01', interval='1D')
+        if _df is not None and len(_df) > 0:
+            st.success(f"✅ Lấy được {len(_df)} dòng dữ liệu HPG!")
+            st.write("Tên các cột trả về:", list(_df.columns))
+            st.dataframe(_df.tail(3))
+        else:
+            st.warning("API trả về RỖNG (không lỗi, nhưng 0 dòng).")
+    except Exception:
+        st.error("❌ API NÉM LỖI — đây là nguyên nhân thật:")
+        st.code(traceback.format_exc())
 # --- 4. TẠO 5 TAB ---
 tab_market, tab_screener, tab_simulation, tab_backtest, tab_reports = st.tabs([
     "🌟 Thị Trường", "🔍 Bộ Lọc", "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo"
