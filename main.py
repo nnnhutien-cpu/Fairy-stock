@@ -109,47 +109,6 @@ exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
 setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
-# --- TEST NGUỒN DỮ LIỆU ---
-with st.expander("🔧 TEST NGUỒN DỮ LIỆU (KBS → VCI → Yahoo Finance)", expanded=False):
-    from vnstock import Vnstock
-    import yfinance as yf
-
-    # Test 1: KBS
-    st.write("**1️⃣ Nguồn KBS (KB Securities — ưu tiên):**")
-    try:
-        _df_kbs = Vnstock().stock(symbol='HPG', source='KBS').quote.history(
-            start='2025-01-01', end='2025-06-01', interval='1D')
-        if _df_kbs is not None and len(_df_kbs) > 0:
-            st.success(f"✅ KBS: {len(_df_kbs)} dòng — NGUỒN CHÍNH")
-        else:
-            st.warning("⚠️ KBS trả rỗng.")
-    except Exception as e:
-        st.error(f"❌ KBS: {str(e)[:200]}")
-
-    # Test 2: VCI
-    st.write("**2️⃣ Nguồn VCI (dự phòng 1):**")
-    try:
-        _df_vci = Vnstock().stock(symbol='HPG', source='VCI').quote.history(
-            start='2025-01-01', end='2025-06-01', interval='1D')
-        if _df_vci is not None and len(_df_vci) > 0:
-            st.success(f"✅ VCI: {len(_df_vci)} dòng")
-        else:
-            st.warning("⚠️ VCI trả rỗng.")
-    except Exception as e:
-        st.error(f"❌ VCI: {str(e)[:200]}")
-
-    # Test 3: Yahoo Finance
-    st.write("**3️⃣ Nguồn Yahoo Finance (dự phòng 2):**")
-    try:
-        _df_yf = yf.download('HPG.VN', start='2025-01-01', end='2025-06-01', progress=False)
-        if _df_yf is not None and len(_df_yf) > 0:
-            st.success(f"✅ Yahoo Finance: {len(_df_yf)} dòng")
-        else:
-            st.warning("⚠️ Yahoo Finance trả rỗng.")
-    except Exception as e:
-        st.error(f"❌ Yahoo Finance: {str(e)[:200]}")
-
-    st.info("💡 **Thứ tự ưu tiên:** KBS → VCI → Yahoo Finance")
 # --- 4. TẠO 5 TAB ---
 tab_market, tab_screener, tab_simulation, tab_backtest, tab_reports = st.tabs([
     "🌟 Thị Trường", "🔍 Bộ Lọc", "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo"
@@ -257,23 +216,18 @@ with tab_screener:
         else:
             tickers_to_scan = tickers[:max_scan]
 
-            with st.status(f"Đang dùng 8 Luồng quét {len(tickers_to_scan)} mã (Dữ liệu Daily 200 ngày)...", expanded=True) as status:
+            with st.status(f"Đang quét {len(tickers_to_scan)} mã (Dữ liệu Daily 200 ngày)...", expanded=True) as status:
                 progress_bar = st.progress(0)
                 results = []
                 total = len(tickers_to_scan)
                 processed = 0
 
                 def process_ticker(ticker):
-                    # Lớp 1: chặn mã đã biết bị đình chỉ / hạn chế GD
                     if ticker in BLACKLIST:
                         return None
-
                     df = get_stock_data(ticker, days_back=200)
                     if df is None or df.empty:
                         return None
-
-                    # Lớp 2: VƯỢT BẪY DỮ LIỆU CŨ — loại mã không có phiên mới trong 7 ngày
-                    # (mã đình chỉ / hủy niêm yết / ngừng GD sẽ có phiên cuối cách xa hôm nay)
                     try:
                         last_date = pd.to_datetime(df['time']).max().normalize()
                         days_stale = (pd.Timestamp.now().normalize() - last_date).days
@@ -281,10 +235,9 @@ with tab_screener:
                             return None
                     except Exception:
                         return None
-
                     return calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
 
-                with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
                     future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
                     for future in concurrent.futures.as_completed(future_to_ticker):
                         processed += 1
