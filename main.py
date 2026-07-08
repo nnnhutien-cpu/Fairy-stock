@@ -108,26 +108,20 @@ exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
 setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
-# --- TEST TCBS: thử nhiều endpoint để tìm URL đúng ---
-with st.expander("🔧 TEST TCBS (nhiều URL)", expanded=True):
-    import requests
-    from datetime import datetime
-    to_ts = int(datetime.now().timestamp())
-    urls = [
-        ("v1/bars-long-term", f"https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=HPG&type=stock&resolution=D&to={to_ts}&countBack=50"),
-        ("v1/bars",           f"https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars?ticker=HPG&type=stock&resolution=D&to={to_ts}&countBack=50"),
-        ("v2/bars-long-term", f"https://apipubaws.tcbs.com.vn/stock-insight/v2/stock/bars-long-term?ticker=HPG&type=stock&resolution=D&to={to_ts}&countBack=50"),
-    ]
-    for name, u in urls:
+# --- TEST KBS & FMP (2 nguồn vnstock CHƯA thử) ---
+with st.expander("🔧 TEST KBS & FMP", expanded=True):
+    from vnstock import Vnstock
+    for src in ['KBS', 'FMP']:
+        st.write(f"**Nguồn {src}:**")
         try:
-            r = requests.get(u, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
-            if r.status_code == 200:
-                n = len(r.json().get("data", []))
-                st.success(f"✅ {name} → HTTP 200, {n} dòng. DÙNG URL NÀY!")
+            _df = Vnstock().stock(symbol='HPG', source=src).quote.history(
+                start='2025-01-01', end='2025-06-01', interval='1D')
+            if _df is not None and len(_df) > 0:
+                st.success(f"✅ {src} CHẠY ĐƯỢC — {len(_df)} dòng! DÙNG NGUỒN NÀY.")
             else:
-                st.warning(f"⚠️ {name} → HTTP {r.status_code}: {r.text[:100]}")
+                st.warning(f"⚠️ {src} trả rỗng.")
         except Exception as e:
-            st.error(f"❌ {name} → {str(e)[:100]}")
+            st.error(f"❌ {src}: {str(e)[:200]}")
 
     st.write("**2. Gọi thử API trực tiếp (bỏ qua cache):**")
     try:
