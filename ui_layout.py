@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 
+
 def render_sidebar():
     with st.sidebar:
         st.title("🧚‍♀️ CÔ TIÊN STOCK")
@@ -10,7 +11,7 @@ def render_sidebar():
         exchange_choice = st.selectbox("Chọn sàn giao dịch:", ["HOSE", "HNX", "UPCOM", "Tất cả 3 sàn"])
         signal_filter = st.radio("Bộ lọc tín hiệu kỹ thuật:", ["Tất cả", "🟢 Tích cực", "🔴 Tiêu cực"])
         max_scan = st.slider("Số lượng mã quét tối đa:", 10, 2000, 1600)
-        
+
         with st.expander("🛠️ TÙY CHỈNH ICHIMOKU (NÂNG CAO)", expanded=False):
             p_tenkan = st.number_input("Tenkan-sen", value=9, step=1)
             p_kijun = st.number_input("Kijun-sen", value=26, step=1)
@@ -22,24 +23,26 @@ def render_sidebar():
 def render_market_tab(chart_df, df_today):
     st.subheader("Nhịp Đập Thị Trường")
     if chart_df is not None and not chart_df.empty:
-        st.line_chart(chart_df, color=["#FF0000", "#00FF00"], height=380)
+        # màu khớp theme tím: hôm qua = tím mờ (tham chiếu), hôm nay = xanh nổi
+        st.line_chart(chart_df, color=["#8b7fb5", "#34d399"], height=380)
+        st.caption("🟣 Hôm qua (tham chiếu) · 🟢 Hôm nay (real-time)")
+    else:
+        st.info("📡 Chưa có dữ liệu biểu đồ. Dữ liệu VN-INDEX đang được tải hoặc thị trường chưa mở phiên.")
 
 
 def render_screener_results(results_df, signal_filter):
     if not isinstance(results_df, pd.DataFrame):
         results_df = pd.DataFrame(results_df)
-    
+
     if not results_df.empty:
-        # Lọc trạng thái
         if signal_filter != "Tất cả" and 'Trạng thái' in results_df.columns:
             results_df = results_df[results_df['Trạng thái'] == signal_filter]
-        
-        # LẤY TẤT CẢ CÁC CỘT, CHỈ LOẠI BỎ DUY NHẤT CỘT MÃ "9"
-        # str(col) != '9' đảm bảo xóa cả cột số 9 và cột chữ '9'
+
+        # Loại cột rác tên "9" nếu có
         cols_to_use = [col for col in results_df.columns if str(col) != '9']
         df_display = results_df[cols_to_use]
 
-        # Hiển thị bảng đã được dọn dẹp lên Streamlit
+        st.caption(f"📊 Tìm thấy {len(df_display)} mã khớp bộ lọc.")
         st.dataframe(df_display, use_container_width=True, hide_index=True)
     else:
         st.info("Chưa có dữ liệu.")
