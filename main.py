@@ -101,11 +101,24 @@ supabase = init_connection()
 # --- Danh sách mã bị đình chỉ / hạn chế giao dịch (tự bổ sung khi phát hiện) ---
 BLACKLIST = {"BCG", "HBC", "HNG", "POM", "HAG", "ITA", "TGG", "TTB"}
 
+# --- Danh sách mã vốn hoá lớn / thanh khoản cao (VN30 + một số mã lớn khác) ---
+# Dùng để: (1) ưu tiên quét trước -> có kết quả hợp lệ xuất hiện nhanh trong vài giây,
+# (2) làm "Chế độ NHANH" -> chỉ quét nhóm này, gần như chắc chắn đủ thanh khoản >=20 tỷ/phiên
+# nên tỷ lệ hợp lệ cao, tránh lãng phí quota vào các mã nhỏ chắc chắn bị lọc bỏ.
+PRIORITY_TICKERS = [
+    "ACB", "BCM", "BID", "BVH", "CTG", "FPT", "GAS", "GVR", "HDB", "HPG",
+    "MBB", "MSN", "MWG", "PLX", "POW", "SAB", "SHB", "SSB", "SSI", "STB",
+    "TCB", "TPB", "VCB", "VHM", "VIB", "VIC", "VJC", "VNM", "VPB", "VRE",
+    "DGC", "DPM", "DCM", "PVD", "PVS", "GEX", "KDH", "NLG", "DXG", "PDR",
+    "VND", "HCM", "VCI", "BSI", "CTS", "MSB", "OCB", "EIB", "LPB", "SGB",
+    "REE", "GMD", "HAH", "PNJ", "DGW", "FRT", "VTP", "ANV", "VHC", "DBC",
+]
+
 # --- 3. KHỞI TẠO BIẾN CHO GIAO DIỆN ---
 if 'scan_results' not in st.session_state:
     st.session_state['scan_results'] = []
 
-exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift, vnstock_api_key = render_sidebar()
+exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift, vnstock_api_key, fast_mode = render_sidebar()
 
 # --- Đăng ký API Key vnstock (nếu có) để tăng giới hạn tốc độ từ 20 -> 60 request/phút ---
 # Không có key: tài khoản "khách" chỉ được 20 request/phút -> quét 1500 mã sẽ mất hơn 1 tiếng
@@ -237,8 +250,22 @@ with tab_screener:
             st.error("⚠️ Lỗi từ data_loader.py: Hàm `get_all_tickers` trả về danh sách rỗng!")
         else:
             st.info(f"📊 Hệ thống đã lấy thành công danh sách **{len(tickers)}** mã từ API (Chuẩn thực tế ~1525 mã).")
-            
-            tickers_to_scan = tickers[:max_scan]
+
+            # ƯU TIÊN QUÉT NHÓM VỐN HOÁ LỚN / THANH KHOẢN CAO TRƯỚC:
+            # -> có mã hợp lệ hiện ra ngay trong vài giây đầu thay vì phải chờ quét lần lượt
+            #    hết các mã nhỏ (đa phần sẽ bị loại vì không đủ thanh khoản >=20 tỷ/phiên).
+            ticker_set = set(tickers)
+            priority_present = [t for t in PRIORITY_TICKERS if t in ticker_set]
+            rest = [t for t in tickers if t not in set(priority_present)]
+
+            if fast_mode:
+                # Chế độ NHANH: chỉ quét nhóm ưu tiên (thường đủ thanh khoản) -> nhanh, ít lãng phí quota
+                tickers_ordered = priority_present if priority_present else tickers
+                st.caption(f"⚡ Chế độ NHANH đang bật: chỉ quét {len(tickers_ordered)} mã vốn hoá lớn/thanh khoản cao (tắt ở sidebar để quét toàn sàn).")
+            else:
+                tickers_ordered = priority_present + rest
+
+            tickers_to_scan = tickers_ordered[:max_scan]
 
             # ƯỚC TÍNH THỜI GIAN: vnstock giới hạn 20 request/phút (khách) hoặc 60/phút (có API key)
             rate_per_min = 60 if active_api_key else 20
