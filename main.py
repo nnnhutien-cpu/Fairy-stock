@@ -522,116 +522,317 @@ with tab_backtest:
             else:
                 st.error("Lỗi: Không lấy được dữ liệu. Hãy kiểm tra lại mã cổ phiếu hoặc API đang bảo trì!")
 
-# PATCH V3 - TAB 5: BÁO CÁO
-# Fix thêm: tự normalize SUPABASE_URL (strip, thêm https:// nếu thiếu)
+# ==========================================
+# PATCH V4 - TAB 5: BÁO CÁO PHÂN TÍCH TỪ CTCK
+# Không dùng Supabase. Cào trực tiếp từ:
+#   1. DNSE  — public API, không cần login
+#   2. Vietstock Finance — endpoint public báo cáo phân tích
+#   3. CafeF — fallback HTML scrape
+# Cache 4 giờ bằng st.cache_data để không cào lại mỗi lần bấm tab.
+# ==========================================
 
+import requests as _req
+import pandas as _pd
+from datetime import datetime as _dt, timedelta as _td
+import streamlit as st
+
+# ── NGUỒN 1: DNSE analyst recommendations (public, không cần auth) ──────────
+@st.cache_data(ttl=14400, show_spinner=False)
+def _fetch_dnse_reports(ticker: str = "") -> _pd.DataFrame:
+    """
+    DNSE public endpoint trả về khuyến nghị từ nhiều CTCK.
+    Docs: https://developers.dnse.com.vn  (không cần key cho endpoint này)
+    """
+    rows = []
+    try:
+        # Endpoint tổng hợp khuyến nghị — DNSE trả JSON chuẩn UTF-8
+        url = "https://finfo-api.dnse.com.vn/v3/analyst-recommendations"
+        params = {"size": 200, "page": 1}
+        if ticker:
+            params["symbol"] = ticker.upper()
+
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json",
+            "Accept-Charset": "utf-8",
+        }
+        resp = _req.get(url, params=params, headers=headers, timeout=10)
+        resp.encoding = "utf-8"
+
+        if resp.status_code == 200:
+            data = resp.json()
+            # DNSE trả về list hoặc {"data": [...]}
+            items = data if isinstance(data, list) else data.get("data", [])
+            for item in items:
+                rows.append({
+                    "Ngày":           item.get("publishDate", item.get("date", ""))[:10],
+                    "Mã":             item.get("symbol", item.get("ticker", "")),
+                    "CTCK":           item.get("firm", item.get("company", item.get("analyst", ""))),
+                    "Khuyến Nghị":    item.get("recommendation", item.get("action", "")),
+                    "Giá Hiện Tại":   item.get("currentPrice", item.get("closePrice", 0)),
+                    "Giá Mục Tiêu":   item.get("targetPrice", item.get("target_price", 0)),
+                    "Nguồn":          "DNSE",
+                    "Link PDF":       item.get("reportUrl", item.get("url", "")),
+                })
+    except Exception:
+        pass
+    return _pd.DataFrame(rows)
+
+
+# ── NGUỒN 2: Vietstock báo cáo phân tích (public JSON, không cần login) ─────
+@st.cache_data(ttl=14400, show_spinner=False)
+def _fetch_vietstock_reports(ticker: str = "") -> _pd.DataFrame:
+    """
+    Vietstock Finance public API — endpoint báo cáo phân tích tổng hợp.
+    Lấy 30 ngày gần nhất, filter theo ticker nếu có.
+    """
+    rows = []
+    try:
+        today   = _dt.now().strftime("%Y-%m-%d")
+        from_dt = (_dt.now() - _td(days=30)).strftime("%Y-%m-%d")
+
+        url = "https://finance.vietstock.vn/data/analyst-report"
+        params = {
+            "fromDate": from_dt,
+            "toDate":   today,
+            "page":     1,
+            "pageSize": 200,
+            "catID":    0,          # 0 = tất cả ngành
+            "stockCode": ticker.upper() if ticker else "",
+        }
+        headers = {
+            "User-Agent":   "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Referer":      "https://finance.vietstock.vn/bao-cao-phan-tich.htm",
+            "Accept":       "application/json, text/javascript, */*",
+            "Accept-Charset": "utf-8",
+        }
+        resp = _req.get(url, params=params, headers=headers, timeout=12)
+        resp.encoding = "utf-8"
+
+        if resp.status_code == 200:
+            try:
+                payload = resp.json()
+            except Exception:
+                return _pd.DataFrame(rows)
+
+            # Vietstock thường trả {"data": [...]} hoặc list thẳng
+            items = payload if isinstance(payload, list) else payload.get("data", payload.get("Data", []))
+            for item in items:
+                stock = item.get("StockCode", item.get("stockCode", item.get("Symbol", "")))
+                rows.append({
+                    "Ngày":         (item.get("PublishDate", item.get("publishDate", "")) or "")[:10],
+                    "Mã":           stock,
+                    "CTCK":         item.get("AnalystFirmName", item.get("Source", item.get("source", ""))),
+                    "Khuyến Nghị":  item.get("Recommendation", item.get("recommendation", item.get("Action", ""))),
+                    "Giá Hiện Tại": item.get("CurrentPrice", item.get("closePrice", 0)),
+                    "Giá Mục Tiêu": item.get("TargetPrice",  item.get("targetPrice", 0)),
+                    "Nguồn":        "Vietstock",
+                    "Link PDF":     item.get("ReportUrl", item.get("reportUrl", item.get("DocumentUrl", ""))),
+                })
+    except Exception:
+        pass
+    return _pd.DataFrame(rows)
+
+
+# ── NGUỒN 3: CafeF tổng hợp khuyến nghị (HTML scrape, fallback) ─────────────
+@st.cache_data(ttl=14400, show_spinner=False)
+def _fetch_cafef_reports(ticker: str = "") -> _pd.DataFrame:
+    """
+    CafeF trang khuyến nghị phân tích — scrape bảng HTML.
+    URL: https://cafef.vn/thi-truong-chung-khoan/khuyen-nghi-dau-tu.chn
+    """
+    rows = []
+    try:
+        from bs4 import BeautifulSoup
+
+        url = "https://cafef.vn/thi-truong-chung-khoan/khuyen-nghi-dau-tu.chn"
+        if ticker:
+            url = f"https://cafef.vn/du-lieu/bao-cao/{ticker.lower()}-0.chn"
+
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Accept-Charset": "utf-8",
+        }
+        resp = _req.get(url, headers=headers, timeout=12)
+        resp.encoding = "utf-8"
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        table = soup.find("table", {"class": lambda c: c and "tbl" in c.lower()})
+        if not table:
+            return _pd.DataFrame(rows)
+
+        headers_row = [th.get_text(strip=True) for th in table.find_all("th")]
+        for tr in table.find_all("tr")[1:]:
+            tds = [td.get_text(strip=True) for td in tr.find_all("td")]
+            if len(tds) >= 4:
+                link_tag = tr.find("a", href=True)
+                link = "https://cafef.vn" + link_tag["href"] if link_tag else ""
+                rows.append({
+                    "Ngày":         tds[0] if len(tds) > 0 else "",
+                    "Mã":           tds[1] if len(tds) > 1 else ticker,
+                    "CTCK":         tds[2] if len(tds) > 2 else "",
+                    "Khuyến Nghị":  tds[3] if len(tds) > 3 else "",
+                    "Giá Hiện Tại": tds[4] if len(tds) > 4 else 0,
+                    "Giá Mục Tiêu": tds[5] if len(tds) > 5 else 0,
+                    "Nguồn":        "CafeF",
+                    "Link PDF":     link,
+                })
+    except Exception:
+        pass
+    return _pd.DataFrame(rows)
+
+
+# ── HÀM TỔNG HỢP: gọi song song 3 nguồn, gộp lại, dedup ───────────────────
+@st.cache_data(ttl=14400, show_spinner=False)
+def _fetch_all_reports(ticker: str = "") -> _pd.DataFrame:
+    import concurrent.futures
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+        futures = {
+            ex.submit(_fetch_dnse_reports,      ticker): "DNSE",
+            ex.submit(_fetch_vietstock_reports,  ticker): "Vietstock",
+            ex.submit(_fetch_cafef_reports,      ticker): "CafeF",
+        }
+        for future in concurrent.futures.as_completed(futures, timeout=15):
+            try:
+                df = future.result()
+                if df is not None and not df.empty:
+                    results.append(df)
+            except Exception:
+                pass
+
+    if not results:
+        return _pd.DataFrame()
+
+    df_all = _pd.concat(results, ignore_index=True)
+
+    # Chuẩn hoá cột số
+    for col in ["Giá Hiện Tại", "Giá Mục Tiêu"]:
+        df_all[col] = _pd.to_numeric(
+            df_all[col].astype(str).str.replace(",", "").str.replace(".", ""),
+            errors="coerce"
+        ).fillna(0)
+
+    # Tính Kỳ Vọng Upside %
+    mask = (df_all["Giá Hiện Tại"] > 0) & (df_all["Giá Mục Tiêu"] > 0)
+    df_all["Upside (%)"] = 0.0
+    df_all.loc[mask, "Upside (%)"] = (
+        (df_all.loc[mask, "Giá Mục Tiêu"] - df_all.loc[mask, "Giá Hiện Tại"])
+        / df_all.loc[mask, "Giá Hiện Tại"] * 100
+    ).round(1)
+
+    # Sắp xếp mới nhất trước
+    df_all = df_all.sort_values("Ngày", ascending=False).reset_index(drop=True)
+
+    # Dedup: cùng Ngày + Mã + CTCK thì giữ 1
+    df_all = df_all.drop_duplicates(subset=["Ngày", "Mã", "CTCK"], keep="first")
+
+    return df_all
+
+
+# ══════════════════════════════════════════════════════════
+#  RENDER TAB BÁO CÁO
+#  Thay toàn bộ khối `with tab_reports:` trong main.py bằng đoạn dưới đây
+# ══════════════════════════════════════════════════════════
 with tab_reports:
     st.subheader("📑 Hệ Thống Phân Tích Định Giá Cổ Phiếu")
-    st.caption("Dữ liệu hệ thống tự động quét hàng ngày từ 15+ CTCK hàng đầu (SSI, VND, VCI, MBS, MAS, KIS, VCBS, KB, CTS, BSI...).")
+    st.caption(
+        "Dữ liệu tổng hợp tự động từ **DNSE · Vietstock · CafeF** — "
+        "cập nhật mỗi 4 giờ, không cần đăng nhập."
+    )
 
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        filter_action = st.selectbox("Lọc Khuyến Nghị:", ["Tất cả", "MUA", "NẮM GIỮ", "BÁN"])
-    with col2:
+    # ── Bộ lọc ──────────────────────────────────────────────────────────────
+    col_f1, col_f2, col_f3 = st.columns([1, 1, 2])
+    with col_f1:
+        filter_action = st.selectbox(
+            "Lọc Khuyến Nghị:",
+            ["Tất cả", "MUA", "NẮM GIỮ", "BÁN", "TÍCH LŨY", "KHẢ QUAN"],
+        )
+    with col_f2:
+        filter_source = st.selectbox(
+            "Nguồn dữ liệu:",
+            ["Tất cả", "DNSE", "Vietstock", "CafeF"],
+        )
+    with col_f3:
         rep_ticker = st.text_input(
-            "Nhập mã cổ phiếu (Ví dụ: FPT, HPG) hoặc để trống để xem toàn thị trường:",
-            value="", key="rep_ticker_db"
+            "Mã cổ phiếu (để trống = toàn thị trường):",
+            value="",
+            key="rep_ticker_v4",
+            placeholder="Ví dụ: FPT, HPG, VNM...",
         ).upper().strip()
 
-    with st.spinner("Đang truy vấn kho dữ liệu định giá..."):
-        try:
-            import requests as _req
+    # ── Nút refresh thủ công ────────────────────────────────────────────────
+    col_btn, col_note = st.columns([1, 4])
+    with col_btn:
+        if st.button("🔄 Làm mới dữ liệu", key="refresh_reports"):
+            _fetch_all_reports.clear()
+            st.rerun()
+    with col_note:
+        st.caption("⏱️ Dữ liệu được cache 4 giờ. Nhấn 'Làm mới' để cào lại ngay.")
 
-            # ── Lấy & normalize URL ──────────────────────────────────────────
-            _raw_url = st.secrets["SUPABASE_URL"]
-            _sb_key  = st.secrets["SUPABASE_KEY"]
+    # ── Cào dữ liệu ─────────────────────────────────────────────────────────
+    with st.spinner("Đang cào dữ liệu từ DNSE · Vietstock · CafeF..."):
+        df_reports = _fetch_all_reports(rep_ticker)
 
-            # Strip khoảng trắng / newline / ký tự ẩn thường bị copy-paste vào
-            _sb_url = _raw_url.strip().rstrip("/")
+    # ── Hiển thị kết quả ────────────────────────────────────────────────────
+    if df_reports.empty:
+        st.info(
+            "⚠️ Chưa lấy được dữ liệu từ các nguồn. Có thể do:\n"
+            "- Các trang đang bảo trì\n"
+            "- Streamlit Cloud chặn outbound request đến nguồn này\n\n"
+            "Thử nhấn **Làm mới dữ liệu** sau ít phút."
+        )
+    else:
+        # Áp filter
+        df_show = df_reports.copy()
+        if filter_action != "Tất cả":
+            df_show = df_show[
+                df_show["Khuyến Nghị"].str.upper().str.contains(filter_action, na=False)
+            ]
+        if filter_source != "Tất cả":
+            df_show = df_show[df_show["Nguồn"] == filter_source]
 
-            # Tự thêm scheme nếu thiếu
-            if _sb_url and not _sb_url.startswith("http"):
-                _sb_url = "https://" + _sb_url
+        # Metrics tổng quan
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("📋 Tổng báo cáo", len(df_show))
+        n_buy  = df_show["Khuyến Nghị"].str.upper().str.contains("MUA|TÍCH LŨY|KHẢ QUAN|BUY", na=False).sum()
+        n_hold = df_show["Khuyến Nghị"].str.upper().str.contains("GIỮ|HOLD|NEUTRAL", na=False).sum()
+        n_sell = df_show["Khuyến Nghị"].str.upper().str.contains("BÁN|SELL", na=False).sum()
+        m2.metric("🟢 Mua / Tích lũy", n_buy)
+        m3.metric("🟡 Nắm giữ", n_hold)
+        m4.metric("🔴 Bán", n_sell)
 
-            # Kiểm tra URL hợp lệ trước khi gọi API
-            if not _sb_url or "supabase" not in _sb_url:
-                st.error(
-                    f"⚠️ SUPABASE_URL không hợp lệ: `{_sb_url[:60]}`\n\n"
-                    "Vào **Settings → Secrets** và kiểm tra lại giá trị SUPABASE_URL. "
-                    "Định dạng đúng: `https://abcxyz.supabase.co`"
-                )
-                st.stop()
+        st.divider()
 
-            # ── Gọi REST API trực tiếp ───────────────────────────────────────
-            _headers = {
-                "apikey":        _sb_key.strip(),
-                "Authorization": f"Bearer {_sb_key.strip()}",
-                "Content-Type":  "application/json",
-            }
-            _params = {"select": "*", "order": "date.desc", "limit": "500"}
-            if rep_ticker:
-                _params["ticker"] = f"eq.{rep_ticker}"
-
-            _resp = _req.get(
-                f"{_sb_url}/rest/v1/analyst_reports",
-                headers=_headers,
-                params=_params,
-                timeout=15,
+        if df_show.empty:
+            st.warning("Không có báo cáo nào khớp bộ lọc.")
+        else:
+            st.dataframe(
+                df_show[[
+                    "Ngày", "Mã", "CTCK", "Khuyến Nghị",
+                    "Giá Hiện Tại", "Giá Mục Tiêu", "Upside (%)",
+                    "Nguồn", "Link PDF"
+                ]],
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Ngày":           st.column_config.TextColumn("📅 Ngày"),
+                    "Mã":             st.column_config.TextColumn("🏷️ Mã"),
+                    "CTCK":           st.column_config.TextColumn("🏢 CTCK"),
+                    "Khuyến Nghị":    st.column_config.TextColumn("⚡ Khuyến Nghị"),
+                    "Giá Hiện Tại":   st.column_config.NumberColumn("💰 Giá Hiện Tại", format="%d ₫"),
+                    "Giá Mục Tiêu":   st.column_config.NumberColumn("🎯 Giá Mục Tiêu", format="%d ₫"),
+                    "Upside (%)":     st.column_config.NumberColumn("🚀 Upside", format="%.1f %%"),
+                    "Nguồn":          st.column_config.TextColumn("🔗 Nguồn"),
+                    "Link PDF":       st.column_config.LinkColumn("📥 Báo Cáo", display_text="Xem"),
+                },
             )
-            _resp.encoding = "utf-8"
 
-            if _resp.status_code == 404:
-                st.info("Bảng `analyst_reports` chưa có dữ liệu hoặc chưa được tạo. Hãy chạy bot cào dữ liệu trước!")
-                st.stop()
-
-            if _resp.status_code != 200:
-                st.error(f"⚠️ Supabase trả về lỗi {_resp.status_code}: {_resp.text[:300]}")
-                st.stop()
-
-            _data = _resp.json()
-            df_reports = pd.DataFrame(_data)
-
-            if not df_reports.empty:
-                if filter_action != "Tất cả":
-                    df_reports = df_reports[df_reports["action"] == filter_action]
-
-                if not df_reports.empty:
-                    df_reports["target_price"] = pd.to_numeric(df_reports["target_price"], errors="coerce")
-                    df_reports["buy_price"]    = pd.to_numeric(df_reports["buy_price"],    errors="coerce")
-                    df_reports["Kỳ Vọng (%)"] = (
-                        (df_reports["target_price"] - df_reports["buy_price"])
-                        / df_reports["buy_price"] * 100
-                    ).round(2)
-
-                    df_display = df_reports[
-                        ["date", "ticker", "company", "action",
-                         "buy_price", "target_price", "Kỳ Vọng (%)", "report_url"]
-                    ].copy()
-
-                    st.dataframe(
-                        df_display,
-                        use_container_width=True,
-                        hide_index=True,
-                        column_config={
-                            "date":         st.column_config.DateColumn("📅 Ngày", format="DD/MM/YYYY"),
-                            "ticker":       st.column_config.TextColumn("🏷️ Mã"),
-                            "company":      st.column_config.TextColumn("🏢 CTCK"),
-                            "action":       st.column_config.TextColumn("⚡ Khuyến Nghị"),
-                            "buy_price":    st.column_config.NumberColumn("💰 Giá Khuyến Nghị", format="%d ₫"),
-                            "target_price": st.column_config.NumberColumn("🎯 Giá Mục Tiêu",    format="%d ₫"),
-                            "Kỳ Vọng (%)": st.column_config.NumberColumn("🚀 Kỳ Vọng Upside",  format="%.2f %%"),
-                            "report_url":   st.column_config.LinkColumn("📥 Tải PDF", display_text="Xem Báo Cáo"),
-                        },
-                    )
-                else:
-                    st.warning("Không có báo cáo nào khớp với bộ lọc của bạn.")
-            else:
-                if rep_ticker:
-                    st.info(f"Hiện tại chưa có dữ liệu báo cáo cho mã {rep_ticker}. Bot cào dữ liệu sẽ tự động bổ sung vào sáng mai!")
-                else:
-                    st.info("Kho báo cáo hiện đang trống. Hãy đợi Bot tự động cào dữ liệu về nhé!")
-
-        except KeyError as e:
-            st.warning(f"⚠️ Thiếu secret: {e}. Vào Settings → Secrets và thêm SUPABASE_URL + SUPABASE_KEY.")
-        except Exception as e:
-            st.error(f"⚠️ Lỗi kết nối hoặc xử lý dữ liệu báo cáo: {str(e)}")
+            # Export CSV
+            csv_bytes = df_show.to_csv(index=False).encode("utf-8-sig")
+            st.download_button(
+                label="⬇️ Tải CSV",
+                data=csv_bytes,
+                file_name=f"bao_cao_phan_tich_{_dt.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+            )
