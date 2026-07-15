@@ -6,7 +6,7 @@ import streamlit.components.v1 as components
 from supabase import create_client
 import traceback
 
-from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex
+from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex, set_rate_limit
 from indicators import calculate_technical_signals
 from ui_layout import render_sidebar, render_market_tab, render_screener_results
 from ux_components import setup_cache_clear_button, render_search_and_export
@@ -120,8 +120,11 @@ if active_api_key:
     try:
         import vnai
         vnai.setup_api_key(active_api_key)
+        set_rate_limit(55)  # có API key -> hạn mức 60/phút, để dư an toàn 55
     except Exception:
-        pass
+        set_rate_limit(18)
+else:
+    set_rate_limit(18)  # tài khoản khách -> hạn mức 20/phút, để dư an toàn 18
 
 setup_cache_clear_button()
 
