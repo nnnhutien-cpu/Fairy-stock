@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-from vnstock import Vnstock
+from vnstock.api.quote import Quote
+from vnstock.api.listing import Listing
 
 # Danh sách dự phòng nếu xui xẻo cả 3 CTCK cùng sập API
 FALLBACK_TICKERS = ["HPG", "SSI", "VND", "FPT", "TCB", "MBB", "MWG", "VIC", "VHM", "VNM"]
@@ -53,57 +54,60 @@ def _fetch_yahoo(symbol, start, end):
         return pd.DataFrame()
 
 def _fetch(symbol, start, end, interval):
-    # CƠ CHẾ DỰ PHÒNG: Thử lần lượt các nguồn, VCI và TCBS ổn định nhất
-    sources = ['VCI', 'TCBS', 'KBS']
-    
+    # CƠ CHẾ DỰ PHÒNG: Thử lần lượt các nguồn còn được vnstock>=4 hỗ trợ.
+    # LƯU Ý: 'TCBS' đã bị gỡ bỏ khỏi vnstock từ bản 4.x nên KHÔNG dùng nữa (luôn lỗi ngầm trước đây).
+    # Dùng Quote (vnstock.api.quote) thay vì Vnstock().stock(...) vì class cũ đã bị deprecated
+    # và khi khởi tạo sẽ tự động load thêm Company/Finance/Dividend... gây tốn API call
+    # và dễ bị nguồn dữ liệu chặn (403) khi quét nhiều mã cùng lúc -> đây là nguyên nhân chính khiến
+    # tab Bộ Lọc bị "kẹt" không ra dữ liệu.
+    sources = ['VCI', 'MSN']
+
     for src in sources:
         try:
-            df = Vnstock().stock(symbol=symbol, source=src).quote.history(
+            df = Quote(symbol=symbol, source=src).history(
                 start=start, end=end, interval=interval
             )
             if df is not None and not df.empty:
                 return _normalize(df)
         except Exception:
-            continue # Nếu lỗi API CTCK này, nhảy sang thử CTCK khác
-            
-    # Nếu cả 3 nguồn nội địa đều sập, cầu cứu Yahoo Finance
+            continue # Nếu lỗi API nguồn này, nhảy sang thử nguồn khác
+
+    # Nếu cả các nguồn nội địa đều sập, cầu cứu Yahoo Finance
     if interval == '1D':
         return _fetch_yahoo(symbol, start, end)
-        
+
     return pd.DataFrame()
 
 @st.cache_data(ttl=86400) # Lưu cache danh sách mã trong 24h
 def get_all_tickers(exchange='all'):
-    try:
-        # VCI cho hàm all_symbols() rất ổn định và trả về danh sách đầy đủ ~1525 mã
-        stock_api = Vnstock().stock(symbol='ACB', source='VCI')
+    # LƯU Ý: all_symbols() ở vnstock>=4.x chỉ trả về 2 cột (symbol, organ_name),
+    # KHÔNG còn cột 'exchange'/'type' -> lọc theo sàn sẽ không có tác dụng.
+    # Dùng thẳng symbols_by_exchange() vì hàm này mới thực sự có đủ cột exchange/type.
+    for src in ['vci', 'kbs']:
         try:
-            df = stock_api.listing.all_symbols()
-        except Exception:
-            df = stock_api.listing.symbols_by_exchange() # Hàm dự phòng của vnstock
+            df = Listing(source=src).symbols_by_exchange()
+            df.columns = [str(c).lower().strip() for c in df.columns]
 
-        df.columns = [str(c).lower().strip() for c in df.columns]
-        
-        # Tìm cột phân loại (Stock, Bond, CW...) để chỉ lấy cổ phiếu
-        type_col = next((c for c in df.columns if 'type' in c), None)
-        if type_col:
-            df = df[df[type_col].astype(str).str.upper().isin(['STOCK', 'CP', 'CỔ PHIẾU'])]
-            
-        if 'exchange' in df.columns:
-            df = df[df['exchange'].astype(str).str.upper().isin(['HOSE', 'HSX', 'HNX', 'UPCOM'])]
-            if exchange != 'all':
-                tgt = ['HOSE', 'HSX'] if str(exchange).upper() in ('HOSE', 'HSX') else [str(exchange).upper()]
-                df = df[df['exchange'].astype(str).str.upper().isin(tgt)]
-                
-        col = 'symbol' if 'symbol' in df.columns else ('ticker' if 'ticker' in df.columns else None)
-        
-        if col:
-            lst = [str(t).strip().upper() for t in df[col].dropna().tolist() if str(t).strip()]
-            if lst:
-                return lst
-    except Exception:
-        pass
-        
+            # Tìm cột phân loại (Stock, Bond, CW...) để chỉ lấy cổ phiếu
+            type_col = next((c for c in df.columns if 'type' in c), None)
+            if type_col:
+                df = df[df[type_col].astype(str).str.upper().isin(['STOCK', 'CP', 'CỔ PHIẾU'])]
+
+            if 'exchange' in df.columns:
+                df = df[df['exchange'].astype(str).str.upper().isin(['HOSE', 'HSX', 'HNX', 'UPCOM'])]
+                if exchange != 'all':
+                    tgt = ['HOSE', 'HSX'] if str(exchange).upper() in ('HOSE', 'HSX') else [str(exchange).upper()]
+                    df = df[df['exchange'].astype(str).str.upper().isin(tgt)]
+
+            col = 'symbol' if 'symbol' in df.columns else ('ticker' if 'ticker' in df.columns else None)
+
+            if col:
+                lst = [str(t).strip().upper() for t in df[col].dropna().tolist() if str(t).strip()]
+                if lst:
+                    return lst
+        except Exception:
+            continue
+
     # Chỉ khi mạng rớt sạch thì mới phải dùng 10 mã dự bị
     return FALLBACK_TICKERS
 
