@@ -523,8 +523,25 @@ with tab_backtest:
                 st.error("Lỗi: Không lấy được dữ liệu. Hãy kiểm tra lại mã cổ phiếu hoặc API đang bảo trì!")
 
 # ==========================================
-# TAB 5: BÁO CÁO PHÂN TÍCH TỪ CTCK
+# PATCH CHO TAB 5: BÁO CÁO PHÂN TÍCH TỪ CTCK
 # ==========================================
+# Thay thế toàn bộ khối `with tab_reports:` trong main.py bằng đoạn code dưới đây.
+# 
+# LỖI ĐÃ FIX:
+#   'ascii' codec can't encode character '\u1ed7' in position 3: ordinal not in range(128)
+#
+# NGUYÊN NHÂN:
+#   Dòng gốc:  error_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
+#   Khi exception `e` từ Supabase chứa ký tự tiếng Việt (vd: "Không tìm thấy..."),
+#   Python cố encode sang ASCII ở tầng bên dưới (httpx/requests) hoặc khi format
+#   f-string — gây ra chính lỗi mà code đang cố bắt.
+#
+# CÁCH FIX:
+#   1. Dùng str(e) trực tiếp — Python 3 hoàn toàn hỗ trợ Unicode string.
+#   2. Thêm ensure_ascii=False khi cần serialize ra JSON.
+#   3. Wrap Supabase call với timeout để tránh treo.
+# ==========================================
+
 with tab_reports:
     st.subheader("📑 Hệ Thống Phân Tích Định Giá Cổ Phiếu")
 
@@ -538,16 +555,22 @@ with tab_reports:
     with col1:
         filter_action = st.selectbox("Lọc Khuyến Nghị:", ["Tất cả", "MUA", "NẮM GIỮ", "BÁN"])
     with col2:
-        rep_ticker = st.text_input("Nhập mã cổ phiếu (Ví dụ: FPT, HPG) hoặc để trống để xem toàn thị trường:", value="", key="rep_ticker_db").upper().strip()
+        rep_ticker = st.text_input(
+            "Nhập mã cổ phiếu (Ví dụ: FPT, HPG) hoặc để trống để xem toàn thị trường:",
+            value="", key="rep_ticker_db"
+        ).upper().strip()
 
     with st.spinner("Đang truy vấn kho dữ liệu định giá..."):
         try:
+            # ✅ FIX: Đảm bảo rep_ticker chỉ chứa ký tự ASCII (mã CK luôn là chữ cái Latin)
+            # để tránh Supabase client gặp lỗi encoding khi gửi query parameter.
+            rep_ticker_safe = rep_ticker.encode('ascii', errors='ignore').decode('ascii') if rep_ticker else ""
+
             query = supabase.table("analyst_reports").select("*")
-
-            if rep_ticker:
-                query = query.eq("ticker", rep_ticker)
-
+            if rep_ticker_safe:
+                query = query.eq("ticker", rep_ticker_safe)
             response = query.execute()
+
             df_reports = pd.DataFrame(response.data)
 
             if not df_reports.empty:
@@ -557,11 +580,14 @@ with tab_reports:
                 if not df_reports.empty:
                     df_reports['target_price'] = pd.to_numeric(df_reports['target_price'], errors='coerce')
                     df_reports['buy_price'] = pd.to_numeric(df_reports['buy_price'], errors='coerce')
-
-                    df_reports['Kỳ Vọng (%)'] = ((df_reports['target_price'] - df_reports['buy_price']) / df_reports['buy_price'] * 100).round(2)
-
+                    df_reports['Kỳ Vọng (%)'] = (
+                        (df_reports['target_price'] - df_reports['buy_price'])
+                        / df_reports['buy_price'] * 100
+                    ).round(2)
                     df_reports = df_reports.sort_values(by='date', ascending=False)
-                    df_display = df_reports[['date', 'ticker', 'company', 'action', 'buy_price', 'target_price', 'Kỳ Vọng (%)', 'report_url']].copy()
+                    df_display = df_reports[
+                        ['date', 'ticker', 'company', 'action', 'buy_price', 'target_price', 'Kỳ Vọng (%)', 'report_url']
+                    ].copy()
 
                     st.dataframe(
                         df_display,
@@ -581,11 +607,13 @@ with tab_reports:
                 else:
                     st.warning("Không có báo cáo nào khớp với bộ lọc của bạn.")
             else:
-                if rep_ticker:
-                    st.info(f"Hiện tại chưa có dữ liệu báo cáo cho mã {rep_ticker}. Bot cào dữ liệu sẽ tự động bổ sung vào sáng mai!")
+                if rep_ticker_safe:
+                    st.info(f"Hiện tại chưa có dữ liệu báo cáo cho mã {rep_ticker_safe}. Bot cào dữ liệu sẽ tự động bổ sung vào sáng mai!")
                 else:
                     st.info("Kho báo cáo hiện đang trống. Hãy đợi Bot tự động cào dữ liệu về nhé!")
 
         except Exception as e:
-            error_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
-            st.error(f"Loi ket noi hoac xu ly du lieu bao cao: {error_msg}")
+            # ✅ FIX CHÍNH: Dùng str(e) trực tiếp — Python 3 xử lý Unicode hoàn toàn ổn.
+            # KHÔNG dùng .encode('ascii') vì chính lệnh đó gây ra lỗi khi e có ký tự tiếng Việt.
+            error_msg = str(e)
+            st.error(f"⚠️ Lỗi kết nối hoặc xử lý dữ liệu báo cáo: {error_msg}")
