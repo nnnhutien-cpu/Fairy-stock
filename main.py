@@ -522,18 +522,8 @@ with tab_backtest:
             else:
                 st.error("Lỗi: Không lấy được dữ liệu. Hãy kiểm tra lại mã cổ phiếu hoặc API đang bảo trì!")
 
-# ==========================================
-# PATCH V2 - TAB 5: BÁO CÁO PHÂN TÍCH TỪ CTCK
-# ==========================================
-# ROOT CAUSE:
-#   supabase-py client (hoặc httpx bên dưới) bị lỗi ASCII encoding khi khởi tạo
-#   HTTP session trên môi trường Streamlit Cloud — xảy ra ở tầng thư viện,
-#   không phải ở code app. Không thể fix bằng cách sửa except block.
-#
-# FIX:
-#   Bypass supabase-py hoàn toàn. Gọi Supabase REST API trực tiếp bằng `requests`
-#   với encoding UTF-8 tường minh. requests không có vấn đề ASCII codec này.
-# ==========================================
+# PATCH V3 - TAB 5: BÁO CÁO
+# Fix thêm: tự normalize SUPABASE_URL (strip, thêm https:// nếu thiếu)
 
 with tab_reports:
     st.subheader("📑 Hệ Thống Phân Tích Định Giá Cổ Phiếu")
@@ -552,20 +542,34 @@ with tab_reports:
         try:
             import requests as _req
 
-            # Lấy credentials từ secrets
-            _sb_url = st.secrets["SUPABASE_URL"].rstrip("/")
-            _sb_key = st.secrets["SUPABASE_KEY"]
+            # ── Lấy & normalize URL ──────────────────────────────────────────
+            _raw_url = st.secrets["SUPABASE_URL"]
+            _sb_key  = st.secrets["SUPABASE_KEY"]
 
-            # Gọi REST API trực tiếp — không qua supabase-py, không có vấn đề ASCII codec
+            # Strip khoảng trắng / newline / ký tự ẩn thường bị copy-paste vào
+            _sb_url = _raw_url.strip().rstrip("/")
+
+            # Tự thêm scheme nếu thiếu
+            if _sb_url and not _sb_url.startswith("http"):
+                _sb_url = "https://" + _sb_url
+
+            # Kiểm tra URL hợp lệ trước khi gọi API
+            if not _sb_url or "supabase" not in _sb_url:
+                st.error(
+                    f"⚠️ SUPABASE_URL không hợp lệ: `{_sb_url[:60]}`\n\n"
+                    "Vào **Settings → Secrets** và kiểm tra lại giá trị SUPABASE_URL. "
+                    "Định dạng đúng: `https://abcxyz.supabase.co`"
+                )
+                st.stop()
+
+            # ── Gọi REST API trực tiếp ───────────────────────────────────────
             _headers = {
-                "apikey": _sb_key,
-                "Authorization": f"Bearer {_sb_key}",
-                "Content-Type": "application/json",
+                "apikey":        _sb_key.strip(),
+                "Authorization": f"Bearer {_sb_key.strip()}",
+                "Content-Type":  "application/json",
             }
-
             _params = {"select": "*", "order": "date.desc", "limit": "500"}
             if rep_ticker:
-                # Mã cổ phiếu luôn là ASCII — safe để gửi thẳng
                 _params["ticker"] = f"eq.{rep_ticker}"
 
             _resp = _req.get(
@@ -574,7 +578,11 @@ with tab_reports:
                 params=_params,
                 timeout=15,
             )
-            _resp.encoding = "utf-8"   # Ép UTF-8 tường minh khi đọc response
+            _resp.encoding = "utf-8"
+
+            if _resp.status_code == 404:
+                st.info("Bảng `analyst_reports` chưa có dữ liệu hoặc chưa được tạo. Hãy chạy bot cào dữ liệu trước!")
+                st.stop()
 
             if _resp.status_code != 200:
                 st.error(f"⚠️ Supabase trả về lỗi {_resp.status_code}: {_resp.text[:300]}")
@@ -605,14 +613,14 @@ with tab_reports:
                         use_container_width=True,
                         hide_index=True,
                         column_config={
-                            "date":          st.column_config.DateColumn("📅 Ngày", format="DD/MM/YYYY"),
-                            "ticker":        st.column_config.TextColumn("🏷️ Mã"),
-                            "company":       st.column_config.TextColumn("🏢 CTCK"),
-                            "action":        st.column_config.TextColumn("⚡ Khuyến Nghị"),
-                            "buy_price":     st.column_config.NumberColumn("💰 Giá Khuyến Nghị", format="%d ₫"),
-                            "target_price":  st.column_config.NumberColumn("🎯 Giá Mục Tiêu",    format="%d ₫"),
-                            "Kỳ Vọng (%)":  st.column_config.NumberColumn("🚀 Kỳ Vọng Upside",  format="%.2f %%"),
-                            "report_url":    st.column_config.LinkColumn("📥 Tải PDF", display_text="Xem Báo Cáo"),
+                            "date":         st.column_config.DateColumn("📅 Ngày", format="DD/MM/YYYY"),
+                            "ticker":       st.column_config.TextColumn("🏷️ Mã"),
+                            "company":      st.column_config.TextColumn("🏢 CTCK"),
+                            "action":       st.column_config.TextColumn("⚡ Khuyến Nghị"),
+                            "buy_price":    st.column_config.NumberColumn("💰 Giá Khuyến Nghị", format="%d ₫"),
+                            "target_price": st.column_config.NumberColumn("🎯 Giá Mục Tiêu",    format="%d ₫"),
+                            "Kỳ Vọng (%)": st.column_config.NumberColumn("🚀 Kỳ Vọng Upside",  format="%.2f %%"),
+                            "report_url":   st.column_config.LinkColumn("📥 Tải PDF", display_text="Xem Báo Cáo"),
                         },
                     )
                 else:
@@ -623,8 +631,7 @@ with tab_reports:
                 else:
                     st.info("Kho báo cáo hiện đang trống. Hãy đợi Bot tự động cào dữ liệu về nhé!")
 
-        except KeyError:
-            st.warning("⚠️ Chưa cấu hình SUPABASE_URL / SUPABASE_KEY trong Secrets. Tab Báo Cáo tạm thời chưa dùng được.")
+        except KeyError as e:
+            st.warning(f"⚠️ Thiếu secret: {e}. Vào Settings → Secrets và thêm SUPABASE_URL + SUPABASE_KEY.")
         except Exception as e:
-            # str(e) trong Python 3 luôn là Unicode string — không cần encode/decode gì thêm
             st.error(f"⚠️ Lỗi kết nối hoặc xử lý dữ liệu báo cáo: {str(e)}")
