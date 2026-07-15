@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import concurrent.futures
+import time
 import streamlit.components.v1 as components
 from supabase import create_client
 import traceback
@@ -104,7 +105,23 @@ BLACKLIST = {"BCG", "HBC", "HNG", "POM", "HAG", "ITA", "TGG", "TTB"}
 if 'scan_results' not in st.session_state:
     st.session_state['scan_results'] = []
 
-exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift = render_sidebar()
+exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift, vnstock_api_key = render_sidebar()
+
+# --- Đăng ký API Key vnstock (nếu có) để tăng giới hạn tốc độ từ 20 -> 60 request/phút ---
+# Không có key: tài khoản "khách" chỉ được 20 request/phút -> quét 1500 mã sẽ mất hơn 1 tiếng
+# và trông giống như bị "kẹt" dù thực chất vẫn đang chạy, chỉ là rất chậm.
+active_api_key = vnstock_api_key.strip()
+if not active_api_key:
+    try:
+        active_api_key = st.secrets.get("VNSTOCK_API_KEY", "")
+    except Exception:
+        active_api_key = ""
+if active_api_key:
+    try:
+        import vnai
+        vnai.setup_api_key(active_api_key)
+    except Exception:
+        pass
 
 setup_cache_clear_button()
 
@@ -219,8 +236,17 @@ with tab_screener:
             st.info(f"📊 Hệ thống đã lấy thành công danh sách **{len(tickers)}** mã từ API (Chuẩn thực tế ~1525 mã).")
             
             tickers_to_scan = tickers[:max_scan]
-            
-            with st.status(f"Đang quét {len(tickers_to_scan)} mã...", expanded=True) as status:
+
+            # ƯỚC TÍNH THỜI GIAN: vnstock giới hạn 20 request/phút (khách) hoặc 60/phút (có API key)
+            rate_per_min = 60 if active_api_key else 20
+            eta_min = len(tickers_to_scan) / rate_per_min
+            st.caption(
+                f"⏱️ Ước tính thời gian quét: khoảng **{eta_min:.1f} phút** "
+                f"(giới hạn {rate_per_min} request/phút{' - đã dùng API key' if active_api_key else ' - tài khoản khách, chưa có API key'})."
+            )
+
+            scan_start_time = time.time()
+            with st.status(f"Đang quét {len(tickers_to_scan)} mã... (ước tính ~{eta_min:.1f} phút)", expanded=True) as status:
                 progress_bar = st.progress(0)
                 results = []
                 error_logs = [] # Rổ chứa nguyên nhân kẹt data
@@ -252,8 +278,10 @@ with tab_screener:
                         # Bắt lỗi kết nối bên file data_loader.py
                         return {"status": "error", "msg": f"{ticker}: Lỗi bên data_loader.py -> {str(e)}"}
 
-                # Chạy đa luồng
-                with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+                # Chạy đa luồng. LƯU Ý: vnstock giới hạn số kết nối đồng thời cho tài khoản khách (~4),
+                # dùng nhiều luồng hơn không giúp nhanh hơn mà chỉ gây tranh chấp / bị chặn nhiều hơn.
+                max_workers = 4
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                     future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
                     
                     for future in concurrent.futures.as_completed(future_to_ticker):
@@ -266,7 +294,13 @@ with tab_screener:
                                 error_logs.append(outcome["msg"])
                         except Exception as e:
                             error_logs.append(f"Lỗi luồng ThreadPool: {str(e)}")
-                            
+
+                        # Cập nhật nhãn theo thời gian thực để KHÔNG bao giờ trông như bị treo
+                        elapsed = time.time() - scan_start_time
+                        status.update(label=(
+                            f"Đang quét... {processed}/{total} mã | "
+                            f"✅ {len(results)} hợp lệ | ⏱️ {elapsed:.0f}s trôi qua"
+                        ))
                         progress_bar.progress(min(processed / total, 1.0))
 
                 # 2. XỬ LÝ GIAO DIỆN KHI CÓ LỖI
