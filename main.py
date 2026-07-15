@@ -523,32 +523,20 @@ with tab_backtest:
                 st.error("Lỗi: Không lấy được dữ liệu. Hãy kiểm tra lại mã cổ phiếu hoặc API đang bảo trì!")
 
 # ==========================================
-# PATCH CHO TAB 5: BÁO CÁO PHÂN TÍCH TỪ CTCK
+# PATCH V2 - TAB 5: BÁO CÁO PHÂN TÍCH TỪ CTCK
 # ==========================================
-# Thay thế toàn bộ khối `with tab_reports:` trong main.py bằng đoạn code dưới đây.
-# 
-# LỖI ĐÃ FIX:
-#   'ascii' codec can't encode character '\u1ed7' in position 3: ordinal not in range(128)
+# ROOT CAUSE:
+#   supabase-py client (hoặc httpx bên dưới) bị lỗi ASCII encoding khi khởi tạo
+#   HTTP session trên môi trường Streamlit Cloud — xảy ra ở tầng thư viện,
+#   không phải ở code app. Không thể fix bằng cách sửa except block.
 #
-# NGUYÊN NHÂN:
-#   Dòng gốc:  error_msg = str(e).encode('ascii', errors='ignore').decode('ascii')
-#   Khi exception `e` từ Supabase chứa ký tự tiếng Việt (vd: "Không tìm thấy..."),
-#   Python cố encode sang ASCII ở tầng bên dưới (httpx/requests) hoặc khi format
-#   f-string — gây ra chính lỗi mà code đang cố bắt.
-#
-# CÁCH FIX:
-#   1. Dùng str(e) trực tiếp — Python 3 hoàn toàn hỗ trợ Unicode string.
-#   2. Thêm ensure_ascii=False khi cần serialize ra JSON.
-#   3. Wrap Supabase call với timeout để tránh treo.
+# FIX:
+#   Bypass supabase-py hoàn toàn. Gọi Supabase REST API trực tiếp bằng `requests`
+#   với encoding UTF-8 tường minh. requests không có vấn đề ASCII codec này.
 # ==========================================
 
 with tab_reports:
     st.subheader("📑 Hệ Thống Phân Tích Định Giá Cổ Phiếu")
-
-    if supabase is None:
-        st.warning("⚠️ Chưa cấu hình SUPABASE_URL / SUPABASE_KEY trong Secrets. Tab Báo Cáo tạm thời chưa dùng được.")
-        st.stop()
-
     st.caption("Dữ liệu hệ thống tự động quét hàng ngày từ 15+ CTCK hàng đầu (SSI, VND, VCI, MBS, MAS, KIS, VCBS, KB, CTS, BSI...).")
 
     col1, col2 = st.columns([1, 3])
@@ -562,31 +550,54 @@ with tab_reports:
 
     with st.spinner("Đang truy vấn kho dữ liệu định giá..."):
         try:
-            # ✅ FIX: Đảm bảo rep_ticker chỉ chứa ký tự ASCII (mã CK luôn là chữ cái Latin)
-            # để tránh Supabase client gặp lỗi encoding khi gửi query parameter.
-            rep_ticker_safe = rep_ticker.encode('ascii', errors='ignore').decode('ascii') if rep_ticker else ""
+            import requests as _req
 
-            query = supabase.table("analyst_reports").select("*")
-            if rep_ticker_safe:
-                query = query.eq("ticker", rep_ticker_safe)
-            response = query.execute()
+            # Lấy credentials từ secrets
+            _sb_url = st.secrets["SUPABASE_URL"].rstrip("/")
+            _sb_key = st.secrets["SUPABASE_KEY"]
 
-            df_reports = pd.DataFrame(response.data)
+            # Gọi REST API trực tiếp — không qua supabase-py, không có vấn đề ASCII codec
+            _headers = {
+                "apikey": _sb_key,
+                "Authorization": f"Bearer {_sb_key}",
+                "Content-Type": "application/json",
+            }
+
+            _params = {"select": "*", "order": "date.desc", "limit": "500"}
+            if rep_ticker:
+                # Mã cổ phiếu luôn là ASCII — safe để gửi thẳng
+                _params["ticker"] = f"eq.{rep_ticker}"
+
+            _resp = _req.get(
+                f"{_sb_url}/rest/v1/analyst_reports",
+                headers=_headers,
+                params=_params,
+                timeout=15,
+            )
+            _resp.encoding = "utf-8"   # Ép UTF-8 tường minh khi đọc response
+
+            if _resp.status_code != 200:
+                st.error(f"⚠️ Supabase trả về lỗi {_resp.status_code}: {_resp.text[:300]}")
+                st.stop()
+
+            _data = _resp.json()
+            df_reports = pd.DataFrame(_data)
 
             if not df_reports.empty:
                 if filter_action != "Tất cả":
-                    df_reports = df_reports[df_reports['action'] == filter_action]
+                    df_reports = df_reports[df_reports["action"] == filter_action]
 
                 if not df_reports.empty:
-                    df_reports['target_price'] = pd.to_numeric(df_reports['target_price'], errors='coerce')
-                    df_reports['buy_price'] = pd.to_numeric(df_reports['buy_price'], errors='coerce')
-                    df_reports['Kỳ Vọng (%)'] = (
-                        (df_reports['target_price'] - df_reports['buy_price'])
-                        / df_reports['buy_price'] * 100
+                    df_reports["target_price"] = pd.to_numeric(df_reports["target_price"], errors="coerce")
+                    df_reports["buy_price"]    = pd.to_numeric(df_reports["buy_price"],    errors="coerce")
+                    df_reports["Kỳ Vọng (%)"] = (
+                        (df_reports["target_price"] - df_reports["buy_price"])
+                        / df_reports["buy_price"] * 100
                     ).round(2)
-                    df_reports = df_reports.sort_values(by='date', ascending=False)
+
                     df_display = df_reports[
-                        ['date', 'ticker', 'company', 'action', 'buy_price', 'target_price', 'Kỳ Vọng (%)', 'report_url']
+                        ["date", "ticker", "company", "action",
+                         "buy_price", "target_price", "Kỳ Vọng (%)", "report_url"]
                     ].copy()
 
                     st.dataframe(
@@ -594,26 +605,26 @@ with tab_reports:
                         use_container_width=True,
                         hide_index=True,
                         column_config={
-                            "date": st.column_config.DateColumn("📅 Ngày", format="DD/MM/YYYY"),
-                            "ticker": st.column_config.TextColumn("🏷️ Mã"),
-                            "company": st.column_config.TextColumn("🏢 CTCK"),
-                            "action": st.column_config.TextColumn("⚡ Khuyến Nghị"),
-                            "buy_price": st.column_config.NumberColumn("💰 Giá Khuyến Nghị", format="%d ₫"),
-                            "target_price": st.column_config.NumberColumn("🎯 Giá Mục Tiêu", format="%d ₫"),
-                            "Kỳ Vọng (%)": st.column_config.NumberColumn("🚀 Kỳ Vọng Upside", format="%.2f %%"),
-                            "report_url": st.column_config.LinkColumn("📥 Tải PDF", display_text="Xem Báo Cáo")
-                        }
+                            "date":          st.column_config.DateColumn("📅 Ngày", format="DD/MM/YYYY"),
+                            "ticker":        st.column_config.TextColumn("🏷️ Mã"),
+                            "company":       st.column_config.TextColumn("🏢 CTCK"),
+                            "action":        st.column_config.TextColumn("⚡ Khuyến Nghị"),
+                            "buy_price":     st.column_config.NumberColumn("💰 Giá Khuyến Nghị", format="%d ₫"),
+                            "target_price":  st.column_config.NumberColumn("🎯 Giá Mục Tiêu",    format="%d ₫"),
+                            "Kỳ Vọng (%)":  st.column_config.NumberColumn("🚀 Kỳ Vọng Upside",  format="%.2f %%"),
+                            "report_url":    st.column_config.LinkColumn("📥 Tải PDF", display_text="Xem Báo Cáo"),
+                        },
                     )
                 else:
                     st.warning("Không có báo cáo nào khớp với bộ lọc của bạn.")
             else:
-                if rep_ticker_safe:
-                    st.info(f"Hiện tại chưa có dữ liệu báo cáo cho mã {rep_ticker_safe}. Bot cào dữ liệu sẽ tự động bổ sung vào sáng mai!")
+                if rep_ticker:
+                    st.info(f"Hiện tại chưa có dữ liệu báo cáo cho mã {rep_ticker}. Bot cào dữ liệu sẽ tự động bổ sung vào sáng mai!")
                 else:
                     st.info("Kho báo cáo hiện đang trống. Hãy đợi Bot tự động cào dữ liệu về nhé!")
 
+        except KeyError:
+            st.warning("⚠️ Chưa cấu hình SUPABASE_URL / SUPABASE_KEY trong Secrets. Tab Báo Cáo tạm thời chưa dùng được.")
         except Exception as e:
-            # ✅ FIX CHÍNH: Dùng str(e) trực tiếp — Python 3 xử lý Unicode hoàn toàn ổn.
-            # KHÔNG dùng .encode('ascii') vì chính lệnh đó gây ra lỗi khi e có ký tự tiếng Việt.
-            error_msg = str(e)
-            st.error(f"⚠️ Lỗi kết nối hoặc xử lý dữ liệu báo cáo: {error_msg}")
+            # str(e) trong Python 3 luôn là Unicode string — không cần encode/decode gì thêm
+            st.error(f"⚠️ Lỗi kết nối hoặc xử lý dữ liệu báo cáo: {str(e)}")
