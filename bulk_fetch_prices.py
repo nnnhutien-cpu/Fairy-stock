@@ -2,36 +2,22 @@
 bulk_fetch_prices.py
 =====================
 Bot chạy NỀN (1 lần/ngày, sau giờ đóng cửa) để lấy sẵn dữ liệu giá lịch sử của
-nhiều mã cổ phiếu và lưu vào bảng `stock_prices` trên Supabase.
+nhiều mã cổ phiếu và lưu vào file data/stock_prices.csv NGAY TRONG REPO.
+Không dùng database ngoài nào cả (không Supabase) — GitHub Actions sẽ tự động
+commit file này ngược lại vào repo sau khi chạy xong (xem
+.github/workflows/bulk_fetch_prices.yml).
 
 TẠI SAO CẦN FILE NÀY:
 Tab "Bộ Lọc" trong app nếu gọi API sống cho từng mã lúc người dùng bấm nút sẽ luôn
 bị giới hạn 20-60 request/phút của vnstock -> quét 500 mã tối thiểu mất vài phút,
 KHÔNG THỂ nhanh xuống còn ~20 giây dù tối ưu code thế nào.
 Giải pháp: chạy bot này 1 lần/ngày (không ai phải chờ), lấy sẵn dữ liệu và lưu vào
-database. Khi người dùng bấm "Quét", app chỉ ĐỌC DATABASE (không gọi API) -> 500 mã
-chỉ mất vài giây (thời gian đọc DB + tính toán Ichimoku bằng pandas).
+data/stock_prices.csv. Vì Streamlit Cloud luôn chạy app đúng từ code trong repo,
+file này có sẵn ngay trên đĩa khi app khởi động. Khi người dùng bấm "Quét", app chỉ
+ĐỌC FILE (không gọi API) -> 500 mã chỉ mất vài giây (đọc CSV + tính Ichimoku bằng pandas).
 
-CÁCH DÙNG:
+CÁCH DÙNG (chạy thủ công để test):
     python bulk_fetch_prices.py
-
-CẦN THIẾT LẬP TRƯỚC:
-1. Biến môi trường (hoặc GitHub Secrets) SUPABASE_URL, SUPABASE_KEY.
-2. Tạo bảng `stock_prices` trên Supabase bằng SQL sau (chạy 1 lần trong SQL Editor):
-
-    create table if not exists stock_prices (
-        ticker text not null,
-        date date not null,
-        open double precision,
-        high double precision,
-        low double precision,
-        close double precision,
-        volume bigint,
-        updated_at timestamptz default now(),
-        primary key (ticker, date)
-    );
-    create index if not exists idx_stock_prices_ticker_date
-        on stock_prices (ticker, date desc);
 """
 
 import os
@@ -41,25 +27,19 @@ import threading
 from datetime import datetime, timedelta
 
 import pandas as pd
-from supabase import create_client
 from vnstock.api.quote import Quote
 
 # ==========================================================
 # 1. CẤU HÌNH
 # ==========================================================
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 DAYS_BACK = int(os.environ.get("BULK_FETCH_DAYS_BACK", "200"))
+OUTPUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "stock_prices.csv")
 
 # Hạn mức request/phút: để trống VNSTOCK_API_KEY -> dùng mức khách (18, an toàn dưới 20).
-# Có API key (đăng ký miễn phí tại vnstocks.com/login) -> đặt VNSTOCK_API_KEY trong secrets
-# để tăng lên tới 55 (an toàn dưới 60) -> bot chạy nhanh hơn nhiều.
+# Có API key (đăng ký miễn phí tại vnstocks.com/login) -> đặt VNSTOCK_API_KEY trong
+# GitHub Secrets để tăng lên tới 55 (an toàn dưới 60) -> bot chạy nhanh hơn nhiều.
 VNSTOCK_API_KEY = os.environ.get("VNSTOCK_API_KEY", "").strip()
 RATE_LIMIT_PER_MIN = 55 if VNSTOCK_API_KEY else 18
-
-if not SUPABASE_URL or not SUPABASE_KEY:
-    print("❌ Thiếu biến môi trường SUPABASE_URL / SUPABASE_KEY. Dừng lại.")
-    sys.exit(1)
 
 if VNSTOCK_API_KEY:
     try:
@@ -68,8 +48,6 @@ if VNSTOCK_API_KEY:
         print("🔑 Đã đăng ký API key vnstock -> hạn mức 60 request/phút.")
     except Exception as e:
         print(f"⚠️ Không đăng ký được API key vnstock ({e}), dùng hạn mức khách.")
-
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Danh sách mã cần cào. Có thể mở rộng danh sách này (vd: đọc từ get_all_tickers())
 # để cào hết cả sàn, miễn là chấp nhận bot chạy lâu hơn (không ai phải chờ vì chạy nền).
@@ -132,12 +110,13 @@ def fetch_one(ticker, start, end):
     return pd.DataFrame()
 
 # ==========================================================
-# 3. CHẠY CÀO + BƠM VÀO SUPABASE
+# 3. CHẠY CÀO + GHI RA FILE data/stock_prices.csv
 # ==========================================================
 def main():
     end_date = datetime.now().strftime('%Y-%m-%d')
     start_date = (datetime.now() - timedelta(days=DAYS_BACK)).strftime('%Y-%m-%d')
 
+    all_frames = []
     ok_count, fail_count = 0, 0
     print(f"⏳ Bắt đầu cào {len(PRIORITY_TICKERS)} mã (hạn mức {RATE_LIMIT_PER_MIN} req/phút)...")
 
@@ -148,31 +127,26 @@ def main():
             fail_count += 1
             continue
 
-        records = [
-            {
-                "ticker": ticker,
-                "date": row["time"].strftime("%Y-%m-%d"),
-                "open": float(row["open"]) if pd.notna(row.get("open")) else None,
-                "high": float(row["high"]) if pd.notna(row.get("high")) else None,
-                "low": float(row["low"]) if pd.notna(row.get("low")) else None,
-                "close": float(row["close"]) if pd.notna(row.get("close")) else None,
-                "volume": int(row["volume"]) if pd.notna(row.get("volume")) else None,
-            }
-            for _, row in df.iterrows()
-        ]
+        df = df[["time", "open", "high", "low", "close", "volume"]].copy()
+        df.rename(columns={"time": "date"}, inplace=True)
+        df["date"] = df["date"].dt.strftime("%Y-%m-%d")
+        df.insert(0, "ticker", ticker)
+        all_frames.append(df)
+        print(f"  [{i}/{len(PRIORITY_TICKERS)}] ✅ {ticker}: {len(df)} dòng.")
+        ok_count += 1
 
-        try:
-            # Upsert theo khoá (ticker, date): ghi đè nếu trùng, thêm mới nếu chưa có.
-            supabase.table("stock_prices").upsert(records, on_conflict="ticker,date").execute()
-            print(f"  [{i}/{len(PRIORITY_TICKERS)}] ✅ {ticker}: đã lưu {len(records)} dòng.")
-            ok_count += 1
-        except Exception as e:
-            print(f"  [{i}/{len(PRIORITY_TICKERS)}] ❌ {ticker}: lỗi lưu Supabase -> {e}")
-            fail_count += 1
+    if not all_frames:
+        print("❌ Không cào được mã nào. Dừng lại, KHÔNG ghi đè file cũ.")
+        sys.exit(1)
+
+    final_df = pd.concat(all_frames, ignore_index=True)
+    final_df = final_df.sort_values(["ticker", "date"]).reset_index(drop=True)
+
+    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
+    final_df.to_csv(OUTPUT_PATH, index=False)
 
     print(f"🎉 HOÀN TẤT! Thành công {ok_count} mã, lỗi {fail_count} mã.")
-    if ok_count == 0:
-        sys.exit(1)
+    print(f"📁 Đã ghi {len(final_df)} dòng vào {OUTPUT_PATH}")
 
 if __name__ == "__main__":
     main()
