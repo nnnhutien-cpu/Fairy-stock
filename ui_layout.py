@@ -10,14 +10,24 @@ def render_sidebar():
         st.header("⚙️ CẤU HÌNH BỘ LỌC")
         exchange_choice = st.selectbox("Chọn sàn giao dịch:", ["HOSE", "HNX", "UPCOM", "Tất cả 3 sàn"])
         signal_filter = st.radio("Bộ lọc tín hiệu kỹ thuật:", ["Tất cả", "🟢 Tích cực", "🔴 Tiêu cực"])
-        max_scan = st.slider("Số lượng mã quét tối đa:", 10, 2000, 1600)
+
+        max_scan = st.slider("Số lượng mã quét tối đa:", 10, 2000, 100)
+        st.caption(
+            "⏱️ vnstock giới hạn **20 request/phút** cho tài khoản khách (chưa có API key). "
+            "Quét 100 mã mất khoảng 5 phút. Đăng ký API key MIỄN PHÍ tại "
+            "[vnstocks.com/login](https://vnstocks.com/login) để tăng lên **60 request/phút** (nhanh gấp 3)."
+        )
+        vnstock_api_key = st.text_input(
+            "🔑 API Key vnstock (không bắt buộc):", value="", type="password",
+            help="Dán API key miễn phí lấy từ vnstocks.com/login để tăng tốc độ quét từ 20 lên 60 mã/phút."
+        )
 
         with st.expander("🛠️ TÙY CHỈNH ICHIMOKU (NÂNG CAO)", expanded=False):
             p_tenkan = st.number_input("Tenkan-sen", value=9, step=1)
             p_kijun = st.number_input("Kijun-sen", value=26, step=1)
             p_senkou_b = st.number_input("Senkou B", value=52, step=1)
             p_shift = st.number_input("Shift", value=26, step=1)
-    return exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift
+    return exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift, vnstock_api_key
 
 
 def render_market_tab(chart_df, df_today):
