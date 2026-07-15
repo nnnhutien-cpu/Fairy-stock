@@ -1,0 +1,37 @@
+name: Scrape Analyst Reports
+
+on:
+  schedule:
+    - cron: "0 3 * * 1-5"   # 10:00 SA giờ VN (UTC+7), thứ 2-6 (sau giờ mở cửa)
+    - cron: "30 8 * * 1-5"  # 15:30 CH giờ VN, sau đóng cửa
+  workflow_dispatch:          # Cho phép chạy thủ công từ GitHub UI
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write         # Cần để commit reports.json lên repo
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4
+
+      - name: Run scraper
+        run: python bot_reports.py
+
+      - name: Commit reports.json
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add reports.json
+          # Chỉ commit nếu có thay đổi thực sự
+          git diff --staged --quiet || git commit -m "auto: cập nhật reports.json $(date +'%Y-%m-%d %H:%M')"
+          git push
