@@ -7,6 +7,62 @@ from vnstock.api.quote import Quote
 from vnstock.api.listing import Listing
 
 # ==========================================================
+# CACHE DÀI HẠN TỪ SUPABASE (DO BOT NỀN BƠM SẴN 1 LẦN/NGÀY)
+# ==========================================================
+# Đây là chìa khoá để quét NHANH thật sự (vài giây cho hàng trăm mã):
+# thay vì gọi API sống cho từng mã lúc người dùng bấm "Quét" (luôn bị giới hạn
+# 20-60 request/phút của vnstock), 1 bot chạy nền (GitHub Actions, xem
+# bulk_fetch_prices.py) lấy sẵn dữ liệu 1 lần/ngày sau giờ đóng cửa và lưu vào
+# bảng `stock_prices` trên Supabase. Khi quét, app chỉ ĐỌC DB (không gọi API)
+# -> không còn bị giới hạn tốc độ, 500 mã đọc từ DB chỉ mất vài giây.
+# Nếu chưa chạy bot nền / mã không có trong cache -> tự động rơi về gọi API sống
+# như bình thường (chậm hơn nhưng luôn ra kết quả đúng).
+_supabase_client = None
+_supabase_tried = False
+
+def _get_supabase():
+    global _supabase_client, _supabase_tried
+    if _supabase_tried:
+        return _supabase_client
+    _supabase_tried = True
+    try:
+        from supabase import create_client
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+        _supabase_client = create_client(url, key)
+    except Exception:
+        _supabase_client = None
+    return _supabase_client
+
+def _read_from_cache(ticker, days_back, max_staleness_days=4):
+    """Đọc lịch sử giá từ Supabase nếu có và đủ mới. Trả về None nếu không có/quá cũ -> gọi API sống."""
+    sb = _get_supabase()
+    if sb is None:
+        return None
+    try:
+        resp = (
+            sb.table("stock_prices")
+            .select("date,open,high,low,close,volume")
+            .eq("ticker", ticker)
+            .order("date", desc=True)
+            .limit(int(days_back * 1.6) + 10)  # dư ra để bù ngày nghỉ/lễ
+            .execute()
+        )
+        rows = resp.data or []
+        if not rows:
+            return None
+
+        newest_date = pd.to_datetime(rows[0]["date"])
+        if (datetime.now() - newest_date).days > max_staleness_days:
+            return None  # cache quá cũ (bot nền có thể đã ngừng chạy) -> gọi API sống cho chắc
+
+        df = pd.DataFrame(rows)
+        df = df.rename(columns={"date": "time"})
+        return _normalize(df)
+    except Exception:
+        return None  # bảng chưa tồn tại / lỗi kết nối -> im lặng rơi về API sống, không làm sập app
+
+# ==========================================================
 # TỰ GIỚI HẠN TỐC ĐỘ GỌI API (CHỦ ĐỘNG) THAY VÌ ĐỂ VNSTOCK TỰ CHẶN RỒI RETRY
 # ==========================================================
 # vnstock (bản >=4) có cơ chế rate-limit NGẦM: khách chưa đăng ký API key chỉ được
@@ -148,6 +204,12 @@ def get_all_tickers(exchange='all'):
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_stock_data(ticker, days_back=200):
+    # 1. Ưu tiên đọc từ cache Supabase (bot nền bơm sẵn hàng ngày) -> TỨC THÌ, không tốn quota API.
+    cached = _read_from_cache(ticker, days_back)
+    if cached is not None and len(cached) >= min(60, days_back // 2):
+        return cached
+
+    # 2. Không có cache / cache quá cũ -> gọi API sống như bình thường (chậm hơn nhưng luôn đúng).
     end_date = datetime.now().strftime('%Y-%m-%d')
     start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
     return _fetch(ticker, start_date, end_date, '1D')
