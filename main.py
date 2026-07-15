@@ -730,15 +730,19 @@ def _fetch_all_reports(ticker: str = "") -> _pd.DataFrame:
     return df_all
 
 
-# ══════════════════════════════════════════════════════════
-#  RENDER TAB BÁO CÁO
-#  Thay toàn bộ khối `with tab_reports:` trong main.py bằng đoạn dưới đây
-# ══════════════════════════════════════════════════════════
+# PATCH V5 - TAB 5: BÁO CÁO PHÂN TÍCH
+# Đọc reports.json từ GitHub raw URL — không bị chặn bởi Streamlit Cloud.
+# Bot GitHub Actions cào dữ liệu 2 lần/ngày và commit file này lên repo.
+# ================================================================
+# CÁCH ĐẶT GITHUB_RAW_BASE vào Streamlit Secrets:
+#   GITHUB_RAW_BASE = "https://raw.githubusercontent.com/nnnhutien-cpu/Fairy-stock/main"
+# ================================================================
+
 with tab_reports:
     st.subheader("📑 Hệ Thống Phân Tích Định Giá Cổ Phiếu")
     st.caption(
         "Dữ liệu tổng hợp tự động từ **DNSE · Vietstock · CafeF** — "
-        "cập nhật mỗi 4 giờ, không cần đăng nhập."
+        "bot cập nhật 2 lần/ngày (10:00 SA & 15:30 CH)."
     )
 
     # ── Bộ lọc ──────────────────────────────────────────────────────────────
@@ -751,88 +755,139 @@ with tab_reports:
     with col_f2:
         filter_source = st.selectbox(
             "Nguồn dữ liệu:",
-            ["Tất cả", "DNSE", "Vietstock", "CafeF"],
+            ["Tất cả", "DNSE", "DNSE Research", "Vietstock", "CafeF"],
         )
     with col_f3:
         rep_ticker = st.text_input(
             "Mã cổ phiếu (để trống = toàn thị trường):",
-            value="",
-            key="rep_ticker_v4",
+            value="", key="rep_ticker_v5",
             placeholder="Ví dụ: FPT, HPG, VNM...",
         ).upper().strip()
 
-    # ── Nút refresh thủ công ────────────────────────────────────────────────
     col_btn, col_note = st.columns([1, 4])
     with col_btn:
-        if st.button("🔄 Làm mới dữ liệu", key="refresh_reports"):
-            _fetch_all_reports.clear()
-            st.rerun()
-    with col_note:
-        st.caption("⏱️ Dữ liệu được cache 4 giờ. Nhấn 'Làm mới' để cào lại ngay.")
+        force_refresh = st.button("🔄 Làm mới", key="refresh_reports_v5")
 
-    # ── Cào dữ liệu ─────────────────────────────────────────────────────────
-    with st.spinner("Đang cào dữ liệu từ DNSE · Vietstock · CafeF..."):
-        df_reports = _fetch_all_reports(rep_ticker)
+    # ── Load reports.json từ GitHub raw ─────────────────────────────────────
+    @st.cache_data(ttl=3600, show_spinner=False)
+    def _load_reports_json() -> dict:
+        import requests as _r
+        # Ưu tiên lấy base URL từ secrets, fallback về hardcode repo này
+        try:
+            base = st.secrets.get("GITHUB_RAW_BASE", "").rstrip("/")
+        except Exception:
+            base = ""
+        if not base:
+            base = "https://raw.githubusercontent.com/nnnhutien-cpu/Fairy-stock/main"
 
-    # ── Hiển thị kết quả ────────────────────────────────────────────────────
-    if df_reports.empty:
-        st.info(
-            "⚠️ Chưa lấy được dữ liệu từ các nguồn. Có thể do:\n"
-            "- Các trang đang bảo trì\n"
-            "- Streamlit Cloud chặn outbound request đến nguồn này\n\n"
-            "Thử nhấn **Làm mới dữ liệu** sau ít phút."
+        url = f"{base}/reports.json"
+        try:
+            resp = _r.get(url, timeout=10)
+            resp.encoding = "utf-8"
+            if resp.status_code == 200:
+                return resp.json()
+            return {"error": f"HTTP {resp.status_code}", "data": []}
+        except Exception as e:
+            return {"error": str(e), "data": []}
+
+    if force_refresh:
+        _load_reports_json.clear()
+
+    with st.spinner("Đang tải dữ liệu báo cáo..."):
+        payload = _load_reports_json()
+
+    # ── Xử lý lỗi load ──────────────────────────────────────────────────────
+    if "error" in payload and not payload.get("data"):
+        st.error(
+            f"⚠️ Không tải được reports.json: `{payload['error']}`\n\n"
+            "**Kiểm tra:**\n"
+            "1. File `reports.json` đã có trong repo chưa? "
+            "Vào GitHub → Actions → chạy thủ công workflow **Scrape Analyst Reports**.\n"
+            "2. Repo có public không? Nếu private cần thêm token vào secrets.\n"
         )
+        st.stop()
+
+    # ── Dựng DataFrame ───────────────────────────────────────────────────────
+    updated_at = payload.get("updated_at", "")
+    raw_data   = payload.get("data", [])
+
+    with col_note:
+        st.caption(f"⏱️ Dữ liệu cập nhật lần cuối: **{updated_at}** — {len(raw_data)} báo cáo")
+
+    df_all = pd.DataFrame(raw_data)
+
+    if df_all.empty:
+        st.info(
+            "Kho báo cáo hiện đang trống.\n\n"
+            "Vào **GitHub → Actions → Scrape Analyst Reports → Run workflow** "
+            "để bot cào dữ liệu về ngay."
+        )
+        st.stop()
+
+    # Chuẩn hoá kiểu dữ liệu
+    for col in ["buy_price", "target_price"]:
+        if col in df_all.columns:
+            df_all[col] = pd.to_numeric(
+                df_all[col].astype(str).str.replace(",", "").str.replace(".", ""),
+                errors="coerce"
+            ).fillna(0)
+
+    mask = (df_all["buy_price"] > 0) & (df_all["target_price"] > 0)
+    df_all["upside_pct"] = 0.0
+    df_all.loc[mask, "upside_pct"] = (
+        (df_all.loc[mask, "target_price"] - df_all.loc[mask, "buy_price"])
+        / df_all.loc[mask, "buy_price"] * 100
+    ).round(1)
+
+    # ── Áp filter ────────────────────────────────────────────────────────────
+    df_show = df_all.copy()
+    if rep_ticker:
+        df_show = df_show[df_show["ticker"].str.upper() == rep_ticker]
+    if filter_action != "Tất cả":
+        df_show = df_show[
+            df_show["action"].str.upper().str.contains(filter_action, na=False)
+        ]
+    if filter_source != "Tất cả":
+        df_show = df_show[df_show["source"] == filter_source]
+
+    # ── Metrics ──────────────────────────────────────────────────────────────
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("📋 Tổng báo cáo", len(df_show))
+    n_buy  = df_show["action"].str.upper().str.contains("MUA|TÍCH LŨY|KHẢ QUAN|BUY", na=False).sum()
+    n_hold = df_show["action"].str.upper().str.contains("GIỮ|HOLD|NEUTRAL", na=False).sum()
+    n_sell = df_show["action"].str.upper().str.contains("BÁN|SELL", na=False).sum()
+    m2.metric("🟢 Mua / Tích lũy", int(n_buy))
+    m3.metric("🟡 Nắm giữ", int(n_hold))
+    m4.metric("🔴 Bán", int(n_sell))
+
+    st.divider()
+
+    if df_show.empty:
+        st.warning("Không có báo cáo nào khớp bộ lọc.")
     else:
-        # Áp filter
-        df_show = df_reports.copy()
-        if filter_action != "Tất cả":
-            df_show = df_show[
-                df_show["Khuyến Nghị"].str.upper().str.contains(filter_action, na=False)
-            ]
-        if filter_source != "Tất cả":
-            df_show = df_show[df_show["Nguồn"] == filter_source]
+        st.dataframe(
+            df_show[["date", "ticker", "company", "action",
+                     "buy_price", "target_price", "upside_pct",
+                     "source", "report_url"]],
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "date":        st.column_config.TextColumn("📅 Ngày"),
+                "ticker":      st.column_config.TextColumn("🏷️ Mã"),
+                "company":     st.column_config.TextColumn("🏢 CTCK"),
+                "action":      st.column_config.TextColumn("⚡ Khuyến Nghị"),
+                "buy_price":   st.column_config.NumberColumn("💰 Giá Khuyến Nghị", format="%d ₫"),
+                "target_price":st.column_config.NumberColumn("🎯 Giá Mục Tiêu",    format="%d ₫"),
+                "upside_pct":  st.column_config.NumberColumn("🚀 Upside",          format="%.1f %%"),
+                "source":      st.column_config.TextColumn("🔗 Nguồn"),
+                "report_url":  st.column_config.LinkColumn("📥 Báo Cáo", display_text="Xem"),
+            },
+        )
 
-        # Metrics tổng quan
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("📋 Tổng báo cáo", len(df_show))
-        n_buy  = df_show["Khuyến Nghị"].str.upper().str.contains("MUA|TÍCH LŨY|KHẢ QUAN|BUY", na=False).sum()
-        n_hold = df_show["Khuyến Nghị"].str.upper().str.contains("GIỮ|HOLD|NEUTRAL", na=False).sum()
-        n_sell = df_show["Khuyến Nghị"].str.upper().str.contains("BÁN|SELL", na=False).sum()
-        m2.metric("🟢 Mua / Tích lũy", n_buy)
-        m3.metric("🟡 Nắm giữ", n_hold)
-        m4.metric("🔴 Bán", n_sell)
-
-        st.divider()
-
-        if df_show.empty:
-            st.warning("Không có báo cáo nào khớp bộ lọc.")
-        else:
-            st.dataframe(
-                df_show[[
-                    "Ngày", "Mã", "CTCK", "Khuyến Nghị",
-                    "Giá Hiện Tại", "Giá Mục Tiêu", "Upside (%)",
-                    "Nguồn", "Link PDF"
-                ]],
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Ngày":           st.column_config.TextColumn("📅 Ngày"),
-                    "Mã":             st.column_config.TextColumn("🏷️ Mã"),
-                    "CTCK":           st.column_config.TextColumn("🏢 CTCK"),
-                    "Khuyến Nghị":    st.column_config.TextColumn("⚡ Khuyến Nghị"),
-                    "Giá Hiện Tại":   st.column_config.NumberColumn("💰 Giá Hiện Tại", format="%d ₫"),
-                    "Giá Mục Tiêu":   st.column_config.NumberColumn("🎯 Giá Mục Tiêu", format="%d ₫"),
-                    "Upside (%)":     st.column_config.NumberColumn("🚀 Upside", format="%.1f %%"),
-                    "Nguồn":          st.column_config.TextColumn("🔗 Nguồn"),
-                    "Link PDF":       st.column_config.LinkColumn("📥 Báo Cáo", display_text="Xem"),
-                },
-            )
-
-            # Export CSV
-            csv_bytes = df_show.to_csv(index=False).encode("utf-8-sig")
-            st.download_button(
-                label="⬇️ Tải CSV",
-                data=csv_bytes,
-                file_name=f"bao_cao_phan_tich_{_dt.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-            )
+        csv_bytes = df_show.to_csv(index=False).encode("utf-8-sig")
+        st.download_button(
+            label="⬇️ Tải CSV",
+            data=csv_bytes,
+            file_name=f"bao_cao_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+        )
