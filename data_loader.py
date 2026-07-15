@@ -1,8 +1,41 @@
 import streamlit as st
 import pandas as pd
+import time
+import threading
 from datetime import datetime, timedelta
 from vnstock.api.quote import Quote
 from vnstock.api.listing import Listing
+
+# ==========================================================
+# TỰ GIỚI HẠN TỐC ĐỘ GỌI API (CHỦ ĐỘNG) THAY VÌ ĐỂ VNSTOCK TỰ CHẶN RỒI RETRY
+# ==========================================================
+# vnstock (bản >=4) có cơ chế rate-limit NGẦM: khách chưa đăng ký API key chỉ được
+# 20 request/phút. Khi vượt hạn mức, thư viện không báo lỗi ngay mà tự "sleep" rồi
+# retry nhiều lần bên trong -> khiến app trông như bị "treo" dù vẫn đang chạy.
+# Giải pháp: chủ động rải đều request theo đúng nhịp cho phép, KHÔNG bao giờ để
+# thư viện phải tự chặn -> tốc độ ổn định, có thể ước tính chính xác, không bị "kẹt".
+_rate_lock = threading.Lock()
+_call_timestamps = []
+_rate_limit_per_min = 18  # mặc định an toàn dưới mức 20/phút của tài khoản khách
+
+def set_rate_limit(requests_per_minute: int):
+    """Gọi hàm này từ main.py khi người dùng có API key để tăng tốc (vd: 55/phút)."""
+    global _rate_limit_per_min
+    _rate_limit_per_min = max(1, int(requests_per_minute))
+
+def _throttle():
+    with _rate_lock:
+        now = time.time()
+        while _call_timestamps and now - _call_timestamps[0] > 60:
+            _call_timestamps.pop(0)
+        if len(_call_timestamps) >= _rate_limit_per_min:
+            wait = 60 - (now - _call_timestamps[0]) + 0.1
+            if wait > 0:
+                time.sleep(wait)
+            now = time.time()
+            while _call_timestamps and now - _call_timestamps[0] > 60:
+                _call_timestamps.pop(0)
+        _call_timestamps.append(now)
 
 # Danh sách dự phòng nếu xui xẻo cả 3 CTCK cùng sập API
 FALLBACK_TICKERS = ["HPG", "SSI", "VND", "FPT", "TCB", "MBB", "MWG", "VIC", "VHM", "VNM"]
@@ -64,6 +97,7 @@ def _fetch(symbol, start, end, interval):
 
     for src in sources:
         try:
+            _throttle()
             df = Quote(symbol=symbol, source=src).history(
                 start=start, end=end, interval=interval
             )
@@ -85,6 +119,7 @@ def get_all_tickers(exchange='all'):
     # Dùng thẳng symbols_by_exchange() vì hàm này mới thực sự có đủ cột exchange/type.
     for src in ['vci', 'kbs']:
         try:
+            _throttle()
             df = Listing(source=src).symbols_by_exchange()
             df.columns = [str(c).lower().strip() for c in df.columns]
 
