@@ -17,6 +17,12 @@ def render_sidebar():
             "Quét 100 mã mất khoảng 5 phút. Đăng ký API key MIỄN PHÍ tại "
             "[vnstocks.com/login](https://vnstocks.com/login) để tăng lên **60 request/phút** (nhanh gấp 3)."
         )
+        fast_mode = st.checkbox(
+            "⚡ Chế độ NHANH: chỉ quét nhóm vốn hoá lớn/thanh khoản cao (~60 mã)",
+            value=True,
+            help="Ưu tiên quét các mã lớn, gần như chắc chắn đủ thanh khoản để lọt bộ lọc -> có kết quả nhanh trong 1-3 phút. "
+                 "Tắt đi nếu muốn quét toàn sàn (chậm hơn nhiều vì phải quét cả mã nhỏ, ít thanh khoản)."
+        )
         vnstock_api_key = st.text_input(
             "🔑 API Key vnstock (không bắt buộc):", value="", type="password",
             help="Dán API key miễn phí lấy từ vnstocks.com/login để tăng tốc độ quét từ 20 lên 60 mã/phút."
@@ -27,7 +33,7 @@ def render_sidebar():
             p_kijun = st.number_input("Kijun-sen", value=26, step=1)
             p_senkou_b = st.number_input("Senkou B", value=52, step=1)
             p_shift = st.number_input("Shift", value=26, step=1)
-    return exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift, vnstock_api_key
+    return exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift, vnstock_api_key, fast_mode
 
 
 def render_market_tab(chart_df, df_today):
