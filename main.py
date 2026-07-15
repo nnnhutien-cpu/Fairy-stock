@@ -249,12 +249,19 @@ with tab_screener:
             )
 
             scan_start_time = time.time()
+            # Giới hạn thời gian CỨNG cho cả lượt quét: tối đa gấp 3 lần ETA, tối thiểu 4 phút,
+            # tối đa 20 phút -> quét không bao giờ treo vô thời hạn, luôn dừng và trả kết quả đang có.
+            hard_timeout = max(240, min(1200, eta_min * 60 * 3))
+
+            live_results_box = st.empty()  # Bảng kết quả LIVE: cập nhật ngay khi có mã hợp lệ, không cần chờ quét xong hết
+
             with st.status(f"Đang quét {len(tickers_to_scan)} mã... (ước tính ~{eta_min:.1f} phút)", expanded=True) as status:
                 progress_bar = st.progress(0)
                 results = []
                 error_logs = [] # Rổ chứa nguyên nhân kẹt data
                 total = len(tickers_to_scan)
                 processed = 0
+                timed_out = False
 
                 def process_ticker(ticker):
                     if ticker in BLACKLIST:
@@ -286,31 +293,71 @@ with tab_screener:
                 max_workers = 4
                 with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                     future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
-                    
-                    for future in concurrent.futures.as_completed(future_to_ticker):
-                        processed += 1
-                        try:
-                            outcome = future.result()
-                            if outcome["status"] == "success":
-                                results.append(outcome["data"])
-                            elif outcome["status"] == "error":
-                                error_logs.append(outcome["msg"])
-                        except Exception as e:
-                            error_logs.append(f"Lỗi luồng ThreadPool: {str(e)}")
 
-                        # Cập nhật nhãn theo thời gian thực để KHÔNG bao giờ trông như bị treo
-                        elapsed = time.time() - scan_start_time
-                        status.update(label=(
-                            f"Đang quét... {processed}/{total} mã | "
-                            f"✅ {len(results)} hợp lệ | ⏱️ {elapsed:.0f}s trôi qua"
-                        ))
-                        progress_bar.progress(min(processed / total, 1.0))
+                    try:
+                        pending = set(future_to_ticker.keys())
+                        while pending:
+                            remaining_time = hard_timeout - (time.time() - scan_start_time)
+                            if remaining_time <= 0:
+                                raise concurrent.futures.TimeoutError()
+
+                            done_now, pending = concurrent.futures.wait(
+                                pending, timeout=min(3, remaining_time),
+                                return_when=concurrent.futures.FIRST_COMPLETED
+                            )
+
+                            for future in done_now:
+                                processed += 1
+                                try:
+                                    outcome = future.result()
+                                    if outcome["status"] == "success":
+                                        results.append(outcome["data"])
+                                    elif outcome["status"] == "error":
+                                        error_logs.append(outcome["msg"])
+                                except Exception as e:
+                                    error_logs.append(f"Lỗi luồng ThreadPool: {str(e)}")
+
+                            # Cập nhật nhãn + BẢNG KẾT QUẢ LIVE theo thời gian thực, không chờ quét xong hết
+                            elapsed = time.time() - scan_start_time
+                            status.update(label=(
+                                f"Đang quét... {processed}/{total} mã | "
+                                f"✅ {len(results)} hợp lệ | ⏱️ {elapsed:.0f}s trôi qua"
+                            ))
+                            progress_bar.progress(min(processed / total, 1.0))
+
+                            if done_now and results:
+                                preview_df = pd.DataFrame(results)
+                                if signal_filter != "Tất cả" and 'Trạng thái' in preview_df.columns:
+                                    preview_df_show = preview_df[preview_df['Trạng thái'] == signal_filter]
+                                else:
+                                    preview_df_show = preview_df
+                                with live_results_box.container():
+                                    st.caption(f"📊 Kết quả LIVE (đang cập nhật): {len(preview_df_show)} mã")
+                                    st.dataframe(preview_df_show, use_container_width=True, hide_index=True)
+                    except concurrent.futures.TimeoutError:
+                        timed_out = True
+                        # Không thể "kill" cứng các luồng đang chạy dở, nhưng KHÔNG chờ nữa -> trả kết quả đang có ngay
+                        executor.shutdown(wait=False, cancel_futures=True)
 
                 # 2. XỬ LÝ GIAO DIỆN KHI CÓ LỖI
-                if len(results) > 0:
+                if timed_out:
+                    status.update(
+                        label=f"⏳ Đã dừng do quá thời gian chờ ({hard_timeout/60:.0f} phút) — hiển thị {len(results)} mã đã quét được ({processed}/{total}).",
+                        state="complete", expanded=False
+                    )
+                elif len(results) > 0:
                     status.update(label=f"✅ Quét xong {len(results)} mã hợp lệ!", state="complete", expanded=False)
                 else:
                     status.update(label=f"❌ Quét thất bại toàn bộ! Xin xem chi tiết lỗi bên dưới.", state="error", expanded=True)
+
+            live_results_box.empty()  # Xóa bảng live, phần dưới sẽ hiện bảng kết quả đầy đủ (có tìm kiếm/tải CSV)
+
+            if timed_out:
+                st.warning(
+                    f"⏳ Đã dừng quét sau {hard_timeout/60:.0f} phút do quá giới hạn thời gian an toàn "
+                    f"(mới xử lý {processed}/{total} mã). Kết quả bên dưới là những mã ĐÃ quét xong. "
+                    "Muốn quét hết, hãy giảm 'Số lượng mã quét tối đa' ở sidebar hoặc thêm API key vnstock để tăng tốc."
+                )
 
             # --- IN RA BỆNH ÁN NẾU BỊ KẸT ---
             if len(error_logs) > 0 and len(results) == 0:
