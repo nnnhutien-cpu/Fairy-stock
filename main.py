@@ -144,8 +144,8 @@ setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 # --- 4. TẠO 5 TAB ---
-tab_market, tab_screener, tab_simulation, tab_backtest, tab_reports = st.tabs([
-    "🌟 Thị Trường", "🔍 Bộ Lọc", "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo"
+tab_market, tab_screener, tab_results, tab_simulation, tab_backtest, tab_reports = st.tabs([
+    "🌟 Thị Trường", "🔍 Bộ Lọc", "📊 Kết Quả Quét", "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo"
 ])
 
 # ==========================================
@@ -399,14 +399,22 @@ with tab_screener:
             
             st.session_state['scan_results'] = results
 
+    if not st.session_state.get('scan_results', []):
+        st.caption("Hãy cấu hình thông số ở Sidebar trái và bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' để bắt đầu. "
+                    "Kết quả sau khi quét xong sẽ hiển thị ở tab **📊 Kết Quả Quét**.")
+
+# ==========================================
+# TAB 2b: KẾT QUẢ QUÉT (tách riêng khỏi tab Bộ Lọc cho đỡ rối)
+# ==========================================
+with tab_results:
+    st.subheader("📊 Kết Quả Quét")
     # Dùng list rỗng [] làm mặc định để không văng lỗi KeyError
     if st.session_state.get('scan_results', []):
-        st.divider()
         raw_df = pd.DataFrame(st.session_state['scan_results'])
         df_display = render_search_and_export(raw_df)
         render_screener_results(df_display, signal_filter)
-    elif not scan_button:
-        st.caption("Hãy cấu hình thông số ở Sidebar trái và bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' để bắt đầu.")
+    else:
+        st.info("Chưa có dữ liệu quét. Sang tab **🔍 Bộ Lọc** để bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' trước.")
 # ==========================================
 # TAB 3: MÔ PHỎNG XU HƯỚNG "CÔ TIÊN" (Kijun17 / Knife65 / Knife129)
 # ==========================================
