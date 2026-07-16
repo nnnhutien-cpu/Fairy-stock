@@ -9,7 +9,7 @@ import traceback
 from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex, set_rate_limit
 from indicators import calculate_technical_signals
 import trend_engine as te
-from ui_layout import render_sidebar, render_market_tab, render_screener_results
+from ui_layout import render_sidebar, render_market_tab, render_screener_results, render_screener_signals
 from ux_components import setup_cache_clear_button, render_search_and_export
 import backtester as bt
 
@@ -144,8 +144,8 @@ setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 # --- 4. TẠO 5 TAB ---
-tab_market, tab_screener, tab_results, tab_simulation, tab_backtest, tab_reports = st.tabs([
-    "🌟 Thị Trường", "🔍 Bộ Lọc", "📊 Kết Quả Quét", "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo"
+tab_market, tab_screener, tab_results, tab_signals, tab_simulation, tab_backtest, tab_reports = st.tabs([
+    "🌟 Thị Trường", "🔍 Bộ Lọc", "📊 Kết Quả Quét", "📡 Tín Hiệu & Cảnh Báo", "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo"
 ])
 
 # ==========================================
@@ -417,9 +417,21 @@ with tab_results:
     if st.session_state.get('scan_results', []):
         raw_df = pd.DataFrame(st.session_state['scan_results'])
         df_display = render_search_and_export(raw_df)
+        st.session_state['df_display_cached'] = df_display  # để tab Tín Hiệu & Cảnh Báo dùng lại, khỏi tìm/lọc 2 lần
         render_screener_results(df_display, signal_filter)
     else:
         st.info("Chưa có dữ liệu quét. Sang tab **🔍 Bộ Lọc** để bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' trước.")
+
+# ==========================================
+# TAB 2c: TÍN HIỆU & CẢNH BÁO (RSI/MFI, cảnh báo tạo đỉnh, bắt đáy — tách riêng cho gọn)
+# ==========================================
+with tab_signals:
+    st.subheader("📡 Tín Hiệu & Cảnh Báo")
+    df_display_cached = st.session_state.get('df_display_cached')
+    if isinstance(df_display_cached, pd.DataFrame) and not df_display_cached.empty:
+        render_screener_signals(df_display_cached, signal_filter)
+    else:
+        st.info("Chưa có dữ liệu quét. Sang tab **🔍 Bộ Lọc** để quét, rồi ghé tab **📊 Kết Quả Quét** trước.")
 # ==========================================
 # TAB 3: MÔ PHỎNG XU HƯỚNG "CÔ TIÊN" (Kijun17 / Knife65 / Knife129)
 # ==========================================
