@@ -250,7 +250,14 @@ with tab_screener:
         if tickers is None or len(tickers) == 0:
             st.error("⚠️ Lỗi từ data_loader.py: Hàm `get_all_tickers` trả về danh sách rỗng!")
         else:
-            st.info(f"📊 Hệ thống đã lấy thành công danh sách **{len(tickers)}** mã từ API (Chuẩn thực tế ~1525 mã).")
+            # Số mã "chuẩn thực tế" để đối chiếu PHẢI phụ thuộc sàn đang chọn — trước đây hardcode
+            # cứng "~1525 mã" (tổng CẢ 3 sàn) dù đang chỉ quét riêng HOSE/HNX/UPCOM, gây hiểu lầm
+            # là bị thiếu dữ liệu trong khi thực ra số lượng lấy về là đúng cho sàn đó.
+            ref_range = {
+                "HOSE": "~400-430 mã", "HNX": "~300 mã", "UPCOM": "~900 mã", "Tất cả 3 sàn": "~1500-1600 mã",
+            }.get(exchange_choice, "")
+            st.info(f"📊 Hệ thống đã lấy thành công danh sách **{len(tickers)}** mã từ API "
+                    f"(sàn **{exchange_choice}**, chuẩn thực tế khoảng {ref_range}).")
 
             # ƯU TIÊN QUÉT NHÓM VỐN HOÁ LỚN / THANH KHOẢN CAO TRƯỚC:
             # -> có mã hợp lệ hiện ra ngay trong vài giây đầu thay vì phải chờ quét lần lượt
