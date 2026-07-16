@@ -296,8 +296,9 @@ with tab_screener:
                         return {"status": "skip"}
                     
                     try:
-                        # Bước 1: Lấy data
-                        df = get_stock_data(ticker, days_back=200)
+                        # Bước 1: Lấy data (300 ngày lịch ~200 phiên -> đủ đệm an toàn cho đường 129 phiên,
+                        # trước đây dùng days_back=200 chỉ ra ~140 phiên, sát ngưỡng tối thiểu 139 -> dễ trượt)
+                        df = get_stock_data(ticker, days_back=300)
                         if df is None or df.empty:
                             return {"status": "error", "msg": f"{ticker}: Hàm get_stock_data không lấy được data (trả về None/Empty)."}
                         
@@ -402,6 +403,10 @@ with tab_screener:
     if not st.session_state.get('scan_results', []):
         st.caption("Hãy cấu hình thông số ở Sidebar trái và bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' để bắt đầu. "
                     "Kết quả sau khi quét xong sẽ hiển thị ở tab **📊 Kết Quả Quét**.")
+    else:
+        n_found = len(st.session_state['scan_results'])
+        st.success(f"✅ Đã có {n_found} mã trong kết quả quét gần nhất. "
+                    "👉 Chuyển sang tab **📊 Kết Quả Quét** ở trên để xem bảng chi tiết, tìm mã, hoặc tải CSV.")
 
 # ==========================================
 # TAB 2b: KẾT QUẢ QUÉT (tách riêng khỏi tab Bộ Lọc cho đỡ rối)
