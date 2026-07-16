@@ -407,73 +407,107 @@ with tab_screener:
     elif not scan_button:
         st.caption("Hãy cấu hình thông số ở Sidebar trái và bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' để bắt đầu.")
 # ==========================================
-# TAB 3: MÔ PHỎNG ICHIMOKU
+# TAB 3: MÔ PHỎNG CỖ MÁY TRẠNG THÁI (TREND ENGINE)
 # ==========================================
 with tab_simulation:
-    st.subheader("🔮 Mô Phỏng Ichimoku & Volume")
-    st.caption("Giao diện tối giản: Chỉ hiển thị Đường Giá (Line), Ichimoku và Volume MA20.")
+    st.subheader("🔮 Mô Phỏng Cỗ Máy Trạng Thái Cổ Phiếu")
+    st.caption("Mô phỏng chu kỳ: Tăng -> Sideway -> Giảm (Phụ thuộc đường đi - Path Dependent)")
 
     sim_ticker = st.text_input("Nhập mã cổ phiếu (Gõ xong nhấn Enter):", value="HPG", key="sim_ticker_input").upper().strip()
 
     if sim_ticker:
-        with st.spinner(f"Đang xử lý dữ liệu {sim_ticker}..."):
-            df_sim = get_stock_data(sim_ticker)
+        with st.spinner(f"Đang chạy Cỗ Máy Trạng Thái cho {sim_ticker}..."):
+            df_raw = get_stock_data(sim_ticker)
 
-            if df_sim is not None and not df_sim.empty:
-                df_sim.columns = [str(c).lower().strip() for c in df_sim.columns]
-
-                df_sim['Tenkan'] = (df_sim['high'].rolling(window=p_tenkan).max() + df_sim['low'].rolling(window=p_tenkan).min()) / 2
-                df_sim['Kijun'] = (df_sim['high'].rolling(window=p_kijun).max() + df_sim['low'].rolling(window=p_kijun).min()) / 2
-
-                senkou_a_raw = (df_sim['Tenkan'] + df_sim['Kijun']) / 2
-                df_sim['Senkou A'] = senkou_a_raw.shift(p_shift)
-
-                senkou_b_raw = (df_sim['high'].rolling(window=p_senkou_b).max() + df_sim['low'].rolling(window=p_senkou_b).min()) / 2
-                df_sim['Senkou B'] = senkou_b_raw.shift(p_shift)
-
-                df_sim['Vol_MA20'] = df_sim['volume'].rolling(window=20).mean()
-
-                plot_df = df_sim.tail(100).copy()
-
-                if 'time' in plot_df.columns:
-                    plot_df['Ngay'] = pd.to_datetime(plot_df['time']).dt.strftime('%Y-%m-%d')
-                    plot_df.set_index('Ngay', inplace=True)
-
+            if df_raw is not None and not df_raw.empty:
+                # Import engine (đặt ở đây để bạn dễ copy, không sợ lỗi quên khai báo đầu file)
+                from trend_engine import run_trend_engine
                 import plotly.graph_objects as go
-                from plotly.subplots import make_subplots
+                
+                # Chạy dữ liệu qua bộ lọc State Machine
+                df_sim = run_trend_engine(df_raw)
+                
+                # --- VẼ BIỂU ĐỒ ---
+                fig = go.Figure()
 
-                fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                                    vertical_spacing=0.03, row_heights=[0.8, 0.2])
+                # a) Mây nội bộ Cô Tiên (Fill giữa Knife65 và Knife129)
+                fig.add_trace(go.Scatter(
+                    x=df_sim['time'], y=df_sim['knife65'],
+                    mode='lines', line=dict(color='rgba(0,0,0,0)'), # Đường tàng hình
+                    showlegend=False, hoverinfo='skip'
+                ))
+                fig.add_trace(go.Scatter(
+                    x=df_sim['time'], y=df_sim['knife129'],
+                    mode='lines', line=dict(color='rgba(0,0,0,0)'),
+                    fill='tonexty', fillcolor='rgba(128, 128, 128, 0.2)', # Màu mây xám mờ
+                    name='☁️ Mây Cô Tiên (65-129)'
+                ))
 
-                fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['close'],
-                                         line=dict(color='#c4b5fd', width=2), name='Giá Đóng Cửa'), row=1, col=1)
+                # b) Nến Nhật
+                fig.add_trace(go.Candlestick(
+                    x=df_sim['time'],
+                    open=df_sim['open'], high=df_sim['high'], low=df_sim['low'], close=df_sim['close'],
+                    name='Giá CP', increasing_line_color='#00ff00', decreasing_line_color='#ff0000'
+                ))
 
-                fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Senkou A'],
-                                         line=dict(color='rgba(0, 200, 83, 0.4)', width=1), name='Senkou A'), row=1, col=1)
-                fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Senkou B'],
-                                         line=dict(color='rgba(255, 23, 68, 0.4)', width=1),
-                                         fill='tonexty', fillcolor='rgba(128, 128, 128, 0.15)', name='Mây Kumo'), row=1, col=1)
+                # c) Các đường định giá
+                fig.add_trace(go.Scatter(x=df_sim['time'], y=df_sim['kijun17'], mode='lines', line=dict(color='#2962FF', width=1.5), name='Kijun (17)'))
+                fig.add_trace(go.Scatter(x=df_sim['time'], y=df_sim['knife65'], mode='lines', line=dict(color='#FF6D00', width=2), name='Knife1 (65)'))
+                fig.add_trace(go.Scatter(x=df_sim['time'], y=df_sim['knife129'], mode='lines', line=dict(color='#AA00FF', width=2.5), name='Knife2 (129)'))
 
-                fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Tenkan'], line=dict(color='#2962FF', width=1.5), name=f'Tenkan ({p_tenkan})'), row=1, col=1)
-                fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Kijun'], line=dict(color='darkred', width=3), name=f'Kijun ({p_kijun})'), row=1, col=1)
+                # d) TÔ MÀU NỀN THEO XU HƯỚNG (Background Highlights)
+                current_trend = None
+                start_date = None
 
-                colors = ['#00C853' if row['close'] >= row['open'] else '#FF1744' for idx, row in plot_df.iterrows()]
-                fig.add_trace(go.Bar(x=plot_df.index, y=plot_df['volume'], marker_color=colors, name='Volume'), row=2, col=1)
-                fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Vol_MA20'], line=dict(color='#FF6D00', width=2, shape='spline'), name='Volume MA20'), row=2, col=1)
+                for i in range(len(df_sim)):
+                    state = df_sim['State'].iloc[i]
+                    date = df_sim['time'].iloc[i]
+                    
+                    if state != current_trend:
+                        if current_trend == "🟢 Tăng":
+                            fig.add_vrect(x0=start_date, x1=date, fillcolor="rgba(0, 255, 0, 0.15)", layer="below", line_width=0)
+                        elif current_trend == "🔴 Giảm":
+                            fig.add_vrect(x0=start_date, x1=date, fillcolor="rgba(255, 0, 0, 0.15)", layer="below", line_width=0)
+                        
+                        current_trend = state
+                        start_date = date
+                        
+                # Đóng trend ở nến cuối cùng
+                if current_trend == "🟢 Tăng":
+                    fig.add_vrect(x0=start_date, x1=df_sim['time'].iloc[-1], fillcolor="rgba(0, 255, 0, 0.15)", layer="below", line_width=0)
+                elif current_trend == "🔴 Giảm":
+                    fig.add_vrect(x0=start_date, x1=df_sim['time'].iloc[-1], fillcolor="rgba(255, 0, 0, 0.15)", layer="below", line_width=0)
 
-                plot_df['Prev_Close'] = plot_df['close'].shift(1)
-                plot_df['Prev_Kijun'] = plot_df['Kijun'].shift(1)
-                buy_points = plot_df[(plot_df['Prev_Close'] <= plot_df['Prev_Kijun']) & (plot_df['close'] > plot_df['Kijun'])]
-                sell_points = plot_df[(plot_df['Prev_Close'] >= plot_df['Prev_Kijun']) & (plot_df['close'] < plot_df['Kijun'])]
+                # e) CỜ TÍN HIỆU (FLAGS)
+                hop_bich_data = df_sim[df_sim['Flag_HopBich']]
+                if not hop_bich_data.empty:
+                    fig.add_trace(go.Scatter(
+                        x=hop_bich_data['time'], y=hop_bich_data['knife129'],
+                        mode='markers', marker=dict(symbol='circle', size=6, color='yellow', line=dict(width=1, color='black')),
+                        name='⚡ Hợp Bích'
+                    ))
 
-                fig.add_trace(go.Scatter(x=buy_points.index, y=buy_points['close'] * 0.98,
-                                         mode='markers', marker=dict(symbol='triangle-up', size=14, color='lime'), name='Tín Hiệu MUA'), row=1, col=1)
-                fig.add_trace(go.Scatter(x=sell_points.index, y=sell_points['close'] * 1.02,
-                                         mode='markers', marker=dict(symbol='triangle-down', size=14, color='red'), name='Tín Hiệu BÁN'), row=1, col=1)
+                chan_song_data = df_sim[df_sim['Flag_ChanSong']]
+                if not chan_song_data.empty:
+                    fig.add_trace(go.Scatter(
+                        x=chan_song_data['time'], y=chan_song_data['low'] * 0.95,
+                        mode='markers+text', marker=dict(symbol='triangle-up', size=12, color='lime'),
+                        text="🚀", textposition="bottom center", name='🚀 Chân Sóng'
+                    ))
 
+                phan_phoi_data = df_sim[df_sim['Flag_PhanPhoi']]
+                if not phan_phoi_data.empty:
+                    fig.add_trace(go.Scatter(
+                        x=phan_phoi_data['time'], y=phan_phoi_data['high'] * 1.05,
+                        mode='markers+text', marker=dict(symbol='triangle-down', size=12, color='red'),
+                        text="⚠️", textposition="top center", name='⚠️ Phân Phối'
+                    ))
+
+                # f) CẤU HÌNH GIAO DIỆN CHART (Đồng bộ Dark Theme)
+                last_state = df_sim['State'].iloc[-1]
                 fig.update_layout(
-                    title=f"<b>Phân Tích Ichimoku (Line Chart): {sim_ticker}</b>",
-                    height=680, margin=dict(l=10, r=10, t=40, b=10),
+                    title=f"<b>Trạng thái hiện tại: {last_state}</b>",
+                    height=650, margin=dict(l=10, r=10, t=40, b=10),
                     showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                     xaxis_rangeslider_visible=False, dragmode='pan',
                     paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='#dcd6ec')
@@ -481,6 +515,23 @@ with tab_simulation:
                 fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
 
                 st.plotly_chart(fig, use_container_width=True)
+
+                # --- 📊 THỐNG KÊ STATE MACHINE ---
+                st.markdown("### 📊 Thông số Kỹ thuật Gần Nhất")
+                col1, col2, col3, col4 = st.columns(4)
+                
+                last_row = df_sim.iloc[-1]
+                col1.metric("Vị thế (State)", last_row['State'])
+                
+                pct_vs_129 = (last_row['close'] - last_row['knife129']) / last_row['knife129'] * 100
+                col2.metric("Cách định giá 129", f"{pct_vs_129:.2f}%")
+                
+                vol_text = "Nổ Vol 💥" if last_row['volume'] >= 1.5 * last_row['vol_ma20'] else "Bình thường"
+                col3.metric("Thanh khoản", vol_text)
+                
+                cbg_text = "Nguy Hiểm ⚠️" if last_row['Flag_PhanPhoi'] else "An Toàn ✅"
+                col4.metric("Rủi ro Phân phối", cbg_text)
+
             else:
                 st.warning(f"⚠️ Không có dữ liệu cho mã {sim_ticker}. Hãy kiểm tra lại mã cổ phiếu!")
 
