@@ -272,6 +272,19 @@ with tab_screener:
                 st.caption(f"⚡ Chế độ NHANH đang bật: chỉ quét {len(tickers_ordered)} mã vốn hoá lớn/thanh khoản cao (tắt ở sidebar để quét toàn sàn).")
             else:
                 tickers_ordered = priority_present + rest
+                extra_scanned = max(0, max_scan - len(priority_present))
+                if extra_scanned < len(rest) * 0.3:
+                    # Cảnh báo đúng tình huống gây nhầm lẫn: tắt Chế độ NHANH nhưng "Số lượng mã quét
+                    # tối đa" vẫn thấp -> chỉ thêm được vài chục mã "còn lại" (thường thanh khoản thấp,
+                    # đa số sẽ bị loại), khiến tổng mã hợp lệ gần như không đổi so với lúc bật NHANH.
+                    st.warning(
+                        f"⚠️ Chế độ NHANH đã tắt, nhưng \"Số lượng mã quét tối đa\" đang chỉ để **{max_scan}** "
+                        f"-> chỉ quét thêm được **{extra_scanned} mã** ngoài {len(priority_present)} mã ưu tiên "
+                        f"(trong tổng {len(rest)} mã còn lại). Đa số mã thêm vào này là mã nhỏ/thanh khoản thấp "
+                        "nên có thể vẫn bị loại gần hết, làm số mã hợp lệ trông không đổi. "
+                        "**Hãy kéo thanh trượt \"Số lượng mã quét tối đa\" ở sidebar lên vài trăm — 1500+** "
+                        "rồi bấm quét lại để thấy khác biệt rõ rệt (lưu ý: quét càng nhiều càng lâu)."
+                    )
 
             tickers_to_scan = tickers_ordered[:max_scan]
 
