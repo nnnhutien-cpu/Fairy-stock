@@ -582,8 +582,12 @@ with tab_simulation:
 
                     fig.update_layout(
                         title=f"<b>Mô Phỏng Xu Hướng Cô Tiên: {sim_ticker}</b>",
-                        height=720, margin=dict(l=10, r=10, t=40, b=10),
-                        showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                        height=760, margin=dict(l=10, r=160, t=40, b=10),
+                        showlegend=True,
+                        # Legend NGANG (orientation="h") với 12 traces sẽ tràn khỏi khung nhìn và bị
+                        # cắt/ẩn bớt mục -> đổi sang DỌC, đặt bên phải chart, không còn bị tràn.
+                        legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.01,
+                                    font=dict(size=11), bgcolor='rgba(0,0,0,0)'),
                         xaxis_rangeslider_visible=False, dragmode='pan',
                         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='#dcd6ec')
                     )
