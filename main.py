@@ -145,7 +145,7 @@ setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 # --- 4. TẠO 5 TAB ---
-tab_market, tab_screener, tab_results, tab_signals, tab_simulation, tab_backtest, tab_reports = st.tabs([
+tab_market, tab_screener, tab_results, tab_signals, tab_simulation, tab_backtest, tab_reports, tab_accum = st.tabs([
     "🌟 Thị Trường", "🔍 Bộ Lọc", "📊 Kết Quả Quét", "📡 Tín Hiệu & Cảnh Báo", "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo", "🧭 Tích Lũy"
 ])
 
@@ -1017,3 +1017,9 @@ with tab_reports:
             file_name=f"bao_cao_{datetime.now().strftime('%Y%m%d')}.csv",
             mime="text/csv",
         )
+
+# ==========================================
+# TAB 8: CHIẾN LƯỢC TÍCH LŨY (RSI + MÂY + MA129 + DÒNG TIỀN)
+# ==========================================
+with tab_accum:
+    render_accumulation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift)
