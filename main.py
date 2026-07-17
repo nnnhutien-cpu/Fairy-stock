@@ -146,7 +146,7 @@ setup_cache_clear_button()
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 # --- 4. TẠO 5 TAB ---
 tab_market, tab_screener, tab_results, tab_signals, tab_simulation, tab_backtest, tab_reports = st.tabs([
-    "🌟 Thị Trường", "🔍 Bộ Lọc", "📊 Kết Quả Quét", "📡 Tín Hiệu & Cảnh Báo", "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo"
+    "🌟 Thị Trường", "🔍 Bộ Lọc", "📊 Kết Quả Quét", "📡 Tín Hiệu & Cảnh Báo", "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo" "🧭 Tích Lũy"
 ])
 
 # ==========================================
