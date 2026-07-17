@@ -6,6 +6,7 @@ import streamlit.components.v1 as components
 from supabase import create_client
 import traceback
 
+from tab_accumulation import render_accumulation_tab
 from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex, set_rate_limit
 from indicators import calculate_technical_signals
 import trend_engine as te
