@@ -192,9 +192,6 @@ def build_action_signal(info: dict) -> dict:
 
 def render_accumulation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senkou_b=52, p_shift=26):
     """Vẽ toàn bộ nội dung tab 'Tích Lũy'. Gọi trong main.py bên trong `with tab_accum:`."""
-    import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
-
     st.subheader("🧭 Chiến Lược Giao Dịch Theo Pha Tích Lũy")
     st.caption(
         "RSI xác định vùng giá hời/quá mua · Mây Ichimoku + MA129 xác định trạng thái xu hướng · "
@@ -215,24 +212,41 @@ def render_accumulation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senkou_
         st.info("Nhập mã cổ phiếu hoặc VNINDEX để bắt đầu phân tích.")
         return
 
-    with st.spinner(f"Đang tải và tính toán dữ liệu {ticker}..."):
-        df = get_stock_data_fn(ticker, days_back=400) if ticker != "VNINDEX" else get_stock_data_fn("VNINDEX", days_back=400)
+    try:
+        with st.spinner(f"Đang tải dữ liệu {ticker}..."):
+            df = get_stock_data_fn(ticker, days_back=400)
+    except Exception as e:
+        st.error(f"🚨 Lỗi khi gọi get_stock_data('{ticker}'): {e}")
+        return
 
     if df is None or df.empty:
         st.warning(f"⚠️ Không lấy được dữ liệu cho {ticker}. Kiểm tra lại mã hoặc thử lại sau.")
         return
 
-    d = calculate_full_indicators(
-        df, p_tenkan=p_tenkan, p_kijun=p_kijun, p_senkou_b=p_senkou_b, p_shift=p_shift,
-        climax_window=int(climax_window), breakout_multiplier=float(breakout_mult)
-    )
-    d = d.dropna(subset=['close']).reset_index(drop=True)
+    try:
+        d = calculate_full_indicators(
+            df, p_tenkan=p_tenkan, p_kijun=p_kijun, p_senkou_b=p_senkou_b, p_shift=p_shift,
+            climax_window=int(climax_window), breakout_multiplier=float(breakout_mult)
+        )
+        d = d.dropna(subset=['close']).reset_index(drop=True)
+    except Exception as e:
+        st.error(f"🚨 Lỗi khi tính chỉ báo (calculate_full_indicators): {e}")
+        st.caption(f"Các cột dữ liệu nhận được: {list(df.columns)}")
+        return
+
+    if d.empty:
+        st.warning("⚠️ Sau khi làm sạch dữ liệu, không còn dòng nào hợp lệ (cột 'close' toàn NaN).")
+        return
 
     if len(d) < 130:
         st.warning("⚠️ Dữ liệu chưa đủ dài (cần tối thiểu ~130 phiên) để tính MA129 & mây Ichimoku chuẩn xác.")
 
-    info = classify_state(d, lookback=40, breakout_multiplier=float(breakout_mult))
-    signal = build_action_signal(info)
+    try:
+        info = classify_state(d, lookback=40, breakout_multiplier=float(breakout_mult))
+        signal = build_action_signal(info)
+    except Exception as e:
+        st.error(f"🚨 Lỗi khi phân loại trạng thái (classify_state): {e}")
+        return
 
     # --- Bảng chỉ số nhanh ---
     m1, m2, m3, m4 = st.columns(4)
@@ -257,6 +271,16 @@ def render_accumulation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senkou_
     )
 
     st.divider()
+
+    try:
+        _render_chart(d, ticker)
+    except Exception as e:
+        st.error(f"🚨 Lỗi khi vẽ biểu đồ: {e}")
+
+
+def _render_chart(d: pd.DataFrame, ticker: str):
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
 
     # --- Biểu đồ: Giá + Mây + MA129 (row1), Volume + cờ bùng nổ/kiệt TK (row2), RSI (row3) ---
     plot_df = d.tail(180).copy()
