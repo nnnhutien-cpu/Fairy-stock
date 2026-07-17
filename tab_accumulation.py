@@ -201,7 +201,7 @@ def render_accumulation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senkou_
     col_a, col_b, col_c = st.columns([2, 1, 1])
     with col_a:
         ticker = st.text_input(
-            "Nhập mã (hoặc VNINDEX):", value="VNINDEX", key="accum_ticker_input"
+            "Nhập mã (hoặc VNINDEX):", value="HPG", key="accum_ticker_input"
         ).upper().strip()
     with col_b:
         climax_window = st.number_input("Cửa sổ xét kiệt TK (phiên)", min_value=5, max_value=60, value=20, step=5)
@@ -212,9 +212,23 @@ def render_accumulation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senkou_
         st.info("Nhập mã cổ phiếu hoặc VNINDEX để bắt đầu phân tích.")
         return
 
+    # Gọi dữ liệu trong luồng riêng có giới hạn thời gian chờ CỨNG (25s):
+    # nguồn vnstock (VCI) đôi khi tự retry rất lâu khi API nguồn bị timeout,
+    # có thể khiến cả app treo vô thời hạn nếu gọi trực tiếp không giới hạn.
+    import concurrent.futures
     try:
-        with st.spinner(f"Đang tải dữ liệu {ticker}..."):
-            df = get_stock_data_fn(ticker, days_back=400)
+        with st.spinner(f"Đang tải dữ liệu {ticker}... (tối đa 25s)"):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                future = ex.submit(get_stock_data_fn, ticker, 400)
+                try:
+                    df = future.result(timeout=25)
+                except concurrent.futures.TimeoutError:
+                    st.error(
+                        f"🚨 Quá thời gian chờ (25s) khi tải dữ liệu cho {ticker}. "
+                        "Nguồn dữ liệu (vnstock/VCI) có thể đang bị chậm/timeout. "
+                        "Hãy thử lại sau ít phút hoặc đổi sang mã khác."
+                    )
+                    return
     except Exception as e:
         st.error(f"🚨 Lỗi khi gọi get_stock_data('{ticker}'): {e}")
         return
