@@ -238,7 +238,16 @@ with tab_market:
 # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU (BẢN TRUY VẾT LỖI X-QUANG)
 # ==========================================
-with tab_screener:
+# --- FIX "tab chồng tab": bọc toàn bộ tab Bộ Lọc vào 1 fragment riêng. ---
+# Lý do lỗi cũ: khi bấm nút quét, Streamlit chạy LẠI TOÀN BỘ file từ trên xuống.
+# Vòng quét bên dưới chạy đồng bộ, có thể mất tới 20 phút (hard_timeout), nên
+# script bị "kẹt" ngay tại đây và CHƯA kịp chạy tới code của các tab phía sau
+# (Kết Quả Quét, Tín Hiệu, Mô Phỏng, Backtest, Báo Cáo, Tích Lũy) trong lượt
+# chạy đó -> các tab đó hiển thị trống/không có thông tin.
+# @st.fragment cô lập phần quét: bấm nút chỉ rerun RIÊNG fragment này, các tab
+# khác giữ nguyên nội dung đã render, không bị "trắng" trong lúc đang quét.
+@st.fragment
+def render_screener_fragment():
     st.subheader(f"Danh Sách Quét Sàn {exchange_choice}")
     scan_button = st.button("🚀 KÍCH HOẠT QUÉT TOÀN DIỆN", use_container_width=True, type="primary")
 
@@ -421,6 +430,12 @@ with tab_screener:
             
             st.session_state['scan_results'] = results
 
+            # Quét xong -> làm 1 lần rerun TOÀN APP (không phải chỉ fragment) để
+            # tab "📊 Kết Quả Quét" và "📡 Tín Hiệu & Cảnh Báo" đọc được dữ liệu mới
+            # ngay lập tức, không cần người dùng phải tự bấm gì thêm. Lần rerun này
+            # rất nhanh vì scan_button sẽ về False -> không quét lại từ đầu.
+            st.rerun()
+
     if not st.session_state.get('scan_results', []):
         st.caption("Hãy cấu hình thông số ở Sidebar trái và bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' để bắt đầu. "
                     "Kết quả sau khi quét xong sẽ hiển thị ở tab **📊 Kết Quả Quét**.")
@@ -428,6 +443,10 @@ with tab_screener:
         n_found = len(st.session_state['scan_results'])
         st.success(f"✅ Đã có {n_found} mã trong kết quả quét gần nhất. "
                     "👉 Chuyển sang tab **📊 Kết Quả Quét** ở trên để xem bảng chi tiết, tìm mã, hoặc tải CSV.")
+
+
+with tab_screener:
+    render_screener_fragment()
 
 # ==========================================
 # TAB 2b: KẾT QUẢ QUÉT (tách riêng khỏi tab Bộ Lọc cho đỡ rối)
