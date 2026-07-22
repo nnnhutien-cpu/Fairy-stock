@@ -390,9 +390,22 @@ def render_screener_fragment():
                                     preview_df_show = preview_df[preview_df['Trạng thái'] == signal_filter]
                                 else:
                                     preview_df_show = preview_df
+                                # Bảng LIVE chỉ hiện ~8 cột gọn để dễ theo dõi tiến độ khi đang quét.
+                                # Bảng đầy đủ/chia nhóm (Tổng Quan, 3 Đường Định Giá, Tín Hiệu & Cảnh Báo)
+                                # sẽ hiện ở các tab riêng sau khi quét xong (xem render_screener_results
+                                # và render_screener_signals trong ui_layout.py) — tránh nhồi 20+ cột vào
+                                # 1 bảng lúc đang quét, gây rối mắt và tràn ngang màn hình.
+                                live_cols = [c for c in [
+                                    "Mã CP", "Giá", "GTGD (Tỷ)", "Vol x TB20",
+                                    "Dòng Tiền", "Xu Hướng", "Định Giá (129)", "Trạng thái",
+                                ] if c in preview_df_show.columns]
+                                preview_df_live = preview_df_show[live_cols] if live_cols else preview_df_show
                                 with live_results_box.container():
-                                    st.caption(f"📊 Kết quả LIVE (đang cập nhật): {len(preview_df_show)} mã")
-                                    st.dataframe(preview_df_show, use_container_width=True, hide_index=True)
+                                    st.caption(
+                                        f"📊 Kết quả LIVE (đang cập nhật): {len(preview_df_live)} mã — "
+                                        "bảng đầy đủ sẽ có ở tab 📊 Kết Quả Quét sau khi quét xong."
+                                    )
+                                    st.dataframe(preview_df_live, use_container_width=True, hide_index=True)
                     except concurrent.futures.TimeoutError:
                         timed_out = True
                         # Không thể "kill" cứng các luồng đang chạy dở, nhưng KHÔNG chờ nữa -> trả kết quả đang có ngay
