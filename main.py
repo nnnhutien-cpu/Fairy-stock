@@ -17,6 +17,7 @@ from ui_layout import render_sidebar, render_market_tab, render_screener_results
 from ux_components import setup_cache_clear_button, render_search_and_export
 import backtester as bt
 import valuation
+from market_breadth import get_market_breadth, render_breadth_panel
 
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
@@ -301,6 +302,13 @@ with tab_market:
                 macd_color = snap.get('macd_color', 'gray')
                 macd_cross = snap.get('macd_cross', '—')
                 st.markdown(f"**Trạng thái MACD:** :{macd_color}[{macd_cross}]")
+
+                st.divider()
+
+                # --- BREADTH THỊ TRƯỜNG ---
+                scan_results = st.session_state.get('scan_results', [])
+                breadth = get_market_breadth(scan_results)
+                render_breadth_panel(breadth)
 
         with c4:
             with st.container(border=True):
