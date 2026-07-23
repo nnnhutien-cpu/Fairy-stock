@@ -223,11 +223,17 @@ def get_latest_snapshot(df_engine: pd.DataFrame) -> dict:
     }
     # trend_engine.py  →  thêm hàm này vào cuối file
 
-def market_recommendation(snap: dict) -> dict:
-    """Sinh khuyến nghị CP/Tiền từ snapshot thị trường."""
+# trend_engine.py — sửa hàm market_recommendation
+
+def market_recommendation(snap: dict, pe_stats: dict = None) -> dict:
+    """
+    Khuyến nghị tổng hợp:
+    - Trend + Volume + RSI + MACD (đã có)
+    - + P/E percentile (MỚI)
+    """
     score, reasons = 0, []
 
-    # Trend
+    # ===== TREND =====
     t = snap["trend_text"]
     if "tăng mạnh" in t:
         score += 2; reasons.append("✅ Xu hướng tăng mạnh — nên duy trì/vào thêm")
@@ -238,7 +244,7 @@ def market_recommendation(snap: dict) -> dict:
     else:
         score -= 2; reasons.append("📉 Xu hướng giảm — nên giảm tỷ trọng")
 
-    # RSI
+    # ===== RSI =====
     rsi = snap["rsi"]
     if rsi >= 70:
         score -= 1; reasons.append(f"🔴 RSI={rsi} quá mua — chốt lời một phần")
@@ -247,28 +253,49 @@ def market_recommendation(snap: dict) -> dict:
     else:
         reasons.append(f"🟡 RSI={rsi} trung tính — quan sát thêm")
 
-    # MACD
+    # ===== MACD =====
     if snap["macd_cross"] == "Vàng":
         score += 1; reasons.append("✅ MACD cắt lên — tín hiệu tích cực")
     else:
         score -= 1; reasons.append("⚠️ MACD cắt xuống — tín hiệu tiêu cực")
 
-    # Volume
+    # ===== VOLUME =====
     vr = snap["vol_ratio"]
     if vr >= 1.5:
         reasons.append(f"🔥 Volume đột biến {vr}x — dòng tiền hỗ trợ")
     elif vr < 0.7:
         score -= 1; reasons.append(f"💤 Volume yếu {vr}x — thiếu dòng tiền")
 
-    # Phân bổ
-    if score >= 3:
-        stock, cash, action, color = 70, 30, "🚀 MUA / GIỮ MẠNH", "success"
-    elif score >= 1:
-        stock, cash, action, color = 55, 45, "➖ GIỮ - CÂN BẰNG", "info"
-    elif score >= -1:
-        stock, cash, action, color = 40, 60, "⚠️ GIẢM NHẸ TỶ TRỌNG", "warning"
+    # ===== P/E VALUATION (MỚI) =====
+    if pe_stats and pe_stats.get("percentile") is not None:
+        pct = pe_stats["percentile"]
+        z   = pe_stats.get("zscore", 0)
+        if pct < 15:
+            score += 2
+            reasons.append(f"💰 P/E={pe_stats['pe_now']:.1f}x ở percentile {pct:.0f}% — RẺ kỷ lục, cơ hội tích lũy")
+        elif pct < 30:
+            score += 1
+            reasons.append(f"💰 P/E percentile {pct:.0f}% — vùng rẻ, ưu tiên mua gom")
+        elif pct > 85:
+            score -= 2
+            reasons.append(f"💰 P/E percentile {pct:.0f}% — ĐẮT, nên chốt lời dần")
+        elif pct > 70:
+            score -= 1
+            reasons.append(f"💰 P/E percentile {pct:.0f}% — vùng đắt, hạn chế mua mới")
+        else:
+            reasons.append(f"💰 P/E percentile {pct:.0f}% — định giá hợp lý")
+
+    # ===== PHÂN BỔ =====
+    if score >= 4:
+        stock, cash, action, color = 75, 25, "🚀 MUA MẠNH - VÙNG ĐẸP", "success"
+    elif score >= 2:
+        stock, cash, action, color = 65, 35, "🟢 MUA / GIỮ TỶ TRỌNG CAO", "success"
+    elif score >= 0:
+        stock, cash, action, color = 50, 50, "➖ GIỮ - CÂN BẰNG", "info"
+    elif score >= -2:
+        stock, cash, action, color = 35, 65, "⚠️ GIẢM TỶ TRỌNG", "warning"
     else:
-        stock, cash, action, color = 25, 75, "🛡️ PHÒNG THỦ - GIỮ TIỀN MẶT", "danger"
+        stock, cash, action, color = 20, 80, "🛡️ PHÒNG THỦ - GIỮ TIỀN MẶT", "danger"
 
     return {
         "score": score, "action": action, "stock": stock,
