@@ -57,10 +57,10 @@ def get_stock_valuation(ticker, ichi_status, price_val):
             pass
 
     # Làm sạch số liệu (Xóa bỏ các số lỗi)
-    pe = round(float(pe), 2) if pd.notna(pe) else 0.0
-    pb = round(float(pb), 2) if pd.notna(pb) else 0.0
-    von_hoa = round(float(von_hoa), 2) if pd.notna(von_hoa) else 0.0
-
+    pe = round(float(pe), 2) if _pd.notna(pe) else 0.0
+    pb = round(float(pb), 2) if _pd.notna(pb) else 0.0
+    von_hoa = round(float(von_hoa), 2) if _pd.notna(von_hoa) else 0.0
+    
     # THUẬT TOÁN ĐỊNH GIÁ KẾT HỢP ICHIMOKU
     if pe == 0.0 and pb == 0.0:
         danh_gia = "⚠️ Đang tính toán"
