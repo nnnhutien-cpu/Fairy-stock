@@ -157,8 +157,17 @@ def _weighted_eps_vn30() -> float | None:
 
 
 # ----- 2. P/E LỊCH SỬ 20 NĂM -----
-@_st.cache_data(ttl=3600 * 24, show_spinner=False)
-def get_pe_history(years: int = 20) -> "_pd.DataFrame":
+# valuation.py — đặt constants ở đầu file
+PE_CACHE_TTL = 3600           # 1 giờ cho P/E hiện tại
+PE_HIST_TTL  = 86400          # 1 ngày cho P/E lịch sử (20 năm)
+@_st.cache_data(ttl=PE_CACHE_TTL, show_spinner=False)
+def get_current_pe(symbol: str = "VNINDEX"):
+    ...
+
+
+@_st.cache_data(ttl=PE_HIST_TTL, show_spinner=False)
+def get_pe_history(years: int = 20):
+    ...
     """Lấy P/E VN-INDEX hàng tháng, 20 năm gần nhất."""
     # Nếu cache còn mới → dùng
     if os.path.exists(_MKT_HIST_FILE):
