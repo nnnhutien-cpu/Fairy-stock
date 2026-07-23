@@ -292,45 +292,7 @@ with tab_market:
                     text=f"Tỷ lệ: {vol_ratio}x trung bình"
                 )
 
-        # --- Hàng 2: Chỉ báo KT | Khuyến nghị ---
-        c3, c4 = st.columns(2)
-
-        with c3:
-            with st.container(border=True):
-                st.markdown("#### 📊 Chỉ báo kỹ thuật")
-                st.markdown(f"**RSI(14):** `{snap.get('rsi', '—')}` — {snap.get('rsi_text', '')}")
-                st.markdown(
-                    f"**MACD:** `{snap.get('macd', '—')}` &nbsp;|&nbsp; "
-                    f"**Signal:** `{snap.get('macd_signal', '—')}`"
-                )
-                macd_color = snap.get('macd_color', 'gray')
-                macd_cross = snap.get('macd_cross', '—')
-                st.markdown(f"**Trạng thái MACD:** :{macd_color}[{macd_cross}]")
-
-        with c4:
-            if reco is not None:
-                with st.container(border=True):
-                    st.markdown("#### 💡 Khuyến nghị hành động")
-                    st.markdown(f"### :{reco.get('color', 'gray')}[{reco.get('action', '—')}]")
-
-                    s1, s2 = st.columns(2)
-                    s1.metric("📈 Nên nắm giữ CP", f"{reco.get('stock', 0)}%")
-                    s2.metric("💵 Nên giữ tiền mặt", f"{reco.get('cash', 0)}%")
-
-                    stock_pct = reco.get("stock", 0) or 0
-                    cash_pct  = reco.get("cash", 0) or 0
-                    st.progress(stock_pct / 100,
-                                text=f"Tỷ trọng CP {stock_pct}% / Tiền {cash_pct}%")
-
-                    with st.expander("📋 Lý do khuyến nghị", expanded=True):
-                        for r in reco.get("reasons", []):
-                            st.markdown(f"- {r}")
-
-                    st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
-        # main.py — trong tab Thị Trường
-
-# ... (đã có 3 card tổng quan + khối Xu hướng + Dòng tiền) ...
-
+    
 # ============================================================
 # HÀNG: CHỈ BÁO KT | ĐỊNH GIÁ P/E
 # ============================================================
