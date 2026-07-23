@@ -10,6 +10,7 @@ from indicators import market_snapshot
 from trend_engine import market_recommendation
 from tab_accumulation import render_accumulation_tab
 from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex, set_rate_limit
+from indicators import safe_market_snapshot as market_snapshot, _empty_snapshot
 from indicators import calculate_technical_signals
 import trend_engine as te
 from ui_layout import render_sidebar, render_market_tab, render_screener_results, render_screener_signals
