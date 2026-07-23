@@ -326,6 +326,73 @@ with tab_market:
                             st.markdown(f"- {r}")
 
                     st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
+        # main.py — trong tab Thị Trường
+
+# ... (đã có 3 card tổng quan + khối Xu hướng + Dòng tiền) ...
+
+# ============================================================
+# HÀNG: CHỈ BÁO KT | ĐỊNH GIÁ P/E
+# ============================================================
+c3, c4 = st.columns(2)
+
+with c3:
+    with st.container(border=True):
+        st.markdown("#### 📊 Chỉ báo kỹ thuật")
+        st.markdown(f"**RSI(14):** `{snap['rsi']}` — {snap['rsi_text']}")
+        st.markdown(f"**MACD:** `{snap['macd']}` &nbsp;|&nbsp; "
+                    f"**Signal:** `{snap['macd_signal']}`")
+        st.markdown(f"**Trạng thái MACD:** :{snap['macd_color']}[{snap['macd_cross']}]")
+
+with c4:
+    # ====== KHỐI MỚI: ĐỊNH GIÁ P/E ======
+    with st.container(border=True):
+        st.markdown("#### 💰 Định giá P/E (20 năm)")
+        
+        pe_now     = valuation.get_current_pe("VNINDEX")
+        pe_hist    = valuation.get_pe_history(years=20)
+        pe_stats   = valuation.pe_stats(pe_hist, pe_now)
+        
+        # Hiển thị P/E hiện tại lớn
+        col_pe1, col_pe2 = st.columns([1, 1])
+        with col_pe1:
+            st.metric(
+                "P/E hiện tại",
+                f"{pe_stats['pe_now']:.1f}x" if pe_stats['pe_now'] else "—",
+                delta=f"{pe_stats['pct_vs_avg']:+.1f}% vs TB"
+                          if pe_stats['pct_vs_avg'] else None,
+                delta_color="inverse"
+            )
+        with col_pe2:
+            st.metric(
+                "Trung bình 20 năm",
+                f"{pe_stats['mean']:.1f}x" if pe_stats['mean'] else "—",
+                delta=f"{pe_stats['zscore']:+.2f}σ"
+                          if pe_stats['zscore'] else None
+            )
+        
+        # Percentile bar
+        pct = pe_stats['percentile']
+        if pct is not None:
+            color = "🟢" if pct < 25 else "🟡" if pct < 75 else "🔴"
+            label = "RẺ" if pct < 25 else "HỢP LÝ" if pct < 75 else "ĐẮT"
+            st.progress(pct/100, text=f"{color} Percentile: {pct:.0f}% — {label}")
+        
+        # Nhận xét nhanh
+        if pe_stats['comment']:
+            st.info(pe_stats['comment'])
+        
+        # Mini chart lịch sử
+        if not pe_hist.empty:
+            with st.expander("📈 Xem P/E 20 năm", expanded=False):
+                st.line_chart(
+                    pe_hist.set_index("date")["pe"],
+                    height=200
+                )
+
+# ============================================================
+# KHỐI KHUYẾN NGHỊ TỔNG HỢP (đã có, nhưng giờ CỘNG THÊM P/E)
+# ============================================================
+# Sửa hàm market_recommendation() để đưa P/E vào score
 
 # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU
