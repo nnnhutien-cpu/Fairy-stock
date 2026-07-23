@@ -116,3 +116,59 @@ def render_screener_signals(results_df, signal_filter):
         st.dataframe(df[cols], use_container_width=True, hide_index=True)
     else:
         st.info("Không có cột tín hiệu phù hợp trong dữ liệu hiện tại.")
+# ---------- ĐỊNH GIÁ P/E (20 NĂM) ----------
+st.subheader("💰 Định giá P/E (20 năm)")
+
+import valuation
+
+with st.spinner("Đang tải dữ liệu P/E..."):
+    pe_now  = valuation.get_current_pe("VNINDEX")
+    pe_hist = valuation.get_pe_history(years=20)
+    stats   = valuation.pe_stats(pe_hist, pe_now)
+
+if pe_now is None:
+    st.warning("⏳ Chưa lấy được P/E hiện tại từ API. Thử lại sau.")
+else:
+    # --- Metrics hàng trên ---
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("P/E Hiện tại",  f"{stats['pe_now']:.1f}x")
+    c2.metric("TB 20 năm",     f"{stats['mean']:.1f}x"   if stats['mean']   else "—")
+    c3.metric("Percentile",    f"{stats['percentile']:.0f}%" if stats['percentile'] is not None else "—")
+    c4.metric("Z-score",       f"{stats['zscore']:+.2f}"  if stats['zscore'] is not None else "—")
+
+    # --- Nhận xét ---
+    st.markdown(stats["comment"])
+
+    # --- Biểu đồ lịch sử ---
+    if pe_hist is not None and not pe_hist.empty:
+        import plotly.graph_objects as go
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=pe_hist["date"], y=pe_hist["pe"],
+            name="P/E VN-INDEX", line=dict(color="#c4b5fd", width=2)
+        ))
+        # Đường TB và ±1 stdev
+        if stats["mean"]:
+            fig.add_hline(y=stats["mean"],  line_dash="dash",
+                          line_color="#facc15", annotation_text=f"TB {stats['mean']:.1f}x")
+        if stats["mean"] and stats["stdev"]:
+            fig.add_hline(y=stats["mean"] + stats["stdev"], line_dash="dot",
+                          line_color="rgba(250,100,100,0.5)", annotation_text="+1σ")
+            fig.add_hline(y=stats["mean"] - stats["stdev"], line_dash="dot",
+                          line_color="rgba(100,220,100,0.5)", annotation_text="-1σ")
+        # Điểm P/E hiện tại
+        fig.add_hline(y=pe_now, line_color="#f97316", line_width=2,
+                      annotation_text=f"Hôm nay {pe_now:.1f}x",
+                      annotation_position="top left")
+
+        fig.update_layout(
+            height=320,
+            margin=dict(l=10, r=10, t=30, b=10),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#dcd6ec"),
+            showlegend=False,
+            yaxis_title="P/E",
+        )
+        st.plotly_chart(fig, use_container_width=True)
