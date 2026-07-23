@@ -382,7 +382,26 @@ with st.container(border=True):
     h1, h2, h3, h4, h5 = st.columns([2, 1.2, 1.5, 1.5, 1.2])
     h1.markdown("**Index**")
     h2
+# Trong phần hiển thị Bảng 2 Breadth, thêm row phân tích sàn:
 
+st.markdown("##### 📊 Phân tích theo sàn")
+
+ex_data = breadth.get("by_exchange", {})
+cols_ex = st.columns(3)
+for i, ex in enumerate(["HOSE", "HNX", "UPCOM"]):
+    with cols_ex[i]:
+        if ex in ex_data:
+            d = ex_data[ex]
+            emoji = "🟢" if d["ad_ratio"] > 1.5 and d["avg_chg"] > 0 else \
+                    "🔴" if d["ad_ratio"] < 0.7 or d["avg_chg"] < -0.5 else "🟡"
+            st.metric(
+                f"{emoji} {ex}",
+                f"{d['advance']}▲ / {d['decline']}▼",
+                delta=f"{d['avg_chg']:+.2f}%",
+                delta_color="normal"
+            )
+        else:
+            st.metric(ex, "—", "—")
 # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU
 # ==========================================
