@@ -1,39 +1,28 @@
 """
-ux_enhancements.py
-------------------
-File UX bổ sung cho hệ thống Cô Tiên Stock:
-  1. inject_smooth_ux()   -> CSS làm mượt giao diện (transition, hover, fade-in, scrollbar, loading bar)
-  2. get_trend_color()    -> quy tắc màu chuẩn: TĂNG = xanh lá, GIẢM = đỏ, ĐỨNG GIÁ = tím nhạt (trung tính)
-  3. render_trend_metric()-> metric tự đổi màu xanh/đỏ (đẹp hơn st.metric mặc định, đồng bộ theme tím)
-  4. render_trend_badge() -> badge nhỏ dạng pill, dùng trong bảng / dòng chữ để nhấn mạnh tăng/giảm
-  5. render_section_card()-> khung card bo góc, viền đổi màu theo xu hướng (dùng cho các khối phân tích)
-  6. colorize_dataframe_column() -> tô màu 1 cột số trong DataFrame (âm đỏ, dương xanh) khi hiển thị
+ux_components.py
+----------------
+File UX tổng hợp cho hệ thống Cô Tiên Stock.
 
-Cách dùng trong main.py:
-    from ux_enhancements import inject_smooth_ux, render_trend_metric, render_section_card
-
-    inject_smooth_ux()   # gọi 1 lần, ngay sau st.set_page_config(...)
-
-    render_trend_metric("📊 Chỉ số VN-INDEX", current_index, index_change, suffix=" đ")
-
-    render_section_card(
-        title="🧠 Phân tích Xu hướng & Khuyến nghị Thị trường",
-        change_value=index_change,
-        body_up="Thị trường đang TĂNG. Ưu tiên tìm điểm mua theo nhịp điều chỉnh, hạn chế FOMO.",
-        body_down="Thị trường đang GIẢM. Ưu tiên quản trị rủi ro, hạn chế bắt đáy sớm.",
-        body_flat="Thị trường đi ngang. Quan sát thêm, chưa vội vào lệnh.",
-    )
+Gồm:
+  1. inject_smooth_ux()          -> CSS làm mượt giao diện
+  2. get_trend_color()           -> quy tắc màu chuẩn: TĂNG=xanh, GIẢM=đỏ, ĐỨNG=tím
+  3. render_trend_metric()       -> metric tự đổi màu
+  4. render_trend_badge()        -> badge nhỏ dạng pill
+  5. render_section_card()       -> card phân tích/khuyến nghị
+  6. colorize_dataframe_column() -> tô màu cột số trong DataFrame
+  7. setup_cache_clear_button()  -> nút xóa cache st.cache_data / st.cache_resource
+  8. render_search_and_export()  -> ô tìm kiếm + nút xuất CSV cho bảng kết quả quét
 """
 
 import streamlit as st
 import pandas as pd
 
 # ---------------------------------------------------------------------------
-# 1. BẢNG MÀU CHUẨN CHO TOÀN HỆ THỐNG
+# BẢNG MÀU CHUẨN CHO TOÀN HỆ THỐNG
 # ---------------------------------------------------------------------------
-COLOR_UP = "#34d399"      # xanh lá – tăng
-COLOR_DOWN = "#ff4d4f"    # đỏ – giảm
-COLOR_FLAT = "#a99fcf"    # tím nhạt – đứng giá / trung tính
+COLOR_UP = "#34d399"       # xanh lá – tăng
+COLOR_DOWN = "#ff4d4f"     # đỏ – giảm
+COLOR_FLAT = "#a99fcf"     # tím nhạt – đứng giá / trung tính
 COLOR_BG_PURPLE = "#1a1436"
 
 
@@ -62,14 +51,13 @@ def _trend_icon(change_value) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 2. CSS LÀM MƯỢT GIAO DIỆN (gọi 1 LẦN duy nhất trong main.py)
+# 1. CSS LÀM MƯỢT GIAO DIỆN
 # ---------------------------------------------------------------------------
 def inject_smooth_ux():
-    """Bơm CSS giúp giao diện mượt hơn: hiệu ứng fade-in, hover mềm, scrollbar tím, thanh loading mảnh."""
+    """Bơm CSS giúp giao diện mượt hơn: fade-in, hover mềm, scrollbar tím, thanh loading mảnh."""
     st.markdown(
         f"""
         <style>
-        /* Fade-in nhẹ khi mỗi block render lại (đỡ giật khi rerun) */
         div[data-testid="stVerticalBlock"] > div {{
             animation: fadeInUx 0.35s ease-in-out;
         }}
@@ -78,7 +66,6 @@ def inject_smooth_ux():
             to   {{ opacity: 1; transform: translateY(0); }}
         }}
 
-        /* Hover mượt cho card metric */
         div[data-testid="stMetric"] {{
             transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
         }}
@@ -88,23 +75,19 @@ def inject_smooth_ux():
             border-color: #6d28d9;
         }}
 
-        /* Nút bấm mượt hơn */
         .stButton > button {{
             transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
         }}
         .stButton > button:active {{ transform: scale(0.97); }}
 
-        /* Tab chuyển mượt */
         .stTabs [data-baseweb="tab"] {{
             transition: background .2s ease, color .2s ease;
         }}
 
-        /* Progress bar mảnh, màu tím-hồng gradient thay vì đỏ mặc định */
         div[role="progressbar"] > div {{
             background: linear-gradient(90deg, #6d28d9, #34d399) !important;
         }}
 
-        /* Scrollbar tím đồng bộ theme, mảnh và bo tròn */
         ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
         ::-webkit-scrollbar-track {{ background: {COLOR_BG_PURPLE}; }}
         ::-webkit-scrollbar-thumb {{
@@ -112,7 +95,6 @@ def inject_smooth_ux():
         }}
         ::-webkit-scrollbar-thumb:hover {{ background: #6d28d9; }}
 
-        /* DataFrame mượt hơn khi hover từng dòng */
         .stDataFrame [role="row"]:hover {{
             background: rgba(109,40,217,.12) !important;
         }}
@@ -123,13 +105,9 @@ def inject_smooth_ux():
 
 
 # ---------------------------------------------------------------------------
-# 3. METRIC TỰ ĐỔI MÀU XANH/ĐỎ (thay thế / bổ sung cho st.metric)
+# 2. METRIC TỰ ĐỔI MÀU
 # ---------------------------------------------------------------------------
 def render_trend_metric(label: str, value, change_value=None, suffix: str = "", value_fmt: str = "{:,.2f}"):
-    """
-    Vẽ 1 ô metric bo góc, viền + số liệu đổi màu theo xu hướng tăng/giảm.
-    Dùng thay cho st.metric khi muốn kiểm soát màu chính xác (không phụ thuộc theme mặc định của Streamlit).
-    """
     color = get_trend_color(change_value)
     icon = _trend_icon(change_value)
     try:
@@ -160,10 +138,9 @@ def render_trend_metric(label: str, value, change_value=None, suffix: str = "", 
 
 
 # ---------------------------------------------------------------------------
-# 4. BADGE NHỎ (dùng chèn vào giữa câu chữ / bảng)
+# 3. BADGE NHỎ
 # ---------------------------------------------------------------------------
 def render_trend_badge(text: str, change_value) -> str:
-    """Trả về đoạn HTML dạng pill nhỏ, dùng chèn trong st.markdown khác (không tự render)."""
     color = get_trend_color(change_value)
     return (
         f'<span style="background:{color}22; color:{color}; border:1px solid {color}; '
@@ -172,7 +149,7 @@ def render_trend_badge(text: str, change_value) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 5. CARD PHÂN TÍCH / KHUYẾN NGHỊ — viền và chữ đổi màu theo xu hướng
+# 4. CARD PHÂN TÍCH / KHUYẾN NGHỊ
 # ---------------------------------------------------------------------------
 def render_section_card(title: str, change_value, body_up: str, body_down: str, body_flat: str = ""):
     color = get_trend_color(change_value)
@@ -196,13 +173,9 @@ def render_section_card(title: str, change_value, body_up: str, body_down: str, 
 
 
 # ---------------------------------------------------------------------------
-# 6. TÔ MÀU 1 CỘT SỐ TRONG DATAFRAME (dùng với st.dataframe(df.style...))
+# 5. TÔ MÀU CỘT SỐ TRONG DATAFRAME
 # ---------------------------------------------------------------------------
 def colorize_dataframe_column(df: pd.DataFrame, column: str):
-    """
-    Trả về pandas Styler: giá trị dương tô xanh, âm tô đỏ trong 1 cột chỉ định.
-    Dùng: st.dataframe(colorize_dataframe_column(df, "Kỳ Vọng (%)"), use_container_width=True)
-    """
     if column not in df.columns:
         return df
 
@@ -211,3 +184,75 @@ def colorize_dataframe_column(df: pd.DataFrame, column: str):
         return f"color: {c}; font-weight: 600;"
 
     return df.style.applymap(_color, subset=[column])
+
+
+# ---------------------------------------------------------------------------
+# 6. NÚT XÓA CACHE  (setup_cache_clear_button)
+# ---------------------------------------------------------------------------
+def setup_cache_clear_button():
+    """
+    Hiển thị nút 🗑️ Xóa Cache trong sidebar.
+    Khi bấm sẽ clear toàn bộ st.cache_data và st.cache_resource rồi rerun.
+    """
+    with st.sidebar:
+        st.markdown("---")
+        if st.button("🗑️ Xóa Cache & Tải lại", use_container_width=True):
+            st.cache_data.clear()
+            st.cache_resource.clear()
+            st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# 7. Ô TÌM KIẾM + XUẤT CSV  (render_search_and_export)
+# ---------------------------------------------------------------------------
+def render_search_and_export(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Hiển thị:
+      - Ô tìm kiếm theo mã CP (lọc tức thì)
+      - Nút xuất CSV toàn bộ kết quả
+    Trả về DataFrame đã lọc theo từ khóa tìm kiếm.
+
+    Dùng trong Tab 3 (Kết Quả Quét):
+        df_display = render_search_and_export(raw_df)
+        render_screener_results(df_display, signal_filter)
+    """
+    if df is None or df.empty:
+        return df
+
+    col_search, col_export = st.columns([3, 1])
+
+    with col_search:
+        keyword = st.text_input(
+            "🔍 Tìm mã cổ phiếu:",
+            value="",
+            placeholder="Nhập mã CP (VD: FPT, HPG, VNM...)",
+            key="search_ticker_tab3",
+        ).upper().strip()
+
+    with col_export:
+        st.markdown("<br>", unsafe_allow_html=True)  # căn thẳng hàng với text input
+        csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
+        st.download_button(
+            label="⬇️ Xuất CSV",
+            data=csv_bytes,
+            file_name="ket_qua_quet.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+
+    # Lọc theo từ khóa (khớp với cột "Mã CP" nếu có, fallback sang toàn bộ chuỗi)
+    if keyword:
+        ticker_col = next(
+            (c for c in df.columns if c in ("Mã CP", "ticker", "symbol", "Ticker", "Symbol")),
+            None,
+        )
+        if ticker_col:
+            df = df[df[ticker_col].astype(str).str.upper().str.contains(keyword, na=False)]
+        else:
+            # fallback: tìm trong toàn bộ DataFrame dạng chuỗi
+            mask = df.apply(lambda col: col.astype(str).str.upper().str.contains(keyword, na=False)).any(axis=1)
+            df = df[mask]
+
+    st.caption(f"📊 Hiển thị **{len(df)}** mã" + (f" (lọc từ khóa: `{keyword}`)" if keyword else ""))
+
+    return df
