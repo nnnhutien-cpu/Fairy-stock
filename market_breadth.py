@@ -426,3 +426,224 @@ def _empty_breadth():
         "ma20_above": 0, "ma20_below": 0, "ma20_pct": 0, "ma20_trend": "—",
         "ma60_above": 0, "ma60_below": 0, "ma60_pct": 0, "ma60_trend": "—",
     }
+# ============================================================
+# BREADTH TABLE (real-time) — format bảng yêu cầu
+# ============================================================
+@st.cache_data(ttl=180, show_spinner=False)   # 3 phút
+def get_breadth_table_real_time():
+    """
+    Tính đầy đủ breadth cho 1 bảng:
+    - A/D ratio real-time
+    - New High/Low 1M, 3M
+    - ROC5, ROC10, ROC20 (số mã tăng/giảm + trung bình %)
+    - MA20, MA60 (số mã nằm trên/dưới + trung bình %)
+    """
+    try:
+        from vnstock import Vnstock
+        symbols_dict = _get_all_symbols()
+        all_symbols = list(symbols_dict.keys())[:150]   # giới hạn 150 mã
+
+        if not all_symbols:
+            return _empty_breadth_table()
+
+        prices = _fetch_prices_batch(all_symbols, days=120)
+        if prices.empty:
+            return _empty_breadth_table()
+
+        prices["exchange"] = prices["symbol"].map(symbols_dict).fillna("HOSE")
+
+        rows = []
+
+        # ========================================================
+        # 1. TĂNG / GIẢM (Advance / Decline)
+        # ========================================================
+        adv = int((prices["change_pct"].iloc[-1] > 0).sum())
+        dec = int((prices["change_pct"].iloc[-1] < 0).sum())
+        avg_chg = float(prices["change_pct"].iloc[-1].mean())
+
+        if adv + dec == 0:
+            trend_ad = "—"
+        elif adv > dec * 2:
+            trend_ad = "🟢 MẠNH"
+        elif adv > dec:
+            trend_ad = "🟡 TỐT"
+        elif adv > dec * 0.5:
+            trend_ad = "🟠 YẾU"
+        else:
+            trend_ad = "🔴 RẤT YẾU"
+
+        rows.append({
+            "label":   "Tăng/Giảm",
+            "value1":  adv,
+            "value2":  dec,
+            "ratio":   f"{avg_chg:+.2f}%",
+            "trend":   trend_ad,
+            "sort":    1,
+        })
+
+        # ========================================================
+        # 2. ĐỈNH / ĐÁY 1 THÁNG (20 phiên)
+        # ========================================================
+        if "high" in prices.columns and len(prices) >= 21:
+            highs_1m = int((prices["close"].iloc[-1] >
+                           prices["high"].iloc[-21:-1].max(axis=1)).sum())
+            lows_1m  = int((prices["close"].iloc[-1] <
+                           prices["low"].iloc[-21:-1].min(axis=1)).sum())
+        else:
+            highs_1m, lows_1m = 0, 0
+
+        ratio_1m = (highs_1m / max(lows_1m, 1))
+        pct_1m = (highs_1m / (highs_1m + lows_1m) * 100) if (highs_1m + lows_1m) > 0 else 0
+
+        if ratio_1m > 2:
+            trend_1m = "🟢 MẠNH"
+        elif ratio_1m > 0.5:
+            trend_1m = "🟡 TRUNG TÍNH"
+        elif ratio_1m > 0.2:
+            trend_1m = "🟠 YẾU"
+        else:
+            trend_1m = "🔴 RẤT YẾU"
+
+        rows.append({
+            "label":   "Đỉnh/Đáy 1M",
+            "value1":  highs_1m,
+            "value2":  lows_1m,
+            "ratio":   f"{pct_1m:.0f}% vượt đỉnh",
+            "trend":   trend_1m,
+            "sort":    2,
+        })
+
+        # ========================================================
+        # 3. ĐỈNH / ĐÁY 3 THÁNG (60 phiên)
+        # ========================================================
+        if "high" in prices.columns and len(prices) >= 60:
+            highs_3m = int((prices["close"].iloc[-1] >
+                           prices["high"].iloc[-60:-1].max(axis=1)).sum())
+            lows_3m  = int((prices["close"].iloc[-1] <
+                           prices["low"].iloc[-60:-1].min(axis=1)).sum())
+        else:
+            highs_3m, lows_3m = 0, 0
+
+        ratio_3m = (highs_3m / max(lows_3m, 1))
+        pct_3m = (highs_3m / (highs_3m + lows_3m) * 100) if (highs_3m + lows_3m) > 0 else 0
+
+        if ratio_3m > 2:
+            trend_3m = "🟢 MẠNH"
+        elif ratio_3m > 0.5:
+            trend_3m = "🟡 TRUNG TÍNH"
+        elif ratio_3m > 0.2:
+            trend_3m = "🟠 YẾU"
+        else:
+            trend_3m = "🔴 RẤT YẾU"
+
+        rows.append({
+            "label":   "Đỉnh/Đáy 3M",
+            "value1":  highs_3m,
+            "value2":  lows_3m,
+            "ratio":   f"{pct_3m:.0f}% vượt đỉnh",
+            "trend":   trend_3m,
+            "sort":    3,
+        })
+
+        # ========================================================
+        # 4. ROC 5, 10, 20
+        # ========================================================
+        for n, sort_n in [(5, 4), (10, 5), (20, 6)]:
+            col_name = f"roc{n}"
+            if col_name in prices.columns:
+                up_count   = int((prices[col_name].iloc[-1] > 0).sum())
+                down_count = int((prices[col_name].iloc[-1] < 0).sum())
+                avg_roc    = float(prices[col_name].iloc[-1].mean())
+
+                if avg_roc > 3:
+                    trend_roc = "🟢 MẠNH"
+                elif avg_roc > 0:
+                    trend_roc = "🟡 TỐT"
+                elif avg_roc > -3:
+                    trend_roc = "🟠 YẾU"
+                else:
+                    trend_roc = "🔴 RẤT YẾU"
+
+                rows.append({
+                    "label":   f"ROC{n}",
+                    "value1":  up_count,
+                    "value2":  down_count,
+                    "ratio":   f"{avg_roc:+.2f}%",
+                    "trend":   trend_roc,
+                    "sort":    sort_n,
+                })
+
+        # ========================================================
+        # 5. MA20, MA60
+        # ========================================================
+        for n, sort_n in [(20, 7), (60, 8)]:
+            col_name = f"above_ma{n}"
+            if col_name in prices.columns:
+                above = int(prices[col_name].iloc[-1].sum())
+                below = len(prices) - above
+
+                # Trung bình % mã nằm trên MA
+                pct_above = above / max(above + below, 1) * 100
+
+                if pct_above > 70:
+                    trend_ma = "🟢 MẠNH"
+                elif pct_above > 50:
+                    trend_ma = "🟡 TỐT"
+                elif pct_above > 30:
+                    trend_ma = "🟠 YẾU"
+                else:
+                    trend_ma = "🔴 RẤT YẾU"
+
+                rows.append({
+                    "label":   f"MA{n}",
+                    "value1":  above,
+                    "value2":  below,
+                    "ratio":   f"{pct_above:.0f}% trên MA",
+                    "trend":   trend_ma,
+                    "sort":    sort_n,
+                })
+
+        # Sort theo thứ tự
+        rows = sorted(rows, key=lambda x: x["sort"])
+
+        return {
+            "rows":        rows,
+            "total":       len(prices),
+            "verdict":     trend_ad,
+            "last_update": dt.datetime.now().strftime("%H:%M:%S"),
+            "ad_ratio":    round(adv / max(dec, 1), 2),
+            "ad_change":   round(avg_chg, 2),
+        }
+
+    except Exception as e:
+        print(f"[get_breadth_table] {e}")
+        return _empty_breadth_table()
+
+
+def _empty_breadth_table():
+    """Fallback khi không lấy được dữ liệu."""
+    return {
+        "rows": [
+            {"label": "Tăng/Giảm",  "value1": 0, "value2": 0,
+             "ratio": "—", "trend": "⏳ Đang tải…", "sort": 1},
+            {"label": "Đỉnh/Đáy 1M", "value1": 0, "value2": 0,
+             "ratio": "—", "trend": "—", "sort": 2},
+            {"label": "Đỉnh/Đáy 3M", "value1": 0, "value2": 0,
+             "ratio": "—", "trend": "—", "sort": 3},
+            {"label": "ROC5",  "value1": 0, "value2": 0,
+             "ratio": "—", "trend": "—", "sort": 4},
+            {"label": "ROC10", "value1": 0, "value2": 0,
+             "ratio": "—", "trend": "—", "sort": 5},
+            {"label": "ROC20", "value1": 0, "value2": 0,
+             "ratio": "—", "trend": "—", "sort": 6},
+            {"label": "MA20",  "value1": 0, "value2": 0,
+             "ratio": "—", "trend": "—", "sort": 7},
+            {"label": "MA60",  "value1": 0, "value2": 0,
+             "ratio": "—", "trend": "—", "sort": 8},
+        ],
+        "total":       0,
+        "verdict":     "⏳ Đang tải…",
+        "last_update": "—",
+        "ad_ratio":    0,
+        "ad_change":   0,
+    }
