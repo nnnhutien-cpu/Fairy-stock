@@ -365,6 +365,23 @@ with tab_market:
                         st.markdown(f"- {r}")
 
                 st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
+                # ============================================================
+# 🆕 SỨC KHỎE THỊ TRƯỜNG (Breadth)
+# ============================================================
+st.markdown("---")
+st.markdown("### 🏥 Sức khỏe Thị trường (Breadth)")
+
+groups  = get_index_groups()
+breadth = get_market_breadth()
+
+# ===== BẢNG 1: INDEX GROUPS =====
+with st.container(border=True):
+    st.markdown("#### 📊 Index Groups (cập nhật mỗi 3 phút)")
+
+    # Header
+    h1, h2, h3, h4, h5 = st.columns([2, 1.2, 1.5, 1.5, 1.2])
+    h1.markdown("**Index**")
+    h2
 
 # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU
