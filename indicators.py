@@ -241,48 +241,72 @@ def calculate_technical_signals(
     }
     # indicators.py  →  thêm hàm này vào cuối file
 
+# indicators.py — sửa lại hàm market_snapshot, BỎ import data_loader
+
 def market_snapshot(symbol="VNINDEX", days=250):
-    """
-    Lấy & phân tích chỉ số thị trường (VN-INDEX / VN30 / HNX-Index).
-    Tận dụng data_loader + trend_engine có sẵn trong repo.
-    """
-    from data_loader import load_history   # module có sẵn
-    from trend_engine import trend_status  # module có sẵn
+    """Lấy & phân tích chỉ số thị trường - dùng vnstock trực tiếp."""
+    import numpy as np
+    import pandas as pd
 
+    # ----- Lấy dữ liệu lịch sử VN-INDEX -----
     try:
-        df = load_history(symbol, days=days)   # bạn đang dùng để tải CP, dùng luôn cho index
-    except Exception:
+        from vnstock import Vnstock
+        stock = Vnstock().stock(symbol=symbol, source="VCI")
+        df = stock.quote.history(
+            start=f"{days} days ago",
+            end="now",
+            interval="1D"
+        )
+        # vnstock trả về columns: time, open, high, low, close, volume
+        df = df.rename(columns={
+            "time": "date",
+            "open": "open", "high": "high",
+            "low": "low", "close": "close", "volume": "volume"
+        })
+        df = df[["date", "open", "high", "low", "close", "volume"]]
+    except Exception as e:
+        # Fallback: đọc CSV local nếu có
+        try:
+            df = pd.read_csv(f"data/{symbol}.csv")
+        except Exception:
+            return _empty_snapshot()
+
+    if df is None or df.empty or len(df) < 30:
         return _empty_snapshot()
 
-    if df is None or len(df) < 30:
-        return _empty_snapshot()
+    df = df.sort_values("date").reset_index(drop=True)
 
-    # Moving Averages
+    # ===== Moving Averages =====
     df["MA20"]  = df["close"].rolling(20).mean()
     df["MA50"]  = df["close"].rolling(50).mean()
     df["MA200"] = df["close"].rolling(200).mean()
 
-    # RSI(14)
-    import numpy as np
+    # ===== RSI(14) =====
     delta = df["close"].diff()
     gain  = delta.where(delta > 0, 0).rolling(14).mean()
     loss  = (-delta.where(delta < 0, 0)).rolling(14).mean()
     rs    = gain / loss.replace(0, np.nan)
     df["RSI"] = 100 - (100 / (1 + rs))
 
-    # MACD
+    # ===== MACD =====
     ema12 = df["close"].ewm(span=12, adjust=False).mean()
     ema26 = df["close"].ewm(span=26, adjust=False).mean()
     df["MACD"]   = ema12 - ema26
     df["Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
 
-    # Volume stats
+    # ===== Volume stats =====
     df["Vol_MA20"] = df["volume"].rolling(20).mean()
 
     cur, prev = df.iloc[-1], df.iloc[-2]
 
-    # ---- Trend ----
-    if cur["MA20"] != cur["MA20"]:        # NaN check
+    def _is_nan(x):
+        try:
+            return x != x
+        except Exception:
+            return True
+
+    # ----- Trend -----
+    if _is_nan(cur["MA20"]):
         trend_text = "⏳ Đang tải dữ liệu…"
         ma20_text  = "—"
         ma20_alert = "info"
@@ -308,9 +332,9 @@ def market_snapshot(symbol="VNINDEX", days=250):
             ma20_text   = "Giá đang dưới MA20"
             ma20_alert  = "danger"
 
-    # ---- Volume ----
+    # ----- Volume -----
     vol_today = float(cur["volume"])
-    vol_avg   = float(cur["Vol_MA20"]) if cur["Vol_MA20"] == cur["Vol_MA20"] else 0
+    vol_avg   = float(cur["Vol_MA20"]) if not _is_nan(cur["Vol_MA20"]) else 0
     vol_ratio = vol_today / vol_avg if vol_avg > 0 else 0
     if vol_ratio >= 1.5:
         vol_text = f"🔥 Đột biến {vol_ratio:.1f}x trung bình 20 phiên"
@@ -319,8 +343,8 @@ def market_snapshot(symbol="VNINDEX", days=250):
     else:
         vol_text = f"💤 Thấp, thị trường trầm lắng ({vol_ratio:.1f}x)"
 
-    # ---- RSI ----
-    rsi = float(cur["RSI"]) if cur["RSI"] == cur["RSI"] else 50
+    # ----- RSI -----
+    rsi = float(cur["RSI"]) if not _is_nan(cur["RSI"]) else 50
     if rsi >= 70:
         rsi_text, rsi_color = "🔴 Quá mua (≥70)", "danger"
     elif rsi <= 30:
@@ -328,11 +352,11 @@ def market_snapshot(symbol="VNINDEX", days=250):
     else:
         rsi_text, rsi_color = "🟡 Trung tính", "info"
 
-    # ---- MACD ----
-    macd_cross  = "Vàng" if cur["MACD"] > cur["Signal"] else "Chết"
-    macd_color  = "success" if macd_cross == "Vàng" else "danger"
+    # ----- MACD -----
+    macd_cross = "Vàng" if cur["MACD"] > cur["Signal"] else "Chết"
+    macd_color = "success" if macd_cross == "Vàng" else "danger"
 
-    # ---- Hỗ trợ / Kháng cự ----
+    # ----- Hỗ trợ / Kháng cự -----
     support    = float(df["low"].tail(20).min())
     resistance = float(df["high"].tail(20).max())
 
@@ -340,9 +364,9 @@ def market_snapshot(symbol="VNINDEX", days=250):
         "price"        : float(cur["close"]),
         "change"       : float(cur["close"] - prev["close"]),
         "change_pct"   : float((cur["close"] - prev["close"]) / prev["close"] * 100),
-        "ma20"         : float(cur["MA20"])  if cur["MA20"]  == cur["MA20"]  else None,
-        "ma50"         : float(cur["MA50"])  if cur["MA50"]  == cur["MA50"]  else None,
-        "ma200"        : float(cur["MA200"]) if cur["MA200"] == cur["MA200"] else None,
+        "ma20"         : float(cur["MA20"])  if not _is_nan(cur["MA20"])  else None,
+        "ma50"         : float(cur["MA50"])  if not _is_nan(cur["MA50"])  else None,
+        "ma200"        : float(cur["MA200"]) if not _is_nan(cur["MA200"]) else None,
         "trend_text"   : trend_text,
         "ma20_text"    : ma20_text,
         "ma20_alert"   : ma20_alert,
