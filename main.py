@@ -349,7 +349,7 @@ with c4:
     with st.container(border=True):
         st.markdown("#### 💰 Định giá P/E (20 năm)")
         
-        pe_now     = valuation.get_current_pe("VNINDEX")
+        pe_now = valuation.get_current_pe(current_index)  # current_index đã tính ở trên
         pe_hist    = valuation.get_pe_history(years=20)
         pe_stats   = valuation.pe_stats(pe_hist, pe_now)
         
