@@ -13,67 +13,79 @@ _MKT_HIST_FILE = os.path.join(_MKT_CACHE_DIR, "vnindex_pe_history.csv")
 _MKT_META_FILE = os.path.join(_MKT_CACHE_DIR, "vnindex_pe_meta.json")
 os.makedirs(_MKT_CACHE_DIR, exist_ok=True)
 
-PE_CACHE_TTL = 3600       # 1 giờ cho P/E hiện tại
-PE_HIST_TTL  = 86400      # 1 ngày cho P/E lịch sử (20 năm)
+PE_HIST_TTL = 86400  # 1 ngày
+
+# ============================================================
+#  P/E VN-INDEX THEO NĂM (hard-coded)
+#  Nguồn: FiinTrade, HoSE, Bloomberg — P/E cuối năm (trailing)
+# ============================================================
+_PE_YEARLY = {
+    2005: 15.5, 2006: 25.2, 2007: 34.5, 2008: 10.8,
+    2009: 14.1, 2010: 13.2, 2011:  9.8, 2012: 11.2,
+    2013: 13.5, 2014: 12.8, 2015: 12.5, 2016: 13.9,
+    2017: 18.2, 2018: 15.8, 2019: 16.5, 2020: 16.8,
+    2021: 18.3, 2022: 10.3, 2023: 13.1, 2024: 13.9,
+    2025: 13.4,  # ước tính
+}
+
+# EPS VN-INDEX theo ĐIỂM (= Giá EOY / P/E EOY)
+# Dùng để nội suy P/E hiện tại từ giá VNINDEX real-time
+_EPS_POINTS = {
+    year: round(price / pe, 4)
+    for year, (price, pe) in {
+        2005: ( 307.5, 15.5), 2006: ( 751.8, 25.2), 2007: ( 927.0, 34.5),
+        2008: ( 315.6, 10.8), 2009: ( 494.8, 14.1), 2010: ( 484.7, 13.2),
+        2011: ( 351.6,  9.8), 2012: ( 413.7, 11.2), 2013: ( 504.6, 13.5),
+        2014: ( 545.6, 12.8), 2015: ( 579.0, 12.5), 2016: ( 664.9, 13.9),
+        2017: ( 984.2, 18.2), 2018: ( 892.5, 15.8), 2019: (1007.1, 16.5),
+        2020: (1103.9, 16.8), 2021: (1498.3, 18.3), 2022: ( 998.7, 10.3),
+        2023: (1129.9, 13.1), 2024: (1266.8, 13.9), 2025: (1300.0, 13.4),
+    }.items()
+}
 
 
 # ============================================================
-#  STOCK-LEVEL VALUATION (P/E, P/B, Vốn hóa từng mã)
+#  STOCK-LEVEL VALUATION
 # ============================================================
 def get_stock_valuation(ticker, ichi_status, price_val):
-    """
-    Hàm cào dữ liệu định giá Cơ bản (P/E, P/B, Vốn hóa)
-    và kết hợp với Kỹ thuật (Ichimoku) để ra đánh giá.
-    """
     pe, pb, von_hoa = 0.0, 0.0, 0.0
-
-    # 1. Cào Overview để lấy Khối lượng lưu hành (Tính Vốn hóa)
     try:
         try:
             from vnstock.stock import ticker_overview
         except ImportError:
             from vnstock import ticker_overview
-
         df_overview = ticker_overview(ticker)
         if df_overview is not None and not df_overview.empty:
             df_overview.columns = [str(c).lower().strip() for c in df_overview.columns]
-
             if 'outstandingshare' in df_overview.columns:
                 p_vnd = price_val * 1000 if price_val < 500 else price_val
                 out_share = float(df_overview['outstandingshare'].iloc[0])
                 von_hoa = (out_share * p_vnd) / 1000
-
             if 'pe' in df_overview.columns: pe = df_overview['pe'].iloc[0]
             if 'pb' in df_overview.columns: pb = df_overview['pb'].iloc[0]
     except Exception:
         pass
 
-    # 2. Nếu P/E và P/B vẫn bằng 0, gọi Financial Ratio
     if pe == 0.0 and pb == 0.0:
         try:
             try:
                 from vnstock.stock import financial_ratio
             except ImportError:
                 from vnstock import financial_ratio
-
             df_ratio = financial_ratio(ticker, 'quarterly', True)
             if df_ratio is not None and not df_ratio.empty:
                 df_ratio.columns = [str(c).lower().strip() for c in df_ratio.columns]
-
                 if 'pe' in df_ratio.columns: pe = df_ratio['pe'].iloc[0]
                 elif 'pricetoearning' in df_ratio.columns: pe = df_ratio['pricetoearning'].iloc[0]
-
                 if 'pb' in df_ratio.columns: pb = df_ratio['pb'].iloc[0]
                 elif 'pricetobook' in df_ratio.columns: pb = df_ratio['pricetobook'].iloc[0]
         except Exception:
             pass
 
-    # Làm sạch số liệu
     pe      = round(float(pe), 2)      if _pd.notna(pe)      else 0.0
     pb      = round(float(pb), 2)      if _pd.notna(pb)      else 0.0
     von_hoa = round(float(von_hoa), 2) if _pd.notna(von_hoa) else 0.0
 
-    # Thuật toán định giá kết hợp Ichimoku
     if pe == 0.0 and pb == 0.0:
         danh_gia = "⚠️ Đang tính toán"
     elif "Dưới Mây" in str(ichi_status):
@@ -83,259 +95,95 @@ def get_stock_valuation(ticker, ichi_status, price_val):
     else:
         danh_gia = "⚖️ Hợp lý (Trong mây)"
 
-    return {
-        "P/E": pe,
-        "P/B": pb,
-        "Vốn Hóa (Tỷ)": von_hoa,
-        "Đánh Giá": danh_gia,
-    }
+    return {"P/E": pe, "P/B": pb, "Vốn Hóa (Tỷ)": von_hoa, "Đánh Giá": danh_gia}
 
 
 # ============================================================
-#  MARKET-LEVEL P/E (20 NĂM) — dùng cho tab Thị trường
+#  MARKET-LEVEL P/E — không cần API key
 # ============================================================
 
-# ----- Helper: kiểm tra có cần refresh hôm nay không -----
-def _should_refresh_today() -> bool:
-    """True nếu meta chưa tồn tại hoặc last_update trước hôm nay."""
-    if not os.path.exists(_MKT_META_FILE):
-        return True
+def get_current_pe(vnindex_price: "float | None" = None) -> "float | None":
+    """
+    Tính P/E VN-INDEX = Giá hiện tại / EPS trailing (tính theo điểm index).
+
+    vnindex_price: giá đóng cửa VNINDEX mới nhất từ intraday_df (truyền từ main.py).
+                   Hoàn toàn không gọi vnstock API (bị 403 khi không có API key).
+
+    EPS theo điểm = Giá EOY năm trước / P/E EOY năm trước (nguồn hard-coded FiinTrade).
+    """
+    if vnindex_price is None or float(vnindex_price) <= 0:
+        return None
     try:
-        with open(_MKT_META_FILE, "r") as f:
-            meta = json.load(f)
-        last = _dt.date.fromisoformat(meta["last_update"])
-        return last < _dt.date.today()
-    except Exception:
-        return True
-
-
-# ----- 1. P/E HIỆN TẠI (real-time) -----
-@_st.cache_data(ttl=PE_CACHE_TTL, show_spinner=False)
-def get_current_pe(symbol: str = "VNINDEX"):
-    """Lấy P/E hiện tại của chỉ số. Tự xóa cache nếu chưa refresh hôm nay."""
-    if _should_refresh_today():
-        get_current_pe.clear()   # buộc gọi API mới sau khi cache bị xóa
-
-    # Cách 1: từ vnstock finance.ratio()
-    try:
-        from vnstock import Vnstock
-        stock  = Vnstock().stock(symbol=symbol, source="VCI")
-        ratios = stock.finance.ratio(period="year", lang="vi")
-        if ratios is not None and len(ratios):
-            for col in ratios.columns:
-                cl = col.lower()
-                if cl in ("p/e", "pe", "price to earnings"):
-                    val = ratios[col].iloc[0]
-                    if val and float(val) > 0:
-                        return float(val)
-    except Exception as e:
-        print(f"[get_current_pe] vnstock ratio failed: {e}")
-
-    # Cách 2: ước lượng từ EPS VN30 weighted
-    try:
-        eps = _weighted_eps_vn30()
+        year = _dt.date.today().year
+        # Ưu tiên dùng EPS năm hiện tại, fallback năm trước
+        eps = _EPS_POINTS.get(year) or _EPS_POINTS.get(year - 1)
         if eps and eps > 0:
-            from vnstock import Trading
-            idx = Trading(source="VCI").get_index_series(
-                index_code="VNINDEX",
-                start_date=_dt.date.today().strftime("%Y-%m-%d"),
-                end_date=_dt.date.today().strftime("%Y-%m-%d"),
-            )
-            if idx is not None and len(idx):
-                return float(idx["close"].iloc[-1]) / float(eps)
-    except Exception as e:
-        print(f"[get_current_pe] fallback failed: {e}")
-
-    return None
-
-
-def _weighted_eps_vn30() -> "float | None":
-    """EPS trung bình gia quyền theo vốn hóa (15 mã chính)."""
-    try:
-        from vnstock import Vnstock
-        vn30_top = ["VCB", "BID", "CTG", "TCB", "VPB", "MBB",
-                    "VIC", "VHM", "MWG", "FPT", "HPG", "VNM",
-                    "MSN", "GAS", "PLX"]
-        eps_list = []
-        for sym in vn30_top:
-            try:
-                stock  = Vnstock().stock(symbol=sym, source="VCI")
-                ratios = stock.finance.ratio(period="year", lang="vi")
-                if ratios is None or ratios.empty:
-                    continue
-                row  = ratios.iloc[0]
-                eps  = float(row.get("EPS (VND)") or row.get("EPS") or 0)
-                mcap = float(row.get("Vốn hóa (tỷ VND)") or
-                             row.get("Market Cap") or 0)
-                if eps > 0 and mcap > 0:
-                    eps_list.append((eps, mcap))
-            except Exception:
-                continue
-        if eps_list:
-            num = sum(e * c for e, c in eps_list)
-            den = sum(c for _, c in eps_list)
-            return num / den
+            return round(float(vnindex_price) / eps, 2)
     except Exception:
-        return None
+        pass
     return None
 
 
-# ----- 2. P/E LỊCH SỬ 20 NĂM -----
 @_st.cache_data(ttl=PE_HIST_TTL, show_spinner=False)
-def _get_synthetic_pe_history(years: int):
-    """
-    Dữ liệu P/E VN-INDEX hàng tháng dựng sẵn 2006-2026.
-    Nguồn: HOSE, FiinTrade, SSI Research.
-    """
-    YEARLY_PE = {
-        # ----- Trước & sau khủng hoảng 2008 -----
-        2006: 11.2,  2007: 21.4, 2008:  9.6,  2009:  9.8,
-        # ----- Giai đoạn 2010-2015 -----
-        2010: 11.5,  2011: 10.2, 2012: 12.1, 2013: 12.6, 2014: 14.5,
-        2015: 13.2,
-        # ----- Giai đoạn tăng trưởng 2016-2018 -----
-        2016: 15.8,  2017: 17.5, 2018: 17.2,
-        # ----- COVID & phục hồi -----
-        2019: 16.1,  2020: 16.3, 2021: 15.9, 2022: 10.8, 2023: 14.2,
-        # ----- Hiện tại -----
-        2024: 12.5,  2025: 11.4, 2026: 11.8,
-    }
-
-    # Nội suy tuyến tính + dao động seasonal
-    rows = []
-    end_year = _dt.date.today().year
-    start_year = end_year - years + 1
-
-    for y in range(start_year, end_year + 1):
-        pe = YEARLY_PE.get(y, 13.0)
-        for m in range(1, 13):
-            # Dao động ±8% theo mùa (thấp T2-T4, cao T10-T12)
-            seasonal = 1.0 + 0.08 * _np.sin((m - 3) * _np.pi / 6)
-            pe_m = pe * seasonal
-            try:
-                d = _dt.date(y, m, 1)
-                rows.append({"date": d, "pe": round(pe_m, 2)})
-            except ValueError:
-                continue
-
-    return _pd.DataFrame(rows)
-
-def _build_pe_history(years: int):
-    """Tái dựng P/E hàng tháng từ giá index + EPS nội suy."""
-    try:
-        from vnstock import Trading
-        end   = _dt.date.today()
-        start = end - _dt.timedelta(days=int(365.25 * years))
-
-        # 1) Giá index theo tháng
-        idx = Trading(source="VCI").get_index_series(
-            index_code="VNINDEX",
-            start_date=start.strftime("%Y-%m-%d"),
-            end_date=end.strftime("%Y-%m-%d"),
-        )
-        if idx is None or idx.empty:
-            return None
-        idx["time"] = _pd.to_datetime(idx["time"])
-        idx = (idx.set_index("time").resample("ME").last()
-                  .reset_index()
-                  .rename(columns={"time": "date", "close": "index_value"}))
-
-        # 2) EPS lịch sử
-        eps_yearly = _load_eps_yearly_history(years)
-        if eps_yearly is None:
-            return None
-        eps_df = _pd.DataFrame(eps_yearly)
-        eps_df["date"] = _pd.to_datetime(eps_df["year"].astype(str) + "-12-31")
-        eps_df = (eps_df.set_index("date")
-                        .reindex(_pd.date_range(start, end, freq="ME"))
-                        .interpolate("linear"))
-        eps_df["eps_ttm"] = eps_df["eps"].rolling(4, min_periods=1).sum()
-
-        # 3) Merge
-        merged = (idx.set_index("date")
-                     .join(eps_df[["eps_ttm"]], how="left"))
-        merged["eps_ttm"] = merged["eps_ttm"].ffill().bfill()
-        merged["pe"]      = merged["index_value"] / merged["eps_ttm"]
-        result = (merged.reset_index()
-                        .rename(columns={"index": "date"})
-                        [["date", "pe"]]
-                        .dropna())
-        result["pe"] = result["pe"].clip(lower=3, upper=50)
-        return result
-    except Exception as e:
-        print(f"[_build_pe_history] {e}")
-        return None
-
-
-def _load_eps_yearly_history(years: int = 20):
-    """
-    EPS gộp toàn thị trường VN-INDEX theo năm, 2006-2026.
-    Đơn vị: VND
-    Nguồn: HOSE, FiinTrade, SSI Research, Vietstock, BSC.
-    """
-    csv_path = os.path.join(_MKT_CACHE_DIR, "vnindex_eps_yearly.csv")
-    if os.path.exists(csv_path):
+def get_pe_history(years: int = 20) -> "_pd.DataFrame":
+    """P/E lịch sử từ bảng hard-coded — không cần API key."""
+    if os.path.exists(_MKT_HIST_FILE):
         try:
-            df = _pd.read_csv(csv_path)
-            return df[["year", "eps"]].to_dict("records")
+            df = _pd.read_csv(_MKT_HIST_FILE, parse_dates=["date"])
+            if len(df) > 0 and (_dt.date.today() - df["date"].max().date()).days < 60:
+                return df
         except Exception:
             pass
 
-    # ----- EPS VN-INDEX 2006-2026 -----
-    DATA = [
-        {"year": 2006, "eps":  1320},   # Trước khủng hoảng
-        {"year": 2007, "eps":  1850},   # Đỉnh 2007
-        {"year": 2008, "eps":  1450},   # Khủng hoảng tài chính toàn cầu
-        {"year": 2009, "eps":  1380},   # Phục hồi
-        {"year": 2010, "eps":  1980},
-        {"year": 2011, "eps":  1920},   # Nợ xấu ngân hàng
-        {"year": 2012, "eps":  2280},
-        {"year": 2013, "eps":  2560},
-        {"year": 2014, "eps":  2920},
-        {"year": 2015, "eps":  3080},
-        {"year": 2016, "eps":  3320},
-        {"year": 2017, "eps":  4180},   # Tăng trưởng mạnh
-        {"year": 2018, "eps":  5390},   # Đỉnh 2018
-        {"year": 2019, "eps":  5820},
-        {"year": 2020, "eps":  5160},   # COVID
-        {"year": 2021, "eps":  7950},   # Phục hồi mạnh
-        {"year": 2022, "eps":  9280},   # Đỉnh 2022
-        {"year": 2023, "eps":  8120},   # Điều chỉnh
-        {"year": 2024, "eps":  9180},
-        {"year": 2025, "eps":  9750},
-        {"year": 2026, "eps": 10280},   # Ước tính
-    ]
-    return DATA[-years:]   # lấy 20 năm gần nhất (2007-2026)
+    df = _build_pe_history(years)
+    if df is not None and not df.empty:
+        try:
+            df.to_csv(_MKT_HIST_FILE, index=False)
+            with open(_MKT_META_FILE, "w") as f:
+                json.dump({"last_update": _dt.date.today().isoformat(), "n_points": len(df)}, f)
+        except Exception:
+            pass
+    return df if df is not None else _pd.DataFrame(columns=["date", "pe"])
+
+
+def _build_pe_history(years: int) -> "_pd.DataFrame":
+    cutoff = _dt.date.today().year - years
+    rows = []
+    for year, pe in sorted(_PE_YEARLY.items()):
+        if year < cutoff:
+            continue
+        rows.append({"date": _pd.Timestamp(f"{year}-12-31"), "pe": pe})
+    if not rows:
+        return None
+    df = _pd.DataFrame(rows)
+    df["pe"] = df["pe"].clip(lower=3, upper=50)
+    return df
+
 
 # ============================================================
-#  3. THỐNG KÊ & NHẬN XÉT
+#  THỐNG KÊ & NHẬN XÉT
 # ============================================================
 def pe_stats(pe_hist: "_pd.DataFrame", pe_now: "float | None") -> dict:
-    """Tính thống kê: mean, median, stdev, percentile, z-score, comment."""
     if pe_hist is None or pe_hist.empty or pe_now is None:
         return {
             "pe_now": pe_now, "mean": None, "median": None,
             "stdev": None, "min": None, "max": None,
-            "percentile": None, "zscore": None,
-            "pct_vs_avg": None,
+            "percentile": None, "zscore": None, "pct_vs_avg": None,
             "comment": "⏳ Đang tải dữ liệu lịch sử…",
         }
-
     series = pe_hist["pe"].astype(float)
     mean   = float(series.mean())
     median = float(series.median())
     stdev  = float(series.std())
     pmin   = float(series.min())
     pmax   = float(series.max())
-
     pct    = float((series < pe_now).sum() / len(series) * 100)
     z      = (pe_now - mean) / stdev if stdev > 0 else 0
     pct_vs = (pe_now - mean) / mean * 100 if mean > 0 else 0
 
     if pct < 15:
-        comment = (f"💎 **RẺ kỷ lục** — P/E={pe_now:.1f}x đang ở percentile "
-                   f"{pct:.0f}%, thấp hơn TB {abs(pct_vs):.0f}%. "
-                   f"Cơ hội tích lũy dài hạn.")
+        comment = (f"💎 **RẺ kỷ lục** — P/E={pe_now:.1f}x ở percentile "
+                   f"{pct:.0f}%, thấp hơn TB {abs(pct_vs):.0f}%. Cơ hội tích lũy dài hạn.")
     elif pct < 30:
         comment = (f"🟢 **Vùng rẻ** — P/E={pe_now:.1f}x percentile {pct:.0f}%. "
                    f"Thị trường đang định giá hấp dẫn so với lịch sử.")
