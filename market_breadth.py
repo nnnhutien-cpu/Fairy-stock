@@ -91,38 +91,40 @@ def _empty_group(name):
 @st.cache_data(ttl=180, show_spinner=False)
 def get_market_breadth():
     """
-    Tính các chỉ số breadth toàn thị trường:
-    - Advance/Decline (Tăng/Giảm)
-    - New High/Low 1M, 3M
-    - ROC5, ROC10, ROC20
-    - MA20, MA60 (số mã trên/dưới)
+    Tính breadth toàn thị trường (HOSE + HNX + UPCOM).
     """
     try:
         from vnstock import Vnstock
 
-        # Lấy danh sách mã HOSE (~400 mã)
-        symbols = _get_hose_symbols()
-        if not symbols:
+        symbols_dict = _get_all_symbols()   # {sym: exchange}
+        all_symbols  = list(symbols_dict.keys())
+
+        if not all_symbols:
             return _empty_breadth()
 
-        # Lấy dữ liệu giá 60 phiên gần nhất
-        prices = _fetch_prices_batch(symbols, days=60)
+        prices = _fetch_prices_batch(all_symbols, days=60)
         if prices.empty:
             return _empty_breadth()
 
+        # Thêm cột exchange
+        prices["exchange"] = prices["symbol"].map(symbols_dict).fillna("HOSE")
+
         result = {}
 
-        # ---- 1. Advance / Decline ----
-        adv = int((prices["change_pct"].iloc[-1] > 0).sum())
-        dec = int((prices["change_pct"].iloc[-1] < 0).sum())
-        flat = len(prices) - adv - dec
-        result["advance"]     = adv
-        result["decline"]     = dec
-        result["flat"]        = flat
-        result["ad_ratio"]    = round(adv / max(dec, 1), 2)
-        result["ad_change"]   = prices["change_pct"].iloc[-1].mean()
+        # ========================================================
+        # TỔNG HỢP TOÀN THỊ TRƯỜNG
+        # ========================================================
+        adv_total = int((prices["change_pct"].iloc[-1] > 0).sum())
+        dec_total = int((prices["change_pct"].iloc[-1] < 0).sum())
+        flat_total = len(prices) - adv_total - dec_total
 
-        # Đánh giá tổng
+        result["advance"]     = adv_total
+        result["decline"]     = dec_total
+        result["flat"]        = flat_total
+        result["total"]       = len(prices)
+        result["ad_ratio"]    = round(adv_total / max(dec_total, 1), 2)
+        result["ad_change"]   = round(float(prices["change_pct"].iloc[-1].mean()), 2)
+
         if result["ad_ratio"] > 1.5 and result["ad_change"] > 0.5:
             result["verdict"] = "🟢 TÍCH CỰC"
         elif result["ad_ratio"] < 0.7 or result["ad_change"] < -0.5:
@@ -130,7 +132,28 @@ def get_market_breadth():
         else:
             result["verdict"] = "🟡 TRUNG TÍNH"
 
-        # ---- 2. New High / Low 20 phiên (1 tháng) ----
+        # ========================================================
+        # PHÂN TÍCH THEO TỪNG SÀN
+        # ========================================================
+        result["by_exchange"] = {}
+        for ex in ["HOSE", "HNX", "UPCOM"]:
+            sub = prices[prices["exchange"] == ex]
+            if sub.empty:
+                continue
+            adv_x = int((sub["change_pct"].iloc[-1] > 0).sum())
+            dec_x = int((sub["change_pct"].iloc[-1] < 0).sum())
+            result["by_exchange"][ex] = {
+                "advance":  adv_x,
+                "decline":  dec_x,
+                "flat":     len(sub) - adv_x - dec_x,
+                "total":    len(sub),
+                "ad_ratio": round(adv_x / max(dec_x, 1), 2),
+                "avg_chg":  round(float(sub["change_pct"].iloc[-1].mean()), 2),
+            }
+
+        # ========================================================
+        # NEW HIGH / LOW 1M, 3M
+        # ========================================================
         highs_1m = int((prices["close"].iloc[-1] >
                         prices["high"].iloc[-21:-1].max(axis=1)).sum())
         lows_1m  = int((prices["close"].iloc[-1] <
@@ -140,7 +163,6 @@ def get_market_breadth():
         result["trend_1m"] = "UP" if highs_1m > lows_1m * 2 else \
                              "DOWN" if lows_1m > highs_1m * 2 else "SIDEWAY"
 
-        # ---- 3. New High / Low 60 phiên (3 tháng) ----
         highs_3m = int((prices["close"].iloc[-1] >
                         prices["high"].iloc[:-1].max()).sum())
         lows_3m  = int((prices["close"].iloc[-1] <
@@ -150,10 +172,12 @@ def get_market_breadth():
         result["trend_3m"] = "UP" if highs_3m > lows_3m * 2 else \
                              "DOWN" if lows_3m > highs_3m * 2 else "SIDEWAY"
 
-        # ---- 4. ROC5 / ROC10 / ROC20 ----
+        # ========================================================
+        # ROC 5, 10, 20
+        # ========================================================
         for n in [5, 10, 20]:
             col_name = f"roc{n}"
-            if len(prices) >= n + 1:
+            if col_name in prices.columns:
                 up   = int((prices[col_name].iloc[-1] > 0).sum())
                 down = int((prices[col_name].iloc[-1] < 0).sum())
                 avg  = float(prices[col_name].iloc[-1].mean())
@@ -163,7 +187,9 @@ def get_market_breadth():
                 result[f"roc{n}_trend"] = "DOWN" if avg < -3 else \
                                           "UP" if avg > 3 else "SIDEWAY"
 
-        # ---- 5. MA20 / MA60 (số mã nằm trên/dưới) ----
+        # ========================================================
+        # MA20 / MA60
+        # ========================================================
         for n in [20, 60]:
             col_name = f"above_ma{n}"
             if col_name in prices.columns:
@@ -181,6 +207,21 @@ def get_market_breadth():
     except Exception as e:
         print(f"[get_market_breadth] {e}")
         return _empty_breadth()
+
+
+def _empty_breadth():
+    return {
+        "advance": 0, "decline": 0, "flat": 0, "total": 0,
+        "ad_ratio": 0, "ad_change": 0, "verdict": "⏳ Đang tải…",
+        "by_exchange": {},
+        "highs_1m": 0, "lows_1m": 0, "trend_1m": "—",
+        "highs_3m": 0, "lows_3m": 0, "trend_3m": "—",
+        "roc5_up": 0, "roc5_down": 0, "roc5_avg": 0, "roc5_trend": "—",
+        "roc10_up": 0, "roc10_down": 0, "roc10_avg": 0, "roc10_trend": "—",
+        "roc20_up": 0, "roc20_down": 0, "roc20_avg": 0, "roc20_trend": "—",
+        "ma20_above": 0, "ma20_below": 0, "ma20_pct": 0, "ma20_trend": "—",
+        "ma60_above": 0, "ma60_below": 0, "ma60_pct": 0, "ma60_trend": "—",
+    }
 
 
 def _get_all_symbols():
