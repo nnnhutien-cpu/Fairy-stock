@@ -17,7 +17,7 @@ from ui_layout import render_sidebar, render_market_tab, render_screener_results
 from ux_components import setup_cache_clear_button, render_search_and_export
 import backtester as bt
 import valuation
-from market_breadth import get_market_breadth, render_breadth_panel
+from market_breadth import get_market_breadth, get_index_groups
 
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
@@ -236,10 +236,10 @@ with tab_market:
     render_market_tab(chart_df, df_today)
 
     # ============================================================
-    # PHÂN TÍCH XU HƯỚNG & KHUYẾN NGHỊ THỊ TRƯỜNG
+    # 📊 PHÂN TÍCH XU HƯỚNG
     # ============================================================
     st.markdown("---")
-    st.markdown("### 🧠 Phân tích Xu hướng & Khuyến nghị Thị trường")
+    st.markdown("### 📊 Phân tích Xu hướng")
 
     try:
         snap = market_snapshot(symbol="VNINDEX", days=250)
@@ -254,7 +254,7 @@ with tab_market:
             st.warning(f"⚠️ Không tính được khuyến nghị: {e}")
             reco = None
 
-        # --- Hàng 1: Xu hướng giá | Dòng tiền ---
+        # --- Hàng 1: Xu hướng giá | Định giá P/E ---
         c1, c2 = st.columns(2)
 
         with c1:
@@ -274,43 +274,6 @@ with tab_market:
                 )
 
         with c2:
-            with st.container(border=True):
-                st.markdown("#### 🔊 Dòng tiền (Volume)")
-                st.markdown(f"### {snap.get('vol_text', '—')}")
-
-                v1, v2 = st.columns(2)
-                v1.metric("Vol hôm nay", f"{snap.get('vol_today', 0):,.0f}")
-                v2.metric("TB 20 phiên", f"{snap.get('vol_avg', 0):,.0f}")
-
-                vol_ratio = snap.get("vol_ratio", 0) or 0
-                st.progress(
-                    min(vol_ratio / 2.0, 1.0),
-                    text=f"Tỷ lệ: {vol_ratio}x trung bình"
-                )
-
-        # --- Hàng 2: Chỉ báo KT | Định giá P/E ---
-        c3, c4 = st.columns(2)
-
-        with c3:
-            with st.container(border=True):
-                st.markdown("#### 📊 Chỉ báo kỹ thuật")
-                st.markdown(f"**RSI(14):** `{snap.get('rsi', '—')}` — {snap.get('rsi_text', '')}")
-                st.markdown(
-                    f"**MACD:** `{snap.get('macd', '—')}` &nbsp;|&nbsp; "
-                    f"**Signal:** `{snap.get('macd_signal', '—')}`"
-                )
-                macd_color = snap.get('macd_color', 'gray')
-                macd_cross = snap.get('macd_cross', '—')
-                st.markdown(f"**Trạng thái MACD:** :{macd_color}[{macd_cross}]")
-
-                st.divider()
-
-                # --- BREADTH THỊ TRƯỜNG ---
-                scan_results = st.session_state.get('scan_results', [])
-                breadth = get_market_breadth(scan_results)
-                render_breadth_panel(breadth)
-
-        with c4:
             with st.container(border=True):
                 st.markdown("#### 💰 Định giá P/E (20 năm)")
 
@@ -346,10 +309,43 @@ with tab_market:
                     with st.expander("📈 Xem P/E 20 năm", expanded=False):
                         st.line_chart(pe_hist.set_index("date")["pe"], height=200)
 
-        # --- Hàng 3: Khuyến nghị hành động ---
-        if reco is not None:
+        # --- Hàng 2: Chỉ báo KT | Dòng tiền ---
+        c3, c4 = st.columns(2)
+
+        with c3:
             with st.container(border=True):
-                st.markdown("#### 💡 Khuyến nghị hành động")
+                st.markdown("#### 📊 Chỉ báo kỹ thuật")
+                st.markdown(f"**RSI(14):** `{snap.get('rsi', '—')}` — {snap.get('rsi_text', '')}")
+                st.markdown(
+                    f"**MACD:** `{snap.get('macd', '—')}` &nbsp;|&nbsp; "
+                    f"**Signal:** `{snap.get('macd_signal', '—')}`"
+                )
+                macd_color = snap.get('macd_color', 'gray')
+                macd_cross = snap.get('macd_cross', '—')
+                st.markdown(f"**Trạng thái MACD:** :{macd_color}[{macd_cross}]")
+
+        with c4:
+            with st.container(border=True):
+                st.markdown("#### 🔊 Dòng tiền (Volume)")
+                st.markdown(f"### {snap.get('vol_text', '—')}")
+
+                v1, v2 = st.columns(2)
+                v1.metric("Vol hôm nay", f"{snap.get('vol_today', 0):,.0f}")
+                v2.metric("TB 20 phiên", f"{snap.get('vol_avg', 0):,.0f}")
+
+                vol_ratio = snap.get("vol_ratio", 0) or 0
+                st.progress(
+                    min(vol_ratio / 2.0, 1.0),
+                    text=f"Tỷ lệ: {vol_ratio}x trung bình"
+                )
+
+        # ============================================================
+        # 💡 KHUYẾN NGHỊ HÀNH ĐỘNG (tổng hợp tất cả)
+        # ============================================================
+        if reco is not None:
+            st.markdown("---")
+            st.markdown("### 💡 Khuyến nghị Hành động (tổng hợp tất cả)")
+            with st.container(border=True):
                 st.markdown(f"### :{reco.get('color', 'gray')}[{reco.get('action', '—')}]")
 
                 s1, s2 = st.columns(2)
@@ -365,43 +361,102 @@ with tab_market:
                         st.markdown(f"- {r}")
 
                 st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
-                # ============================================================
-# 🆕 SỨC KHỎE THỊ TRƯỜNG (Breadth)
-# ============================================================
-st.markdown("---")
-st.markdown("### 🏥 Sức khỏe Thị trường (Breadth)")
 
-groups  = get_index_groups()
-breadth = get_market_breadth()
+    # ============================================================
+    # 🆕 SỨC KHỎE THỊ TRƯỜNG (Breadth)
+    # ============================================================
+    st.markdown("---")
+    st.markdown("### 🏥 Sức khỏe Thị trường (Breadth)")
 
-# ===== BẢNG 1: INDEX GROUPS =====
-with st.container(border=True):
-    st.markdown("#### 📊 Index Groups (cập nhật mỗi 3 phút)")
+    groups  = get_index_groups()
+    breadth = get_market_breadth()
 
-    # Header
-    h1, h2, h3, h4, h5 = st.columns([2, 1.2, 1.5, 1.5, 1.2])
-    h1.markdown("**Index**")
-    h2
-# Trong phần hiển thị Bảng 2 Breadth, thêm row phân tích sàn:
+    # ===== BẢNG 1: INDEX GROUPS =====
+    with st.container(border=True):
+        st.markdown("#### 📊 Index Groups (cập nhật mỗi 3 phút)")
 
-st.markdown("##### 📊 Phân tích theo sàn")
+        # Header
+        h1, h2, h3, h4, h5 = st.columns([2, 1.2, 1.5, 1.5, 1.2])
+        h1.markdown("**Index**")
+        h2.markdown("**% Thay đổi**")
+        h3.markdown("**GTGD hôm nay**")
+        h4.markdown("**GTGD 5 phiên trước**")
+        h5.markdown("**Tỷ lệ GTGD**")
 
-ex_data = breadth.get("by_exchange", {})
-cols_ex = st.columns(3)
-for i, ex in enumerate(["HOSE", "HNX", "UPCOM"]):
-    with cols_ex[i]:
-        if ex in ex_data:
-            d = ex_data[ex]
-            emoji = "🟢" if d["ad_ratio"] > 1.5 and d["avg_chg"] > 0 else \
-                    "🔴" if d["ad_ratio"] < 0.7 or d["avg_chg"] < -0.5 else "🟡"
-            st.metric(
-                f"{emoji} {ex}",
-                f"{d['advance']}▲ / {d['decline']}▼",
-                delta=f"{d['avg_chg']:+.2f}%",
-                delta_color="normal"
-            )
-        else:
-            st.metric(ex, "—", "—")
+        for g in groups:
+            r1, r2, r3, r4, r5 = st.columns([2, 1.2, 1.5, 1.5, 1.2])
+            chg = g.get("change_pct", 0) or 0
+            chg_color = "green" if chg > 0 else "red" if chg < 0 else "gray"
+            ratio = g.get("value_ratio", 100) or 100
+            ratio_color = "green" if ratio > 100 else "red" if ratio < 80 else "gray"
+
+            r1.markdown(f"**{g.get('name', '—')}**")
+            r2.markdown(f":{chg_color}[{chg:+.2f}%]")
+            r3.markdown(f"{g.get('value_today', 0):,.0f} tỷ")
+            r4.markdown(f"{g.get('value_5d_ago', 0):,.0f} tỷ")
+            r5.markdown(f":{ratio_color}[{ratio:.2f}%]")
+
+    # ===== BẢNG 2: BREADTH TOÀN THỊ TRƯỜNG =====
+    with st.container(border=True):
+        st.markdown("#### 📊 Breadth (toàn thị trường)")
+
+        b1, b2, b3 = st.columns(3)
+        b1.metric("📈 Tăng / Giảm", f"{breadth.get('advance', 0)}▲ / {breadth.get('decline', 0)}▼")
+        b2.metric("⚖️ A/D Ratio", f"{breadth.get('ad_ratio', 0):.2f}", delta=f"{breadth.get('ad_change', 0):+.2f}%")
+        b3.metric("🎯 Đánh giá", breadth.get("verdict", "—"))
+
+        st.markdown("##### 📊 Phân tích theo sàn")
+        ex_data = breadth.get("by_exchange", {})
+        cols_ex = st.columns(3)
+        for i, ex in enumerate(["HOSE", "HNX", "UPCOM"]):
+            with cols_ex[i]:
+                if ex in ex_data:
+                    d = ex_data[ex]
+                    emoji = "🟢" if d["ad_ratio"] > 1.5 and d["avg_chg"] > 0 else \
+                            "🔴" if d["ad_ratio"] < 0.7 or d["avg_chg"] < -0.5 else "🟡"
+                    st.metric(
+                        f"{emoji} {ex}",
+                        f"{d['advance']}▲ / {d['decline']}▼",
+                        delta=f"{d['avg_chg']:+.2f}%",
+                        delta_color="normal"
+                    )
+                else:
+                    st.metric(ex, "—", "—")
+
+        st.divider()
+        st.markdown("##### 🚦 Đỉnh / Đáy & Xu hướng")
+        d1, d2 = st.columns(2)
+        d1.metric(
+            "Đỉnh/Đáy 1 tháng",
+            f"{breadth.get('highs_1m', 0)}▲ / {breadth.get('lows_1m', 0)}▼",
+            delta=breadth.get("trend_1m", "—")
+        )
+        d2.metric(
+            "Đỉnh/Đáy 3 tháng",
+            f"{breadth.get('highs_3m', 0)}▲ / {breadth.get('lows_3m', 0)}▼",
+            delta=breadth.get("trend_3m", "—")
+        )
+
+        st.markdown("##### 📈 Tốc độ thay đổi (ROC)")
+        roc_cols = st.columns(3)
+        for i, n in enumerate([5, 10, 20]):
+            with roc_cols[i]:
+                st.metric(
+                    f"ROC{n}",
+                    f"{breadth.get(f'roc{n}_up', 0)} tăng / {breadth.get(f'roc{n}_down', 0)} giảm",
+                    delta=f"{breadth.get(f'roc{n}_avg', 0):+.2f}% ({breadth.get(f'roc{n}_trend', '—')})"
+                )
+
+        st.markdown("##### 📉 Đường trung bình (MA)")
+        ma_cols = st.columns(2)
+        for i, n in enumerate([20, 60]):
+            with ma_cols[i]:
+                st.metric(
+                    f"MA{n}",
+                    f"{breadth.get(f'ma{n}_above', 0)} nằm trên / {breadth.get(f'ma{n}_below', 0)} nằm dưới",
+                    delta=f"{breadth.get(f'ma{n}_pct', 0):.2f}% ({breadth.get(f'ma{n}_trend', '—')})"
+                )
+
 # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU
 # ==========================================
