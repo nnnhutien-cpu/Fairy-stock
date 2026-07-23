@@ -346,10 +346,13 @@ with tab_market:
                     with st.expander("📈 Xem P/E 20 năm", expanded=False):
                         st.line_chart(pe_hist.set_index("date")["pe"], height=200)
 
-        # --- Hàng 3: Khuyến nghị hành động ---
+        # ============================================================
+        # 💡 KHUYẾN NGHỊ HÀNH ĐỘNG (tổng hợp tất cả)
+        # ============================================================
         if reco is not None:
+            st.markdown("---")
+            st.markdown("### 💡 Khuyến nghị Hành động (tổng hợp tất cả)")
             with st.container(border=True):
-                st.markdown("#### 💡 Khuyến nghị hành động")
                 st.markdown(f"### :{reco.get('color', 'gray')}[{reco.get('action', '—')}]")
 
                 s1, s2 = st.columns(2)
