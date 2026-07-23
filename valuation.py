@@ -39,7 +39,8 @@ _EPS_POINTS = {
         2014: ( 545.6, 12.8), 2015: ( 579.0, 12.5), 2016: ( 664.9, 13.9),
         2017: ( 984.2, 18.2), 2018: ( 892.5, 15.8), 2019: (1007.1, 16.5),
         2020: (1103.9, 16.8), 2021: (1498.3, 18.3), 2022: ( 998.7, 10.3),
-        2023: (1129.9, 13.1), 2024: (1266.8, 13.9), 2025: (1300.0, 13.4),
+        2023: (1129.9, 13.1), 2024: (1266.8, 13.9),
+        # 2025: KHÔNG hard-code vì chưa chốt EOY — dùng EPS 2024 làm trailing
     }.items()
 }
 
@@ -102,23 +103,35 @@ def get_stock_valuation(ticker, ichi_status, price_val):
 #  MARKET-LEVEL P/E — không cần API key
 # ============================================================
 
-def get_current_pe(vnindex_price: "float | None" = None) -> "float | None":
+def get_current_pe(vnindex_price=None):
     """
-    Tính P/E VN-INDEX = Giá hiện tại / EPS trailing (tính theo điểm index).
+    Tính P/E VN-INDEX = Giá hiện tại / EPS trailing.
 
-    vnindex_price: giá đóng cửa VNINDEX mới nhất từ intraday_df (truyền từ main.py).
-                   Hoàn toàn không gọi vnstock API (bị 403 khi không có API key).
+    QUAN TRỌNG: vnindex_price phải là float (điểm số VNINDEX thực tế),
+    KHÔNG truyền string "VNINDEX" vào đây.
 
-    EPS theo điểm = Giá EOY năm trước / P/E EOY năm trước (nguồn hard-coded FiinTrade).
+    EPS trailing = EPS cuối năm trước (đã chốt) để tránh dùng EPS ước tính
+    của năm hiện tại chưa chốt EOY.
+
+    Ví dụ năm 2025: dùng EPS 2024 = 1266.8 / 13.9 = 91.14
+    → P/E = giá_hôm_nay / 91.14
     """
-    if vnindex_price is None or float(vnindex_price) <= 0:
+    if vnindex_price is None:
         return None
     try:
+        price = float(vnindex_price)
+    except (TypeError, ValueError):
+        # Bắt lỗi nếu vô tình truyền string như "VNINDEX"
+        return None
+    if price <= 0:
+        return None
+
+    try:
         year = _dt.date.today().year
-        # Ưu tiên dùng EPS năm hiện tại, fallback năm trước
-        eps = _EPS_POINTS.get(year) or _EPS_POINTS.get(year - 1)
+        # Luôn dùng EPS năm trước (trailing đã chốt), fallback năm kia
+        eps = _EPS_POINTS.get(year - 1) or _EPS_POINTS.get(year - 2)
         if eps and eps > 0:
-            return round(float(vnindex_price) / eps, 2)
+            return round(price / eps, 2)
     except Exception:
         pass
     return None
