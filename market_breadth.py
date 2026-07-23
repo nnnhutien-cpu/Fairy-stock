@@ -80,6 +80,29 @@ def get_index_groups():
                 _empty_group("Penny Index")]
 
 
+def render_breadth_panel(breadth):
+    """
+    Panel gọn hiển thị nhanh Breadth (Advance/Decline + đánh giá tổng quan).
+    Dùng ở card "Chỉ báo kỹ thuật" trong tab Thị Trường.
+    """
+    if not breadth:
+        st.caption("⏳ Chưa có dữ liệu breadth.")
+        return
+
+    st.markdown("##### 🏥 Breadth Thị trường")
+    b1, b2 = st.columns(2)
+    b1.metric(
+        "Tăng / Giảm",
+        f"{breadth.get('advance', 0)}▲ / {breadth.get('decline', 0)}▼",
+    )
+    b2.metric(
+        "A/D Ratio",
+        f"{breadth.get('ad_ratio', 0):.2f}",
+        delta=f"{breadth.get('ad_change', 0):+.2f}%",
+    )
+    st.caption(f"Đánh giá: {breadth.get('verdict', '—')}")
+
+
 def _empty_group(name):
     return {"name": name, "change_pct": 0,
             "value_today": 0, "value_5d_ago": 0, "value_ratio": 100}
@@ -89,9 +112,14 @@ def _empty_group(name):
 # 2. BẢNG 2: BREADTH INDICATORS
 # ============================================================
 @st.cache_data(ttl=180, show_spinner=False)
-def get_market_breadth():
+def get_market_breadth(_scan_results=None):
     """
     Tính breadth toàn thị trường (HOSE + HNX + UPCOM).
+
+    _scan_results: tham số giữ lại để tương thích ngược với các lời gọi cũ
+    (không dùng tới - hàm này luôn tự lấy dữ liệu breadth từ cả 3 sàn).
+    Dấu gạch dưới ở đầu để st.cache_data không cố hash tham số này
+    (vì scan_results là list, không hash được).
     """
     try:
         from vnstock import Vnstock
