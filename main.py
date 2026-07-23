@@ -6,6 +6,8 @@ import streamlit.components.v1 as components
 from supabase import create_client
 import traceback
 
+from indicators import market_snapshot
+from trend_engine import market_recommendation
 from tab_accumulation import render_accumulation_tab
 from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex, set_rate_limit
 from indicators import calculate_technical_signals
@@ -234,7 +236,76 @@ with tab_market:
         st.warning("⚠️ Đang chờ dữ liệu VN-INDEX từ API. Vui lòng tải lại trang sau ít phút...")
 
     render_market_tab(chart_df, df_today)
+# ============================================================
+# 🆕 PHÂN TÍCH XU HƯỚNG & KHUYẾN NGHỊ THỊ TRƯỜNG
+# ============================================================
+st.markdown("---")
+st.markdown("### 🧠 Phân tích Xu hướng & Khuyến nghị Thị trường")
 
+snap = market_snapshot(symbol="VNINDEX", days=250)
+reco = market_recommendation(snap)
+
+# --- Hàng 1: Xu hướng giá | Dòng tiền ---
+c1, c2 = st.columns(2)
+
+with c1:
+    with st.container(border=True):
+        st.markdown("#### 📈 Xu hướng giá")
+        st.markdown(f"### {snap['trend_text']}")
+        st.caption(snap["ma20_text"])
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("MA20",  f"{snap['ma20']:.1f}"  if snap['ma20']  else "—")
+        m2.metric("MA50",  f"{snap['ma50']:.1f}"  if snap['ma50']  else "—")
+        m3.metric("MA200", f"{snap['ma200']:.1f}" if snap['ma200'] else "—")
+
+        st.markdown(
+            f"**Hỗ trợ gần:** `{snap['support']:.1f}` &nbsp;•&nbsp; "
+            f"**Kháng cự:** `{snap['resistance']:.1f}`"
+        )
+
+with c2:
+    with st.container(border=True):
+        st.markdown("#### 🔊 Dòng tiền (Volume)")
+        st.markdown(f"### {snap['vol_text']}")
+
+        v1, v2 = st.columns(2)
+        v1.metric("Vol hôm nay", f"{snap['vol_today']:,.0f}")
+        v2.metric("TB 20 phiên", f"{snap['vol_avg']:,.0f}")
+
+        st.progress(
+            min(snap["vol_ratio"] / 2.0, 1.0),
+            text=f"Tỷ lệ: {snap['vol_ratio']}x trung bình"
+        )
+
+# --- Hàng 2: Chỉ báo KT | Khuyến nghị ---
+c3, c4 = st.columns(2)
+
+with c3:
+    with st.container(border=True):
+        st.markdown("#### 📊 Chỉ báo kỹ thuật")
+        st.markdown(f"**RSI(14):** `{snap['rsi']}` — {snap['rsi_text']}")
+        st.markdown(f"**MACD:** `{snap['macd']}` &nbsp;|&nbsp; "
+                    f"**Signal:** `{snap['macd_signal']}`")
+        st.markdown(f"**Trạng thái MACD:** :{snap['macd_color']}[{snap['macd_cross']}]")
+
+with c4:
+    with st.container(border=True):
+        st.markdown("#### 💡 Khuyến nghị hành động")
+        st.markdown(f"### :{reco['color']}[{reco['action']}]")
+
+        s1, s2 = st.columns(2)
+        s1.metric("📈 Nên nắm giữ CP", f"{reco['stock']}%")
+        s2.metric("💵 Nên giữ tiền mặt", f"{reco['cash']}%")
+
+        st.progress(reco["stock"] / 100,
+                    text=f"Tỷ trọng CP {reco['stock']}% / Tiền {reco['cash']}%")
+
+        with st.expander("📋 Lý do khuyến nghị", expanded=True):
+            for r in reco["reasons"]:
+                st.markdown(f"- {r}")
+
+        st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")    
 # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU (BẢN TRUY VẾT LỖI X-QUANG)
 # ==========================================
@@ -681,10 +752,10 @@ with tab_backtest:
                 st.error("Lỗi: Không lấy được dữ liệu. Hãy kiểm tra lại mã cổ phiếu hoặc API đang bảo trì!")
 
 # ==========================================
-# PATCH V4 - TAB 5: BÁO CÁO PHÂN TÍCH TỪ CTCK
+# PATCH V4 - TAB 5: BÁO CÁO  TỪ CTCK
 # Không dùng Supabase. Cào trực tiếp từ:
 #   1. DNSE  — public API, không cần login
-#   2. Vietstock Finance — endpoint public báo cáo phân tích
+#   2. Vietstock Finance — endpoint public báo cáo 
 #   3. CafeF — fallback HTML scrape
 # Cache 4 giờ bằng st.cache_data để không cào lại mỗi lần bấm tab.
 # ==========================================
@@ -737,11 +808,11 @@ def _fetch_dnse_reports(ticker: str = "") -> _pd.DataFrame:
     return _pd.DataFrame(rows)
 
 
-# ── NGUỒN 2: Vietstock báo cáo phân tích (public JSON, không cần login) ─────
+# ── NGUỒN 2: Vietstock báo cáo  (public JSON, không cần login) ─────
 @st.cache_data(ttl=14400, show_spinner=False)
 def _fetch_vietstock_reports(ticker: str = "") -> _pd.DataFrame:
     """
-    Vietstock Finance public API — endpoint báo cáo phân tích tổng hợp.
+    Vietstock Finance public API — endpoint báo cáo  tổng hợp.
     Lấy 30 ngày gần nhất, filter theo ticker nếu có.
     """
     rows = []
@@ -796,7 +867,7 @@ def _fetch_vietstock_reports(ticker: str = "") -> _pd.DataFrame:
 @st.cache_data(ttl=14400, show_spinner=False)
 def _fetch_cafef_reports(ticker: str = "") -> _pd.DataFrame:
     """
-    CafeF trang khuyến nghị phân tích — scrape bảng HTML.
+    CafeF trang khuyến nghị  — scrape bảng HTML.
     URL: https://cafef.vn/thi-truong-chung-khoan/khuyen-nghi-dau-tu.chn
     """
     rows = []
@@ -888,7 +959,7 @@ def _fetch_all_reports(ticker: str = "") -> _pd.DataFrame:
     return df_all
 
 
-# PATCH V5 - TAB 5: BÁO CÁO PHÂN TÍCH
+# PATCH V5 - TAB 5: BÁO CÁO 
 # Đọc reports.json từ GitHub raw URL — không bị chặn bởi Streamlit Cloud.
 # Bot GitHub Actions cào dữ liệu 2 lần/ngày và commit file này lên repo.
 # ================================================================
@@ -897,7 +968,7 @@ def _fetch_all_reports(ticker: str = "") -> _pd.DataFrame:
 # ================================================================
 
 with tab_reports:
-    st.subheader("📑 Hệ Thống Phân Tích Định Giá Cổ Phiếu")
+    st.subheader("📑 Hệ Thống  Định Giá Cổ Phiếu")
     st.caption(
         "Dữ liệu tổng hợp tự động từ **DNSE · Vietstock · CafeF** — "
         "bot cập nhật 2 lần/ngày (10:00 SA & 15:30 CH)."
