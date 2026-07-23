@@ -291,7 +291,17 @@ with tab_market:
                     min(vol_ratio / 2.0, 1.0),
                     text=f"Tỷ lệ: {vol_ratio}x trung bình"
                 )
+                # HÀNG: CHỈ BÁO KT 
+# ============================================================
+c3, c4 = st.columns(2)
 
+with c3:
+    with st.container(border=True):
+        st.markdown("#### 📊 Chỉ báo kỹ thuật")
+        st.markdown(f"**RSI(14):** `{snap['rsi']}` — {snap['rsi_text']}")
+        st.markdown(f"**MACD:** `{snap['macd']}` &nbsp;|&nbsp; "
+                    f"**Signal:** `{snap['macd_signal']}`")
+        st.markdown(f"**Trạng thái MACD:** :{snap['macd_color']}[{snap['macd_cross']}]")
     
 # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU
