@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import concurrent.futures
 import time
-import valuation
 import streamlit.components.v1 as components
 from supabase import create_client
 import traceback
@@ -19,6 +18,7 @@ import trend_engine as te
 from ui_layout import render_sidebar, render_market_tab, render_screener_results, render_screener_signals
 from ux_components import setup_cache_clear_button, render_search_and_export
 import backtester as bt
+import valuation
 
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
