@@ -1,5 +1,6 @@
 import os
 import json
+import re as _re
 import datetime as _dt
 import numpy as _np
 import pandas as _pd
@@ -29,7 +30,7 @@ _PE_YEARLY = {
 }
 
 # EPS VN-INDEX theo ĐIỂM (= Giá EOY / P/E EOY)
-# Dùng để nội suy P/E hiện tại từ giá VNINDEX real-time
+# Dùng để nội suy P/E hiện tại từ giá VNINDEX real-time (fallback)
 _EPS_POINTS = {
     year: round(price / pe, 4)
     for year, (price, pe) in {
@@ -40,7 +41,7 @@ _EPS_POINTS = {
         2017: ( 984.2, 18.2), 2018: ( 892.5, 15.8), 2019: (1007.1, 16.5),
         2020: (1103.9, 16.8), 2021: (1498.3, 18.3), 2022: ( 998.7, 10.3),
         2023: (1129.9, 13.1), 2024: (1266.8, 13.9),
-        # 2025: KHÔNG hard-code vì chưa chốt EOY — dùng EPS 2024 làm trailing
+        # 2025 chưa chốt EOY → không hard-code, dùng EPS 2024 làm trailing
     }.items()
 }
 
@@ -100,57 +101,74 @@ def get_stock_valuation(ticker, ichi_status, price_val):
 
 
 # ============================================================
-#  MARKET-LEVEL P/E — scrape từ TCBS price board
+#  MARKET-LEVEL P/E — scrape từ 24hmoney (SSR HTML)
 # ============================================================
 
-@_st.cache_data(ttl=3600, show_spinner=False)   # cache 1 tiếng
-def scrape_vnindex_pe() -> "float | None":
+@_st.cache_data(ttl=3600, show_spinner=False)  # cache 1 tiếng
+def scrape_vnindex_pe() -> "dict | None":
     """
-    Lấy P/E VN-INDEX trực tiếp từ TCBS price board endpoint.
-    Endpoint: /stock-insight/v1/stock/second-tc-price?tickers=VCB
-    Trường 'vnipe' trong response = VNINDEX P/E hiện tại (real-time).
+    Scrape P/E và P/B VN-INDEX từ 24hmoney.vn/indices/vn-index.
 
-    Không cần API key, không cần login — đây là endpoint public
-    mà vnstock 3.x dùng nội bộ cho hàm Trading.price_board().
+    Trang dùng Nuxt SSR — P/E và P/B render sẵn trong HTML,
+    không cần API key, không cần cookie/login.
 
-    Fallback lần lượt: VCB → VHM → HPG (phòng khi 1 mã bị lỗi data).
+    Xác nhận: trang trả "P/E 13.18" và "P/B 2.04" dạng text thô.
+
+    Trả về: {"pe": float, "pb": float} hoặc None nếu lỗi.
     """
     import requests as _req
-    _BASE = "https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/second-tc-price"
-    _HDR  = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
 
-    for ticker in ["VCB", "VHM", "HPG"]:
-        try:
-            r = _req.get(_BASE, params={"tickers": ticker}, headers=_HDR, timeout=6)
-            if r.status_code != 200:
-                continue
-            data = r.json().get("data", [])
-            if not data:
-                continue
-            row = data[0]
-            vnipe = row.get("vnipe") or row.get("vni_pe")
-            if vnipe and float(vnipe) > 0:
-                return round(float(vnipe), 2)
-        except Exception:
-            continue
-    return None
+    URL = "https://24hmoney.vn/indices/vn-index"
+    HDR = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "vi-VN,vi;q=0.9",
+        "Referer": "https://24hmoney.vn/",
+    }
+    try:
+        r = _req.get(URL, headers=HDR, timeout=10)
+        if r.status_code != 200:
+            return None
+        html = r.text
+
+        # HTML chứa dạng: "P/E 13.18" và "P/B 2.04" (text thô, SSR)
+        # Regex: bắt số thập phân ngay sau "P/E" hoặc "P/B", có thể có
+        # ký tự HTML ở giữa (tag, khoảng trắng)
+        pe_match = _re.search(r'P/E[\s\S]{0,60}?(\d{1,3}\.\d{1,2})(?!\d)', html)
+        pb_match = _re.search(r'P/B[\s\S]{0,60}?(\d{1,3}\.\d{1,2})(?!\d)', html)
+
+        result = {}
+        if pe_match:
+            val = float(pe_match.group(1))
+            if 1 < val < 100:   # sanity check
+                result["pe"] = round(val, 2)
+        if pb_match:
+            val = float(pb_match.group(1))
+            if 0.1 < val < 20:  # sanity check
+                result["pb"] = round(val, 2)
+
+        return result if result else None
+    except Exception:
+        return None
 
 
 def get_current_pe(vnindex_price=None):
     """
     Lấy P/E VN-INDEX hiện tại theo thứ tự ưu tiên:
 
-    1. scrape_vnindex_pe() — lấy trường 'vnipe' từ TCBS price board
-       (dữ liệu thực tế do TCBS tính, không phải ước tính)
+    1. scrape_vnindex_pe() — 24hmoney SSR HTML (nguồn thực tế, cache 1h)
     2. Fallback: tính từ EPS trailing năm trước (hard-coded)
-       vnindex_price: điểm VNINDEX hiện tại (float), dùng cho fallback.
 
-    KHÔNG truyền string "VNINDEX" vào đây.
+    KHÔNG truyền string "VNINDEX" vào đây — vnindex_price phải là float.
     """
-    # Ưu tiên 1: dữ liệu thực từ TCBS
-    pe_live = scrape_vnindex_pe()
-    if pe_live is not None:
-        return pe_live
+    # Ưu tiên 1: scrape 24hmoney
+    live = scrape_vnindex_pe()
+    if live and live.get("pe"):
+        return live["pe"]
 
     # Fallback: tính xấp xỉ từ EPS trailing
     if vnindex_price is None:
@@ -163,11 +181,20 @@ def get_current_pe(vnindex_price=None):
         return None
     try:
         year = _dt.date.today().year
+        # Dùng EPS năm trước (đã chốt), fallback năm kia
         eps = _EPS_POINTS.get(year - 1) or _EPS_POINTS.get(year - 2)
         if eps and eps > 0:
             return round(price / eps, 2)
     except Exception:
         pass
+    return None
+
+
+def get_current_pb() -> "float | None":
+    """Lấy P/B VN-INDEX từ 24hmoney (cùng request với P/E, free từ cache)."""
+    live = scrape_vnindex_pe()
+    if live and live.get("pb"):
+        return live["pb"]
     return None
 
 
@@ -228,12 +255,12 @@ def pe_stats(pe_hist: "_pd.DataFrame", pe_now: "float | None") -> dict:
     z      = (pe_now - mean) / stdev if stdev > 0 else 0
     pct_vs = (pe_now - mean) / mean * 100 if mean > 0 else 0
 
-    # Ngưỡng percentile được hiệu chỉnh để loại trừ ảnh hưởng bong bóng 2006-2007
-    # (P/E 25-34x kéo lệch phân phối, khiến 18x bị xếp "Đắt kỷ lục" sai)
-    # Thực tế: P/E 18-19x là mức bình thường cuối chu kỳ tăng (2017: 18.2x, 2021: 18.3x)
+    # Ngưỡng 88% thay vì 85% để P/E ~18x (bình thường cuối chu kỳ tăng,
+    # ví dụ 2017: 18.2x, 2021: 18.3x) không bị xếp "Đắt kỷ lục" sai.
+    # Bảng 21 năm có 2 outlier bong bóng (2006: 25x, 2007: 34x) kéo lệch phân phối.
     if pct < 20:
-        comment = (f"💎 **RẺ kỷ lục** — P/E={pe_now:.1f}x ở percentile "
-                   f"{pct:.0f}%, thấp hơn TB {abs(pct_vs):.0f}%. Cơ hội tích lũy dài hạn.")
+        comment = (f"💎 **RẺ kỷ lục** — P/E={pe_now:.1f}x percentile {pct:.0f}%, "
+                   f"thấp hơn TB {abs(pct_vs):.0f}%. Cơ hội tích lũy dài hạn.")
     elif pct < 35:
         comment = (f"🟢 **Vùng rẻ** — P/E={pe_now:.1f}x percentile {pct:.0f}%. "
                    f"Thị trường đang định giá hấp dẫn so với lịch sử.")
