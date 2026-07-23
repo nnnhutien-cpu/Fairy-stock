@@ -19,6 +19,15 @@ import backtester as bt
 import valuation
 from market_breadth import get_market_breadth, get_index_groups, render_breadth_panel
 
+# CSS cho bảng breadth
+st.markdown("""
+<style>
+.breadth-table {font-size: 14px;}
+.breadth-up   {color: #00C853; font-weight: bold;}
+.breadth-down {color: #D32F2F; font-weight: bold;}
+</style>
+""", unsafe_allow_html=True)
+
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
