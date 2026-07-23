@@ -239,3 +239,136 @@ def calculate_technical_signals(
         "Tín Hiệu Sideway (MFI/RSI)": tin_hieu_sideway,
         "Trạng thái": trang_thai,
     }
+    # indicators.py  →  thêm hàm này vào cuối file
+
+def market_snapshot(symbol="VNINDEX", days=250):
+    """
+    Lấy & phân tích chỉ số thị trường (VN-INDEX / VN30 / HNX-Index).
+    Tận dụng data_loader + trend_engine có sẵn trong repo.
+    """
+    from data_loader import load_history   # module có sẵn
+    from trend_engine import trend_status  # module có sẵn
+
+    try:
+        df = load_history(symbol, days=days)   # bạn đang dùng để tải CP, dùng luôn cho index
+    except Exception:
+        return _empty_snapshot()
+
+    if df is None or len(df) < 30:
+        return _empty_snapshot()
+
+    # Moving Averages
+    df["MA20"]  = df["close"].rolling(20).mean()
+    df["MA50"]  = df["close"].rolling(50).mean()
+    df["MA200"] = df["close"].rolling(200).mean()
+
+    # RSI(14)
+    import numpy as np
+    delta = df["close"].diff()
+    gain  = delta.where(delta > 0, 0).rolling(14).mean()
+    loss  = (-delta.where(delta < 0, 0)).rolling(14).mean()
+    rs    = gain / loss.replace(0, np.nan)
+    df["RSI"] = 100 - (100 / (1 + rs))
+
+    # MACD
+    ema12 = df["close"].ewm(span=12, adjust=False).mean()
+    ema26 = df["close"].ewm(span=26, adjust=False).mean()
+    df["MACD"]   = ema12 - ema26
+    df["Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
+
+    # Volume stats
+    df["Vol_MA20"] = df["volume"].rolling(20).mean()
+
+    cur, prev = df.iloc[-1], df.iloc[-2]
+
+    # ---- Trend ----
+    if cur["MA20"] != cur["MA20"]:        # NaN check
+        trend_text = "⏳ Đang tải dữ liệu…"
+        ma20_text  = "—"
+        ma20_alert = "info"
+    else:
+        above   = cur["close"] > cur["MA20"]
+        rising  = cur["MA20"] > prev["MA20"]
+        crossed = (prev["close"] >= prev["MA20"]) and (not above)
+
+        if above and rising:
+            trend_text  = "📈 Xu hướng tăng mạnh"
+            ma20_text   = "Giá trên MA20 và MA20 đang dốc lên"
+            ma20_alert  = "success"
+        elif above and not rising:
+            trend_text  = "↗️ Xu hướng tăng chậm lại"
+            ma20_text   = "Giá trên MA20 nhưng MA20 đi ngang"
+            ma20_alert  = "info"
+        elif crossed:
+            trend_text  = "⚠️ Vừa gãy MA20"
+            ma20_text   = "Giá vừa cắt xuống dưới MA20"
+            ma20_alert  = "warning"
+        else:
+            trend_text  = "📉 Xu hướng giảm"
+            ma20_text   = "Giá đang dưới MA20"
+            ma20_alert  = "danger"
+
+    # ---- Volume ----
+    vol_today = float(cur["volume"])
+    vol_avg   = float(cur["Vol_MA20"]) if cur["Vol_MA20"] == cur["Vol_MA20"] else 0
+    vol_ratio = vol_today / vol_avg if vol_avg > 0 else 0
+    if vol_ratio >= 1.5:
+        vol_text = f"🔥 Đột biến {vol_ratio:.1f}x trung bình 20 phiên"
+    elif vol_ratio >= 1.0:
+        vol_text = f"✅ Bình thường ({vol_ratio:.1f}x)"
+    else:
+        vol_text = f"💤 Thấp, thị trường trầm lắng ({vol_ratio:.1f}x)"
+
+    # ---- RSI ----
+    rsi = float(cur["RSI"]) if cur["RSI"] == cur["RSI"] else 50
+    if rsi >= 70:
+        rsi_text, rsi_color = "🔴 Quá mua (≥70)", "danger"
+    elif rsi <= 30:
+        rsi_text, rsi_color = "🟢 Quá bán (≤30)", "success"
+    else:
+        rsi_text, rsi_color = "🟡 Trung tính", "info"
+
+    # ---- MACD ----
+    macd_cross  = "Vàng" if cur["MACD"] > cur["Signal"] else "Chết"
+    macd_color  = "success" if macd_cross == "Vàng" else "danger"
+
+    # ---- Hỗ trợ / Kháng cự ----
+    support    = float(df["low"].tail(20).min())
+    resistance = float(df["high"].tail(20).max())
+
+    return {
+        "price"        : float(cur["close"]),
+        "change"       : float(cur["close"] - prev["close"]),
+        "change_pct"   : float((cur["close"] - prev["close"]) / prev["close"] * 100),
+        "ma20"         : float(cur["MA20"])  if cur["MA20"]  == cur["MA20"]  else None,
+        "ma50"         : float(cur["MA50"])  if cur["MA50"]  == cur["MA50"]  else None,
+        "ma200"        : float(cur["MA200"]) if cur["MA200"] == cur["MA200"] else None,
+        "trend_text"   : trend_text,
+        "ma20_text"    : ma20_text,
+        "ma20_alert"   : ma20_alert,
+        "vol_today"    : vol_today,
+        "vol_avg"      : vol_avg,
+        "vol_ratio"    : round(vol_ratio, 2),
+        "vol_text"     : vol_text,
+        "rsi"          : round(rsi, 2),
+        "rsi_text"     : rsi_text,
+        "rsi_color"    : rsi_color,
+        "macd"         : round(float(cur["MACD"]), 3),
+        "macd_signal"  : round(float(cur["Signal"]), 3),
+        "macd_cross"   : macd_cross,
+        "macd_color"   : macd_color,
+        "support"      : support,
+        "resistance"   : resistance,
+    }
+
+
+def _empty_snapshot():
+    return {
+        "price": 0, "change": 0, "change_pct": 0,
+        "ma20": None, "ma50": None, "ma200": None,
+        "trend_text": "⏳ Đang tải…", "ma20_text": "—", "ma20_alert": "info",
+        "vol_today": 0, "vol_avg": 0, "vol_ratio": 0, "vol_text": "—",
+        "rsi": 50, "rsi_text": "—", "rsi_color": "info",
+        "macd": 0, "macd_signal": 0, "macd_cross": "—", "macd_color": "info",
+        "support": 0, "resistance": 0,
+    }
