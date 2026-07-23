@@ -333,3 +333,113 @@ def calculate_technical_signals(
         "Tín Hiệu Sideway (MFI/RSI)": tin_hieu_sideway,
         "Trạng thái"               : trang_thai,
     }
+
+
+# ==================================================================================
+# HÀM LẤY P/E, P/B, ROE, ROA — dùng vnstock VCI financial ratio API
+# Gọi: get_pe_ratio("HPG")  → dict hoặc None nếu lỗi
+# ==================================================================================
+
+@st.cache_data(ttl=3600, show_spinner=False)   # cache 1 giờ, P/E không thay đổi từng phút
+def get_pe_ratio(ticker: str) -> dict | None:
+    """
+    Lấy các chỉ số định giá hiện tại từ vnstock VCI:
+      P/E, P/B, P/S, EV/EBITDA, ROE, ROA, Dividend Yield, Market Cap
+    Trả về dict với kỳ báo cáo mới nhất, hoặc None nếu không lấy được.
+
+    Cách gọi trong Streamlit:
+        val = get_pe_ratio("HPG")
+        if val:
+            st.metric("P/E", val["pe"])
+    """
+    try:
+        from vnstock.explorer.vci.financial import Finance
+
+        # Lấy ratio theo quý (mới nhất hơn so với year)
+        fin = Finance(symbol=ticker.upper(), period="quarter", show_log=False)
+        df  = fin.ratio(period="quarter", lang="en", dropna=True, show_log=False)
+
+        if df is None or df.empty:
+            return None
+
+        # Lấy hàng mới nhất (đã sắp xếp desc theo kỳ bởi vnstock)
+        row = df.iloc[0]
+
+        def _safe(col, default=None):
+            try:
+                v = row[col]
+                return round(float(v), 2) if v == v and v is not None else default
+            except Exception:
+                return default
+
+        # Tìm tên cột period linh hoạt
+        period_label = "—"
+        for col in ["report_period", "period", "Kỳ báo cáo", "Period"]:
+            if col in df.columns:
+                period_label = str(row[col])
+                break
+
+        return {
+            "ticker"        : ticker.upper(),
+            "period"        : period_label,
+            "pe"            : _safe("P/E"),
+            "pb"            : _safe("P/B"),
+            "ps"            : _safe("P/S"),
+            "ev_ebitda"     : _safe("EV/EBITDA"),
+            "roe"           : _safe("ROE (%)"),
+            "roa"           : _safe("ROA (%)"),
+            "div_yield"     : _safe("Dividend Yield (%)"),
+            "market_cap"    : _safe("Market Cap"),
+            "debt_equity"   : _safe("Debt/Equity"),
+            "current_ratio" : _safe("Current Ratio"),
+        }
+
+    except Exception:
+        return None
+
+
+def render_valuation_metrics(ticker: str):
+    """
+    Render block định giá P/E trong Streamlit.
+    Gọi trực tiếp trong tab_market hoặc tab_simulation.
+
+    Ví dụ dùng:
+        from indicators import render_valuation_metrics
+        render_valuation_metrics("HPG")
+    """
+    val = get_pe_ratio(ticker)
+
+    st.markdown(f"#### 🏷️ Định giá — {ticker.upper()}")
+
+    if val is None:
+        st.warning(f"Không lấy được chỉ số định giá cho {ticker} (API VCI cần đăng nhập hoặc mạng bị chặn).")
+        return
+
+    st.caption(f"Kỳ báo cáo gần nhất: **{val['period']}**")
+
+    # Hàng 1: P/E · P/B · P/S · EV/EBITDA
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("P/E",       f"{val['pe']:.1f}x"       if val['pe']       else "—")
+    c2.metric("P/B",       f"{val['pb']:.2f}x"       if val['pb']       else "—")
+    c3.metric("P/S",       f"{val['ps']:.2f}x"       if val['ps']       else "—")
+    c4.metric("EV/EBITDA", f"{val['ev_ebitda']:.1f}x" if val['ev_ebitda'] else "—")
+
+    # Hàng 2: ROE · ROA · Div Yield · D/E
+    c5, c6, c7, c8 = st.columns(4)
+    c5.metric("ROE",          f"{val['roe']:.1f}%"       if val['roe']       else "—")
+    c6.metric("ROA",          f"{val['roa']:.1f}%"       if val['roa']       else "—")
+    c7.metric("Div Yield",    f"{val['div_yield']:.2f}%" if val['div_yield'] else "—")
+    c8.metric("D/E",          f"{val['debt_equity']:.2f}x" if val['debt_equity'] else "—")
+
+    # Đánh giá nhanh P/E
+    if val['pe']:
+        if val['pe'] < 10:
+            st.success(f"✅ P/E = {val['pe']:.1f}x — **Vùng hấp dẫn** (dưới 10x)")
+        elif val['pe'] < 15:
+            st.info(f"ℹ️ P/E = {val['pe']:.1f}x — **Hợp lý** (10–15x)")
+        elif val['pe'] < 25:
+            st.warning(f"⚠️ P/E = {val['pe']:.1f}x — **Đang cao** (15–25x), cần thận trọng")
+        else:
+            st.error(f"🚨 P/E = {val['pe']:.1f}x — **Rất đắt** (>25x), rủi ro mua đuổi")
+
+    st.caption("⚠️ Chỉ số tính theo kỳ báo cáo gần nhất từ VCI — không phải TTM real-time.")
