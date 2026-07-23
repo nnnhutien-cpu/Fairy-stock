@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import concurrent.futures
 import time
+import valuation
 import streamlit.components.v1 as components
 from supabase import create_client
 import traceback
