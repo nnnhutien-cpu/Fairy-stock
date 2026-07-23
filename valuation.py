@@ -100,35 +100,69 @@ def get_stock_valuation(ticker, ichi_status, price_val):
 
 
 # ============================================================
-#  MARKET-LEVEL P/E — không cần API key
+#  MARKET-LEVEL P/E — scrape từ TCBS price board
 # ============================================================
+
+@_st.cache_data(ttl=3600, show_spinner=False)   # cache 1 tiếng
+def scrape_vnindex_pe() -> "float | None":
+    """
+    Lấy P/E VN-INDEX trực tiếp từ TCBS price board endpoint.
+    Endpoint: /stock-insight/v1/stock/second-tc-price?tickers=VCB
+    Trường 'vnipe' trong response = VNINDEX P/E hiện tại (real-time).
+
+    Không cần API key, không cần login — đây là endpoint public
+    mà vnstock 3.x dùng nội bộ cho hàm Trading.price_board().
+
+    Fallback lần lượt: VCB → VHM → HPG (phòng khi 1 mã bị lỗi data).
+    """
+    import requests as _req
+    _BASE = "https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/second-tc-price"
+    _HDR  = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+
+    for ticker in ["VCB", "VHM", "HPG"]:
+        try:
+            r = _req.get(_BASE, params={"tickers": ticker}, headers=_HDR, timeout=6)
+            if r.status_code != 200:
+                continue
+            data = r.json().get("data", [])
+            if not data:
+                continue
+            row = data[0]
+            vnipe = row.get("vnipe") or row.get("vni_pe")
+            if vnipe and float(vnipe) > 0:
+                return round(float(vnipe), 2)
+        except Exception:
+            continue
+    return None
+
 
 def get_current_pe(vnindex_price=None):
     """
-    Tính P/E VN-INDEX = Giá hiện tại / EPS trailing.
+    Lấy P/E VN-INDEX hiện tại theo thứ tự ưu tiên:
 
-    QUAN TRỌNG: vnindex_price phải là float (điểm số VNINDEX thực tế),
+    1. scrape_vnindex_pe() — lấy trường 'vnipe' từ TCBS price board
+       (dữ liệu thực tế do TCBS tính, không phải ước tính)
+    2. Fallback: tính từ EPS trailing năm trước (hard-coded)
+       vnindex_price: điểm VNINDEX hiện tại (float), dùng cho fallback.
+
     KHÔNG truyền string "VNINDEX" vào đây.
-
-    EPS trailing = EPS cuối năm trước (đã chốt) để tránh dùng EPS ước tính
-    của năm hiện tại chưa chốt EOY.
-
-    Ví dụ năm 2025: dùng EPS 2024 = 1266.8 / 13.9 = 91.14
-    → P/E = giá_hôm_nay / 91.14
     """
+    # Ưu tiên 1: dữ liệu thực từ TCBS
+    pe_live = scrape_vnindex_pe()
+    if pe_live is not None:
+        return pe_live
+
+    # Fallback: tính xấp xỉ từ EPS trailing
     if vnindex_price is None:
         return None
     try:
         price = float(vnindex_price)
     except (TypeError, ValueError):
-        # Bắt lỗi nếu vô tình truyền string như "VNINDEX"
         return None
     if price <= 0:
         return None
-
     try:
         year = _dt.date.today().year
-        # Luôn dùng EPS năm trước (trailing đã chốt), fallback năm kia
         eps = _EPS_POINTS.get(year - 1) or _EPS_POINTS.get(year - 2)
         if eps and eps > 0:
             return round(price / eps, 2)
@@ -194,16 +228,19 @@ def pe_stats(pe_hist: "_pd.DataFrame", pe_now: "float | None") -> dict:
     z      = (pe_now - mean) / stdev if stdev > 0 else 0
     pct_vs = (pe_now - mean) / mean * 100 if mean > 0 else 0
 
-    if pct < 15:
+    # Ngưỡng percentile được hiệu chỉnh để loại trừ ảnh hưởng bong bóng 2006-2007
+    # (P/E 25-34x kéo lệch phân phối, khiến 18x bị xếp "Đắt kỷ lục" sai)
+    # Thực tế: P/E 18-19x là mức bình thường cuối chu kỳ tăng (2017: 18.2x, 2021: 18.3x)
+    if pct < 20:
         comment = (f"💎 **RẺ kỷ lục** — P/E={pe_now:.1f}x ở percentile "
                    f"{pct:.0f}%, thấp hơn TB {abs(pct_vs):.0f}%. Cơ hội tích lũy dài hạn.")
-    elif pct < 30:
+    elif pct < 35:
         comment = (f"🟢 **Vùng rẻ** — P/E={pe_now:.1f}x percentile {pct:.0f}%. "
                    f"Thị trường đang định giá hấp dẫn so với lịch sử.")
-    elif pct < 70:
+    elif pct < 65:
         comment = (f"🟡 **Hợp lý** — P/E={pe_now:.1f}x percentile {pct:.0f}%. "
                    f"Định giá cân bằng, không có tín hiệu rõ ràng.")
-    elif pct < 85:
+    elif pct < 88:
         comment = (f"🟠 **Vùng đắt** — P/E={pe_now:.1f}x percentile {pct:.0f}%. "
                    f"Nên thận trọng, hạn chế mua đuổi.")
     else:
