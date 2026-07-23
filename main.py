@@ -302,6 +302,27 @@ with c3:
         st.markdown(f"**MACD:** `{snap['macd']}` &nbsp;|&nbsp; "
                     f"**Signal:** `{snap['macd_signal']}`")
         st.markdown(f"**Trạng thái MACD:** :{snap['macd_color']}[{snap['macd_cross']}]")
+ with c4:
+            if reco is not None:
+                with st.container(border=True):
+                    st.markdown("#### 💡 Khuyến nghị hành động")
+                    st.markdown(f"### :{reco.get('color', 'gray')}[{reco.get('action', '—')}]")
+
+                    s1, s2 = st.columns(2)
+                    s1.metric("📈 Nên nắm giữ CP", f"{reco.get('stock', 0)}%")
+                    s2.metric("💵 Nên giữ tiền mặt", f"{reco.get('cash', 0)}%")
+
+                    stock_pct = reco.get("stock", 0) or 0
+                    cash_pct  = reco.get("cash", 0) or 0
+                    st.progress(stock_pct / 100,
+                                text=f"Tỷ trọng CP {stock_pct}% / Tiền {cash_pct}%")
+
+                    with st.expander("📋 Lý do khuyến nghị", expanded=True):
+                        for r in reco.get("reasons", []):
+                            st.markdown(f"- {r}")
+
+                    st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
+        # main.py — trong tab Thị Trường
     
 # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU
