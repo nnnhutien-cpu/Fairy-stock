@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-
 # ==================================================================================
 # HỆ THỐNG "CÔ TIÊN" — 3 ĐƯỜNG ĐỊNH GIÁ Kijun17 / Knife1(65) / Knife2(129)
 # theo tài liệu triết lý giao dịch (đường 129 là quan trọng nhất).
@@ -245,10 +244,8 @@ def calculate_technical_signals(
 
 def market_snapshot(symbol="VNINDEX", days=250):
     """Lấy & phân tích chỉ số thị trường - dùng vnstock trực tiếp."""
-    import numpy as np
-    import pandas as pd
-
-    # ----- Lấy dữ liệu lịch sử VN-INDEX -----
+    # KHÔNG import numpy/pandas ở đây nữa (đã có ở đầu file)
+    
     try:
         from vnstock import Vnstock
         stock = Vnstock().stock(symbol=symbol, source="VCI")
@@ -257,25 +254,24 @@ def market_snapshot(symbol="VNINDEX", days=250):
             end="now",
             interval="1D"
         )
-        # vnstock trả về columns: time, open, high, low, close, volume
         df = df.rename(columns={
             "time": "date",
             "open": "open", "high": "high",
             "low": "low", "close": "close", "volume": "volume"
         })
         df = df[["date", "open", "high", "low", "close", "volume"]]
-    except Exception as e:
-        # Fallback: đọc CSV local nếu có
+    except Exception:
         try:
-            df = pd.read_csv(f"data/{symbol}.csv")
+            df = pd.read_csv(f"data/{symbol}.csv")   # dùng pd import ở đầu file
         except Exception:
             return _empty_snapshot()
-
+    
     if df is None or df.empty or len(df) < 30:
         return _empty_snapshot()
-
+    
     df = df.sort_values("date").reset_index(drop=True)
-
+    
+    # ... (giữ nguyên phần tính MA, RSI, MACD như đã có) ...
     # ===== Moving Averages =====
     df["MA20"]  = df["close"].rolling(20).mean()
     df["MA50"]  = df["close"].rolling(50).mean()
