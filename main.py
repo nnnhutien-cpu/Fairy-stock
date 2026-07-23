@@ -11,8 +11,6 @@ from indicators import market_snapshot
 from trend_engine import market_recommendation
 from tab_accumulation import render_accumulation_tab
 from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex, set_rate_limit
-# FIX: indicators.py không có safe_market_snapshot / _empty_snapshot.
-# Dùng thẳng market_snapshot đã import ở trên — bọc try/except ở nơi gọi để an toàn.
 from indicators import calculate_technical_signals
 import trend_engine as te
 from ui_layout import render_sidebar, render_market_tab, render_screener_results, render_screener_signals
@@ -94,7 +92,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. KẾT NỐI SUPABASE (an toàn: thiếu secrets vẫn không làm sập app) ---
+# --- 2. KẾT NỐI SUPABASE ---
 @st.cache_resource
 def init_connection():
     try:
@@ -106,10 +104,8 @@ def init_connection():
 
 supabase = init_connection()
 
-# --- Danh sách mã bị đình chỉ / hạn chế giao dịch ---
 BLACKLIST = {"BCG", "HBC", "HNG", "POM", "HAG", "ITA", "TGG", "TTB"}
 
-# --- Danh sách mã vốn hoá lớn / thanh khoản cao (VN30 + một số mã lớn khác) ---
 PRIORITY_TICKERS = [
     "ACB", "BCM", "BID", "BVH", "CTG", "FPT", "GAS", "GVR", "HDB", "HPG",
     "MBB", "MSN", "MWG", "PLX", "POW", "SAB", "SHB", "SSB", "SSI", "STB",
@@ -119,13 +115,12 @@ PRIORITY_TICKERS = [
     "REE", "GMD", "HAH", "PNJ", "DGW", "FRT", "VTP", "ANV", "VHC", "DBC",
 ]
 
-# --- 3. KHỞI TẠO BIẾN CHO GIAO DIỆN ---
+# --- 3. KHỞI TẠO BIẾN ---
 if 'scan_results' not in st.session_state:
     st.session_state['scan_results'] = []
 
 exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift, vnstock_api_key, fast_mode = render_sidebar()
 
-# --- Đăng ký API Key vnstock (nếu có) ---
 active_api_key = vnstock_api_key.strip()
 if not active_api_key:
     try:
@@ -167,6 +162,7 @@ with tab_market:
 
     intraday_df = get_intraday_vnindex()
     chart_df, df_today = None, None
+    current_index = 0
 
     if intraday_df is not None and not intraday_df.empty:
         col_mapping = {}
@@ -240,7 +236,6 @@ with tab_market:
 
     # ============================================================
     # PHÂN TÍCH XU HƯỚNG & KHUYẾN NGHỊ THỊ TRƯỜNG
-    # (nằm TRONG tab_market — không lơ lửng ngoài tab)
     # ============================================================
     st.markdown("---")
     st.markdown("### 🧠 Phân tích Xu hướng & Khuyến nghị Thị trường")
@@ -291,39 +286,78 @@ with tab_market:
                     min(vol_ratio / 2.0, 1.0),
                     text=f"Tỷ lệ: {vol_ratio}x trung bình"
                 )
-                # HÀNG: CHỈ BÁO KT 
-# ============================================================
-c3, c4 = st.columns(2)
 
-with c3:
-    with st.container(border=True):
-        st.markdown("#### 📊 Chỉ báo kỹ thuật")
-        st.markdown(f"**RSI(14):** `{snap['rsi']}` — {snap['rsi_text']}")
-        st.markdown(f"**MACD:** `{snap['macd']}` &nbsp;|&nbsp; "
-                    f"**Signal:** `{snap['macd_signal']}`")
-        st.markdown(f"**Trạng thái MACD:** :{snap['macd_color']}[{snap['macd_cross']}]")
- with c4:
-            if reco is not None:
-                with st.container(border=True):
-                    st.markdown("#### 💡 Khuyến nghị hành động")
-                    st.markdown(f"### :{reco.get('color', 'gray')}[{reco.get('action', '—')}]")
+        # --- Hàng 2: Chỉ báo KT | Định giá P/E ---
+        c3, c4 = st.columns(2)
 
-                    s1, s2 = st.columns(2)
-                    s1.metric("📈 Nên nắm giữ CP", f"{reco.get('stock', 0)}%")
-                    s2.metric("💵 Nên giữ tiền mặt", f"{reco.get('cash', 0)}%")
+        with c3:
+            with st.container(border=True):
+                st.markdown("#### 📊 Chỉ báo kỹ thuật")
+                st.markdown(f"**RSI(14):** `{snap.get('rsi', '—')}` — {snap.get('rsi_text', '')}")
+                st.markdown(
+                    f"**MACD:** `{snap.get('macd', '—')}` &nbsp;|&nbsp; "
+                    f"**Signal:** `{snap.get('macd_signal', '—')}`"
+                )
+                macd_color = snap.get('macd_color', 'gray')
+                macd_cross = snap.get('macd_cross', '—')
+                st.markdown(f"**Trạng thái MACD:** :{macd_color}[{macd_cross}]")
 
-                    stock_pct = reco.get("stock", 0) or 0
-                    cash_pct  = reco.get("cash", 0) or 0
-                    st.progress(stock_pct / 100,
-                                text=f"Tỷ trọng CP {stock_pct}% / Tiền {cash_pct}%")
+        with c4:
+            with st.container(border=True):
+                st.markdown("#### 💰 Định giá P/E (20 năm)")
 
-                    with st.expander("📋 Lý do khuyến nghị", expanded=True):
-                        for r in reco.get("reasons", []):
-                            st.markdown(f"- {r}")
+                pe_now   = valuation.get_current_pe(current_index)
+                pe_hist  = valuation.get_pe_history(years=20)
+                pe_stats = valuation.pe_stats(pe_hist, pe_now)
 
-                    st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
-        # main.py — trong tab Thị Trường
-    
+                col_pe1, col_pe2 = st.columns([1, 1])
+                with col_pe1:
+                    st.metric(
+                        "P/E hiện tại",
+                        f"{pe_stats['pe_now']:.1f}x" if pe_stats['pe_now'] else "—",
+                        delta=f"{pe_stats['pct_vs_avg']:+.1f}% vs TB" if pe_stats.get('pct_vs_avg') else None,
+                        delta_color="inverse"
+                    )
+                with col_pe2:
+                    st.metric(
+                        "Trung bình 20 năm",
+                        f"{pe_stats['mean']:.1f}x" if pe_stats.get('mean') else "—",
+                        delta=f"{pe_stats['zscore']:+.2f}σ" if pe_stats.get('zscore') else None
+                    )
+
+                pct = pe_stats.get('percentile')
+                if pct is not None:
+                    color = "🟢" if pct < 25 else "🟡" if pct < 75 else "🔴"
+                    label = "RẺ" if pct < 25 else "HỢP LÝ" if pct < 75 else "ĐẮT"
+                    st.progress(pct / 100, text=f"{color} Percentile: {pct:.0f}% — {label}")
+
+                if pe_stats.get('comment'):
+                    st.info(pe_stats['comment'])
+
+                if pe_hist is not None and not pe_hist.empty:
+                    with st.expander("📈 Xem P/E 20 năm", expanded=False):
+                        st.line_chart(pe_hist.set_index("date")["pe"], height=200)
+
+        # --- Hàng 3: Khuyến nghị hành động ---
+        if reco is not None:
+            with st.container(border=True):
+                st.markdown("#### 💡 Khuyến nghị hành động")
+                st.markdown(f"### :{reco.get('color', 'gray')}[{reco.get('action', '—')}]")
+
+                s1, s2 = st.columns(2)
+                s1.metric("📈 Nên nắm giữ CP", f"{reco.get('stock', 0)}%")
+                s2.metric("💵 Nên giữ tiền mặt", f"{reco.get('cash', 0)}%")
+
+                stock_pct = reco.get("stock", 0) or 0
+                cash_pct  = reco.get("cash", 0) or 0
+                st.progress(stock_pct / 100, text=f"Tỷ trọng CP {stock_pct}% / Tiền {cash_pct}%")
+
+                with st.expander("📋 Lý do khuyến nghị", expanded=True):
+                    for r in reco.get("reasons", []):
+                        st.markdown(f"- {r}")
+
+                st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
+
 # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU
 # ==========================================
