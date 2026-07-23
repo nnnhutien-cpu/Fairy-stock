@@ -221,3 +221,56 @@ def get_latest_snapshot(df_engine: pd.DataFrame) -> dict:
         "vung_phan_phoi": bool(last['vung_phan_phoi']),
         "v_ratio": round(last['v_ratio'], 2) if pd.notna(last.get('v_ratio')) else None,
     }
+    # trend_engine.py  →  thêm hàm này vào cuối file
+
+def market_recommendation(snap: dict) -> dict:
+    """Sinh khuyến nghị CP/Tiền từ snapshot thị trường."""
+    score, reasons = 0, []
+
+    # Trend
+    t = snap["trend_text"]
+    if "tăng mạnh" in t:
+        score += 2; reasons.append("✅ Xu hướng tăng mạnh — nên duy trì/vào thêm")
+    elif "chậm lại" in t:
+        score += 1; reasons.append("↗️ Tăng chậm lại — giữ, không mua đuổi")
+    elif "gãy MA20" in t:
+        score -= 1; reasons.append("⚠️ Vừa gãy MA20 — cân nhắc giảm tỷ trọng")
+    else:
+        score -= 2; reasons.append("📉 Xu hướng giảm — nên giảm tỷ trọng")
+
+    # RSI
+    rsi = snap["rsi"]
+    if rsi >= 70:
+        score -= 1; reasons.append(f"🔴 RSI={rsi} quá mua — chốt lời một phần")
+    elif rsi <= 30:
+        score += 1; reasons.append(f"🟢 RSI={rsi} quá bán — cơ hội tích lũy dần")
+    else:
+        reasons.append(f"🟡 RSI={rsi} trung tính — quan sát thêm")
+
+    # MACD
+    if snap["macd_cross"] == "Vàng":
+        score += 1; reasons.append("✅ MACD cắt lên — tín hiệu tích cực")
+    else:
+        score -= 1; reasons.append("⚠️ MACD cắt xuống — tín hiệu tiêu cực")
+
+    # Volume
+    vr = snap["vol_ratio"]
+    if vr >= 1.5:
+        reasons.append(f"🔥 Volume đột biến {vr}x — dòng tiền hỗ trợ")
+    elif vr < 0.7:
+        score -= 1; reasons.append(f"💤 Volume yếu {vr}x — thiếu dòng tiền")
+
+    # Phân bổ
+    if score >= 3:
+        stock, cash, action, color = 70, 30, "🚀 MUA / GIỮ MẠNH", "success"
+    elif score >= 1:
+        stock, cash, action, color = 55, 45, "➖ GIỮ - CÂN BẰNG", "info"
+    elif score >= -1:
+        stock, cash, action, color = 40, 60, "⚠️ GIẢM NHẸ TỶ TRỌNG", "warning"
+    else:
+        stock, cash, action, color = 25, 75, "🛡️ PHÒNG THỦ - GIỮ TIỀN MẶT", "danger"
+
+    return {
+        "score": score, "action": action, "stock": stock,
+        "cash": cash, "color": color, "reasons": reasons,
+    }
