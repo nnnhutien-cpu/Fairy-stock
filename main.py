@@ -402,25 +402,61 @@ with tab_market:
             r4.markdown(f"{g.get('value_5d_ago', 0):,.0f} tỷ")
             r5.markdown(f":{ratio_color}[{ratio:.2f}%]")
 
-    # Trong phần hiển thị Bảng 2 Breadth, thêm row phân tích sàn:
-    st.markdown("##### 📊 Phân tích theo sàn")
+    # Trong tab Thị Trường, sau phần Index Groups:
 
-    ex_data = breadth_full.get("by_exchange", {})
-    cols_ex = st.columns(3)
-    for i, ex in enumerate(["HOSE", "HNX", "UPCOM"]):
-        with cols_ex[i]:
-            if ex in ex_data:
-                d = ex_data[ex]
-                emoji = "🟢" if d["ad_ratio"] > 1.5 and d["avg_chg"] > 0 else \
-                        "🔴" if d["ad_ratio"] < 0.7 or d["avg_chg"] < -0.5 else "🟡"
-                st.metric(
-                    f"{emoji} {ex}",
-                    f"{d['advance']}▲ / {d['decline']}▼",
-                    delta=f"{d['avg_chg']:+.2f}%",
-                    delta_color="normal"
-                )
-            else:
-                st.metric(ex, "—", "—")
+# ========================================================
+# BẢNG BREADTH (real-time)
+# ========================================================
+breadth_table = get_breadth_table_real_time()
+
+with st.container(border=True):
+    # Header
+    st.markdown("#### 📊 Breadth (Tăng/Giảm & Chỉ báo xu hướng)")
+    st.caption(f"🔄 Cập nhật lúc: **{breadth_table['last_update']}** "
+               f"| Tổng: **{breadth_table['total']} mã** "
+               f"| Verdict: **{breadth_table['verdict']}**")
+
+    rows = breadth_table['rows']
+
+    # Tạo bảng bằng Streamlit columns
+    # Header
+    h1, h2, h3, h4, h5, h6 = st.columns([1.5, 0.8, 0.8, 1.2, 1.0, 1.2])
+    h1.markdown("**📊 Chỉ báo**")
+    h2.markdown("**🟢 Tăng**")
+    h3.markdown("**🔴 Giảm**")
+    h4.markdown("**📈 Tỷ lệ**")
+    h5.markdown("**Đánh giá**")
+    h6.markdown("**Xu hướng**")
+
+    st.divider()
+
+    # Data rows
+    for row in rows:
+        c1, c2, c3, c4, c5, c6 = st.columns([1.5, 0.8, 0.8, 1.2, 1.0, 1.2])
+        c1.markdown(f"**{row['label']}**")
+        c2.markdown(f"`{row['value1']}`")
+        c3.markdown(f"`{row['value2']}`")
+        c4.markdown(f"`{row['ratio']}`")
+
+        # Đánh giá = trend text
+        c5.markdown(row['trend'].split(' ')[0])   # emoji
+        c6.markdown(row['trend'])
+
+    # Footer
+    st.divider()
+    adv = rows[0]["value1"] if rows else 0
+    dec = rows[0]["value2"] if rows else 0
+
+    f1, f2, f3 = st.columns(3)
+    f1.metric("Tổng tăng/giảm", f"{adv}▲ / {dec}▼")
+    f2.metric("A/D Ratio", f"{breadth_table['ad_ratio']}",
+              delta=f"{breadth_table['ad_change']:+.2f}%",
+              delta_color="inverse")
+    f3.metric("Verdict", breadth_table['verdict'])
+
+    st.caption("⏱ Refresh mỗi 3 phút | "
+               "🔴 Rất yếu < 30% | 🟠 Yếu 30-50% | "
+               "🟡 Tốt 50-70% | 🟢 Mạnh > 70%")
 # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU
 # ==========================================
