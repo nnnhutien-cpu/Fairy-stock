@@ -393,6 +393,25 @@ with tab_market:
 
         with c4:
             with st.container(border=True):
+                st.markdown("#### 💡 Khuyến nghị hành động")
+                if reco is not None:
+                    st.markdown(f"### :{_safe_color(reco.get('color', 'gray'))}[{reco['action']}]")
+                    s1, s2 = st.columns(2)
+                    s1.metric("📈 Nên nắm giữ CP", f"{reco['stock']}%")
+                    s2.metric("💵 Nên giữ tiền mặt", f"{reco['cash']}%")
+                    st.progress(reco["stock"] / 100,
+                                text=f"Tỷ trọng CP {reco['stock']}% / Tiền {reco['cash']}%")
+                    with st.expander("📋 Lý do khuyến nghị", expanded=True):
+                        for r in reco["reasons"]:
+                            st.markdown(f"- {r}")
+                    st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
+                else:
+                    st.info("Chưa tính được khuyến nghị hành động (xem cảnh báo phía trên).")
+
+        # --- Hàng 3: Định giá P/E (chuyển xuống riêng 1 hàng, không còn chung với c4) ---
+        c5, = st.columns(1)
+        with c5:
+            with st.container(border=True):
                 st.markdown("#### 💰 Định giá P/E (20 năm)")
 
                 pe_now   = valuation.get_current_pe(current_index)
@@ -428,27 +447,9 @@ with tab_market:
                         st.line_chart(pe_hist.set_index("date")["pe"], height=200)
 
         # ============================================================
-        # 💡 KHUYẾN NGHỊ HÀNH ĐỘNG (tổng hợp tất cả)
+        # 💡 (đã gộp Khuyến nghị Hành động vào cột c4 phía trên — không còn
+        # section riêng toàn chiều ngang bên dưới nữa)
         # ============================================================
-        if reco is not None:
-            st.markdown("---")
-            st.markdown("### 💡 Khuyến nghị Hành động (tổng hợp tất cả)")
-            with st.container(border=True):
-                st.markdown(f"### :{_safe_color(reco.get('color', 'gray'))}[{reco.get('action', '—')}]")
-
-                s1, s2 = st.columns(2)
-                s1.metric("📈 Nên nắm giữ CP", f"{reco.get('stock', 0)}%")
-                s2.metric("💵 Nên giữ tiền mặt", f"{reco.get('cash', 0)}%")
-
-                stock_pct = reco.get("stock", 0) or 0
-                cash_pct  = reco.get("cash", 0) or 0
-                st.progress(stock_pct / 100, text=f"Tỷ trọng CP {stock_pct}% / Tiền {cash_pct}%")
-
-                with st.expander("📋 Lý do khuyến nghị", expanded=True):
-                    for r in reco.get("reasons", []):
-                        st.markdown(f"- {r}")
-
-                st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
 
     # ============================================================
     # 🆕 SỨC KHỎE THỊ TRƯỜNG (Breadth)
