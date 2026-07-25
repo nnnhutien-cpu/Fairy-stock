@@ -19,16 +19,8 @@ import valuation
 import market_breadth as mb
 from market_breadth import get_market_breadth, get_index_groups, render_breadth_panel
 
-# get_breadth_table_real_time la ham "bang breadth real-time" duoc them gan day.
-# Lay bang getattr de app khong bi crash neu ham nay chua ton tai trong market_breadth.py
 get_breadth_table_real_time = getattr(mb, "get_breadth_table_real_time", None)
 
-# ==========================================================
-# Streamlit chi hieu mau: red, green, blue, orange, violet, gray/grey, rainbow
-# trend_engine.py dang tra ve ten mau kieu Bootstrap ("danger", "success", "warning", "info"...)
-# -> :danger[...] khong hop le nen Streamlit in thang chu ":danger" ra man hinh.
-# Ham nay anh xa ve ten mau hop le de khong con bi loi hien thi.
-# ==========================================================
 _SEMANTIC_COLOR_MAP = {
     "danger": "red", "error": "red", "bad": "red",
     "success": "green", "good": "green", "positive": "green",
@@ -44,11 +36,7 @@ def _safe_color(color):
     c = _SEMANTIC_COLOR_MAP.get(c, c)
     return c if c in _VALID_ST_COLORS else "gray"
 
-# ==========================================================
-# ux_components.py da bi xoa khoi repo -> dinh nghia lai truc tiep o day
-# de main.py khong con phu thuoc vao file da mat (tranh loi
-# ModuleNotFoundError: No module named 'ux_components').
-# ==========================================================
+
 def setup_cache_clear_button():
     if st.sidebar.button("🧹 XÓA BỘ NHỚ CACHE", use_container_width=True):
         st.cache_data.clear()
@@ -61,7 +49,6 @@ def _convert_df_to_csv(df):
 
 
 def render_search_and_export(results_df):
-    # 1. Bảo vệ lỗi: rỗng hoặc không phải DataFrame
     if results_df is None:
         return results_df
     if not isinstance(results_df, pd.DataFrame):
@@ -69,7 +56,6 @@ def render_search_and_export(results_df):
     if results_df.empty:
         return results_df
 
-    # 2. UI thanh tìm kiếm + nút tải CSV
     col1, col2 = st.columns([3, 1])
     with col1:
         search_query = st.text_input("🔍 Nhập mã cổ phiếu cần tìm (VD: SSI, HPG):", "").upper().strip()
@@ -83,7 +69,6 @@ def render_search_and_export(results_df):
             use_container_width=True
         )
 
-    # 3. Lọc theo mã
     if search_query and 'Mã CP' in results_df.columns:
         results_df = results_df[
             results_df['Mã CP'].astype(str).str.contains(search_query, case=False, na=False)
@@ -91,7 +76,6 @@ def render_search_and_export(results_df):
     return results_df
 
 
-# CSS cho bảng breadth
 st.markdown("""
 <style>
 .breadth-table {font-size: 14px;}
@@ -100,10 +84,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
-# --- 1b. GIAO DIỆN: TÍM ĐẬM SANG TRỌNG + FONT + HÒA HEADER ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');
@@ -174,7 +156,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. KẾT NỐI SUPABASE ---
 @st.cache_resource
 def init_connection():
     try:
@@ -197,7 +178,6 @@ PRIORITY_TICKERS = [
     "REE", "GMD", "HAH", "PNJ", "DGW", "FRT", "VTP", "ANV", "VHC", "DBC",
 ]
 
-# --- 3. KHỞI TẠO BIẾN ---
 if 'scan_results' not in st.session_state:
     st.session_state['scan_results'] = []
 
@@ -223,7 +203,6 @@ setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 
-# --- 4. TẠO 8 TAB ---
 tab_market, tab_screener, tab_results, tab_signals, tab_simulation, tab_backtest, tab_reports, tab_accum = st.tabs([
     "🌟 Thị Trường", "🔍 Bộ Lọc", "📊 Kết Quả Quét", "📡 Tín Hiệu & Cảnh Báo",
     "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo", "🧭 Tích Lũy"
@@ -335,7 +314,7 @@ with tab_market:
             st.warning(f"⚠️ Không tính được khuyến nghị: {e}")
             reco = None
 
-        # --- 4 cột ---
+        # --- 4 cột: c1=Xu hướng giá | c2=Chỉ báo kỹ thuật | c3=Dòng tiền | c4=Khuyến nghị ---
         c1, c2, c3, c4 = st.columns(4)
 
         with c1:
@@ -343,14 +322,12 @@ with tab_market:
                 st.markdown("#### 📈 Xu hướng giá")
                 st.markdown(f"### {snap.get('trend_text', '—')}")
                 st.caption(snap.get("ma20_text", ""))
-
                 m1, m2, m3 = st.columns(3)
                 m1.metric("MA20",  f"{snap['ma20']:.1f}"  if snap.get('ma20')  else "—")
                 m2.metric("MA50",  f"{snap['ma50']:.1f}"  if snap.get('ma50')  else "—")
                 m3.metric("MA200", f"{snap['ma200']:.1f}" if snap.get('ma200') else "—")
-
                 st.markdown(
-                    f"**Hỗ trợ:** `{snap.get('support', 0):.1f}` &nbsp;•&nbsp; "
+                    f"**Hỗ trợ gần:** `{snap.get('support', 0):.1f}` &nbsp;•&nbsp; "
                     f"**Kháng cự:** `{snap.get('resistance', 0):.1f}`"
                 )
 
@@ -365,9 +342,7 @@ with tab_market:
                 macd_color = _safe_color(snap.get('macd_color', 'gray'))
                 macd_cross = snap.get('macd_cross', '—')
                 st.markdown(f"**Trạng thái MACD:** :{macd_color}[{macd_cross}]")
-
                 st.divider()
-
                 scan_results = st.session_state.get('scan_results', [])
                 breadth = get_market_breadth(scan_results)
                 render_breadth_panel(breadth)
@@ -376,11 +351,9 @@ with tab_market:
             with st.container(border=True):
                 st.markdown("#### 🔊 Dòng tiền (Volume)")
                 st.markdown(f"### {snap.get('vol_text', '—')}")
-
                 v1, v2 = st.columns(2)
                 v1.metric("Vol hôm nay", f"{snap.get('vol_today', 0):,.0f}")
                 v2.metric("TB 20 phiên", f"{snap.get('vol_avg', 0):,.0f}")
-
                 vol_ratio = snap.get("vol_ratio", 0) or 0
                 st.progress(
                     min(vol_ratio / 2.0, 1.0),
@@ -389,21 +362,20 @@ with tab_market:
 
         with c4:
             with st.container(border=True):
-                st.markdown("#### 💡 Khuyến nghị")
+                st.markdown("#### 💡 Khuyến nghị hành động")
                 if reco is not None:
                     st.markdown(f"### :{_safe_color(reco.get('color', 'gray'))}[{reco['action']}]")
                     s1, s2 = st.columns(2)
-                    s1.metric("📈 Giữ CP", f"{reco['stock']}%")
-                    s2.metric("💵 Tiền mặt", f"{reco['cash']}%")
+                    s1.metric("📈 Nên nắm giữ CP", f"{reco['stock']}%")
+                    s2.metric("💵 Nên giữ tiền mặt", f"{reco['cash']}%")
                     st.progress(reco["stock"] / 100,
-                                text=f"CP {reco['stock']}% / Tiền {reco['cash']}%")
-                    with st.expander("📋 Lý do", expanded=True):
+                                text=f"Tỷ trọng CP {reco['stock']}% / Tiền {reco['cash']}%")
+                    with st.expander("📋 Lý do khuyến nghị", expanded=True):
                         for r in reco["reasons"]:
                             st.markdown(f"- {r}")
-                    st.caption("⚠️ Phân tích kỹ thuật, không phải tư vấn đầu tư.")
+                    st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
                 else:
-                    st.info("Chưa tính được khuyến nghị.")
-    # ==========================================
+                    st.info("Chưa tính được khuyến nghị hành động (xem cảnh báo phía trên).")
 
         # --- Định giá P/E (riêng 1 hàng full-width bên dưới) ---
         c5, = st.columns(1)
@@ -443,17 +415,15 @@ with tab_market:
                     with st.expander("📈 Xem P/E 20 năm", expanded=False):
                         st.line_chart(pe_hist.set_index("date")["pe"], height=200)
 
-
     # ============================================================
-    # 🆕 SỨC KHỎE THỊ TRƯỜNG (Breadth)
+    # SỨC KHỎE THỊ TRƯỜNG (Breadth)
     # ============================================================
     st.markdown("---")
     st.markdown("### 🏥 Sức khỏe Thị trường (Breadth)")
 
-    groups  = get_index_groups()
+    groups = get_index_groups()
     breadth_full = get_market_breadth()
 
-    # ===== BẢNG 1: INDEX GROUPS =====
     with st.container(border=True):
         st.markdown("#### 📊 Index Groups (cập nhật mỗi 3 phút)")
 
@@ -477,10 +447,6 @@ with tab_market:
             r4.markdown(f"{g.get('value_5d_ago', 0):,.0f} tỷ")
             r5.markdown(f":{ratio_color}[{ratio:.2f}%]")
 
-    # ========================================================
-    # BẢNG BREADTH (real-time) — ĐÃ ĐƯA VÀO TRONG tab_market
-    # (trước đây đoạn này bị viết thụt lề sai, nằm NGOÀI mọi tab)
-    # ========================================================
     if get_breadth_table_real_time is None:
         st.info(
             "ℹ️ Bảng Breadth real-time chưa hiển thị vì hàm `get_breadth_table_real_time()` "
