@@ -314,10 +314,10 @@ with tab_market:
             st.warning(f"⚠️ Không tính được khuyến nghị: {e}")
             reco = None
 
-        # --- 4 cột: c1=Xu hướng giá | c2=Chỉ báo kỹ thuật | c3=Dòng tiền | c4=Khuyến nghị ---
-        c1, c2, c3, c4 = st.columns(4)
+        # --- Hàng 1: Xu hướng giá (trái) | Dòng tiền Volume (phải) ---
+        col_left, col_right = st.columns(2)
 
-        with c1:
+        with col_left:
             with st.container(border=True):
                 st.markdown("#### 📈 Xu hướng giá")
                 st.markdown(f"### {snap.get('trend_text', '—')}")
@@ -331,7 +331,23 @@ with tab_market:
                     f"**Kháng cự:** `{snap.get('resistance', 0):.1f}`"
                 )
 
-        with c2:
+        with col_right:
+            with st.container(border=True):
+                st.markdown("#### 🔊 Dòng tiền (Volume)")
+                st.markdown(f"### {snap.get('vol_text', '—')}")
+                v1, v2 = st.columns(2)
+                v1.metric("Vol hôm nay", f"{snap.get('vol_today', 0):,.0f}")
+                v2.metric("TB 20 phiên", f"{snap.get('vol_avg', 0):,.0f}")
+                vol_ratio = snap.get("vol_ratio", 0) or 0
+                st.progress(
+                    min(vol_ratio / 2.0, 1.0),
+                    text=f"Tỷ lệ: {vol_ratio}x trung bình"
+                )
+
+        # --- Hàng 2: Chỉ báo kỹ thuật (trái) | Khuyến nghị hành động (phải) ---
+        col_left2, col_right2 = st.columns(2)
+
+        with col_left2:
             with st.container(border=True):
                 st.markdown("#### 📊 Chỉ báo kỹ thuật")
                 st.markdown(f"**RSI(14):** `{snap.get('rsi', '—')}` — {snap.get('rsi_text', '')}")
@@ -347,20 +363,7 @@ with tab_market:
                 breadth = get_market_breadth(scan_results)
                 render_breadth_panel(breadth)
 
-        with c3:
-            with st.container(border=True):
-                st.markdown("#### 🔊 Dòng tiền (Volume)")
-                st.markdown(f"### {snap.get('vol_text', '—')}")
-                v1, v2 = st.columns(2)
-                v1.metric("Vol hôm nay", f"{snap.get('vol_today', 0):,.0f}")
-                v2.metric("TB 20 phiên", f"{snap.get('vol_avg', 0):,.0f}")
-                vol_ratio = snap.get("vol_ratio", 0) or 0
-                st.progress(
-                    min(vol_ratio / 2.0, 1.0),
-                    text=f"Tỷ lệ: {vol_ratio}x trung bình"
-                )
-
-        with c4:
+        with col_right2:
             with st.container(border=True):
                 st.markdown("#### 💡 Khuyến nghị hành động")
                 if reco is not None:
