@@ -312,6 +312,8 @@ with tab_market:
             reco = market_recommendation(snap)
         except Exception as e:
             st.warning(f"⚠️ Không tính được khuyến nghị: {e}")
+            import traceback
+            st.code(traceback.format_exc())
             reco = None
 
         # --- Hàng 1: Xu hướng giá (trái) | Dòng tiền Volume (phải) ---
@@ -375,7 +377,12 @@ with tab_market:
         with col_right2:
             with st.container(border=True):
                 st.markdown("#### 💡 Khuyến nghị hành động")
-                if reco is not None:
+                # DEBUG: hiển thị raw reco để tìm lỗi
+                if reco is None:
+                    st.error("❌ reco = None — market_recommendation() trả về None hoặc bị exception")
+                else:
+                    st.caption(f"🔍 DEBUG reco keys: {list(reco.keys())}")
+                    st.caption(f"color={reco.get('color')} | action={reco.get('action')} | stock={reco.get('stock')} | cash={reco.get('cash')}")
                     action_color = _safe_color(reco.get('color', 'gray'))
                     action_label = reco.get('action', '—')
                     st.markdown(f"### :{action_color}[{action_label}]")
@@ -394,10 +401,6 @@ with tab_market:
                             for r in reasons:
                                 st.markdown(f"- {r}")
                     st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
-                else:
-                    # reco None -> vẫn hiển thị khung, thông báo lý do
-                    st.warning("⚠️ Chưa tính được khuyến nghị.")
-                    st.caption("Kiểm tra hàm `market_recommendation()` trong `trend_engine.py`.")
 
         # --- Định giá P/E (riêng 1 hàng full-width bên dưới) ---
         c5, = st.columns(1)
