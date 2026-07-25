@@ -14,78 +14,15 @@ from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_i
 from indicators import calculate_technical_signals
 import trend_engine as te
 from ui_layout import render_sidebar, render_market_tab, render_screener_results, render_screener_signals
+from ux_components import setup_cache_clear_button, render_search_and_export
 import backtester as bt
 import valuation
-import market_breadth as mb
-from market_breadth import get_market_breadth, get_index_groups, render_breadth_panel
+from market_breadth import get_market_breadth, render_breadth_panel
 
-get_breadth_table_real_time = getattr(mb, "get_breadth_table_real_time", None)
-
-_SEMANTIC_COLOR_MAP = {
-    "danger": "red", "error": "red", "bad": "red",
-    "success": "green", "good": "green", "positive": "green",
-    "warning": "orange", "warn": "orange",
-    "info": "blue", "primary": "blue",
-    "secondary": "gray", "neutral": "gray", "muted": "gray",
-}
-_VALID_ST_COLORS = {"red", "green", "blue", "orange", "violet", "gray", "grey", "rainbow"}
-
-
-def _safe_color(color):
-    c = str(color or "gray").strip().lower()
-    c = _SEMANTIC_COLOR_MAP.get(c, c)
-    return c if c in _VALID_ST_COLORS else "gray"
-
-
-def setup_cache_clear_button():
-    if st.sidebar.button("🧹 XÓA BỘ NHỚ CACHE", use_container_width=True):
-        st.cache_data.clear()
-        st.sidebar.success("Đã làm sạch toàn bộ hệ thống!")
-
-
-@st.cache_data(show_spinner=False)
-def _convert_df_to_csv(df):
-    return df.to_csv(index=False).encode('utf-8-sig')
-
-
-def render_search_and_export(results_df):
-    if results_df is None:
-        return results_df
-    if not isinstance(results_df, pd.DataFrame):
-        results_df = pd.DataFrame(results_df)
-    if results_df.empty:
-        return results_df
-
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        search_query = st.text_input("🔍 Nhập mã cổ phiếu cần tìm (VD: SSI, HPG):", "").upper().strip()
-    with col2:
-        csv_data = _convert_df_to_csv(results_df)
-        st.download_button(
-            label="📥 Tải file (CSV)",
-            data=csv_data,
-            file_name="Danh_Sach_Sieu_Co_Phieu.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-
-    if search_query and 'Mã CP' in results_df.columns:
-        results_df = results_df[
-            results_df['Mã CP'].astype(str).str.contains(search_query, case=False, na=False)
-        ]
-    return results_df
-
-
-st.markdown("""
-<style>
-.breadth-table {font-size: 14px;}
-.breadth-up   {color: #00C853; font-weight: bold;}
-.breadth-down {color: #D32F2F; font-weight: bold;}
-</style>
-""", unsafe_allow_html=True)
-
+# --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
+# --- 1b. GIAO DIỆN: TÍM ĐẬM SANG TRỌNG + FONT + HÒA HEADER ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');
@@ -156,6 +93,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- 2. KẾT NỐI SUPABASE ---
 @st.cache_resource
 def init_connection():
     try:
@@ -178,6 +116,7 @@ PRIORITY_TICKERS = [
     "REE", "GMD", "HAH", "PNJ", "DGW", "FRT", "VTP", "ANV", "VHC", "DBC",
 ]
 
+# --- 3. KHỞI TẠO BIẾN ---
 if 'scan_results' not in st.session_state:
     st.session_state['scan_results'] = []
 
@@ -203,6 +142,7 @@ setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 
+# --- 4. TẠO 8 TAB ---
 tab_market, tab_screener, tab_results, tab_signals, tab_simulation, tab_backtest, tab_reports, tab_accum = st.tabs([
     "🌟 Thị Trường", "🔍 Bộ Lọc", "📊 Kết Quả Quét", "📡 Tín Hiệu & Cảnh Báo",
     "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo", "🧭 Tích Lũy"
@@ -312,44 +252,46 @@ with tab_market:
             reco = market_recommendation(snap)
         except Exception as e:
             st.warning(f"⚠️ Không tính được khuyến nghị: {e}")
-            import traceback
-            st.code(traceback.format_exc())
             reco = None
 
-        # --- Hàng 1: Xu hướng giá (trái) | Dòng tiền Volume (phải) ---
-        col_left, col_right = st.columns(2)
+        # --- Hàng 1: Xu hướng giá | Dòng tiền ---
+        c1, c2 = st.columns(2)
 
-        with col_left:
+        with c1:
             with st.container(border=True):
                 st.markdown("#### 📈 Xu hướng giá")
                 st.markdown(f"### {snap.get('trend_text', '—')}")
                 st.caption(snap.get("ma20_text", ""))
+
                 m1, m2, m3 = st.columns(3)
                 m1.metric("MA20",  f"{snap['ma20']:.1f}"  if snap.get('ma20')  else "—")
                 m2.metric("MA50",  f"{snap['ma50']:.1f}"  if snap.get('ma50')  else "—")
                 m3.metric("MA200", f"{snap['ma200']:.1f}" if snap.get('ma200') else "—")
+
                 st.markdown(
                     f"**Hỗ trợ gần:** `{snap.get('support', 0):.1f}` &nbsp;•&nbsp; "
                     f"**Kháng cự:** `{snap.get('resistance', 0):.1f}`"
                 )
 
-        with col_right:
+        with c2:
             with st.container(border=True):
                 st.markdown("#### 🔊 Dòng tiền (Volume)")
                 st.markdown(f"### {snap.get('vol_text', '—')}")
+
                 v1, v2 = st.columns(2)
                 v1.metric("Vol hôm nay", f"{snap.get('vol_today', 0):,.0f}")
                 v2.metric("TB 20 phiên", f"{snap.get('vol_avg', 0):,.0f}")
+
                 vol_ratio = snap.get("vol_ratio", 0) or 0
                 st.progress(
                     min(vol_ratio / 2.0, 1.0),
                     text=f"Tỷ lệ: {vol_ratio}x trung bình"
                 )
 
-        # --- Hàng 2: Chỉ báo kỹ thuật (trái) | Khuyến nghị hành động (phải) ---
-        col_left2, col_right2 = st.columns(2)
+        # --- Hàng 2: Chỉ báo KT | Định giá P/E ---
+        c3, c4 = st.columns(2)
 
-        with col_left2:
+        with c3:
             with st.container(border=True):
                 st.markdown("#### 📊 Chỉ báo kỹ thuật")
                 st.markdown(f"**RSI(14):** `{snap.get('rsi', '—')}` — {snap.get('rsi_text', '')}")
@@ -357,54 +299,17 @@ with tab_market:
                     f"**MACD:** `{snap.get('macd', '—')}` &nbsp;|&nbsp; "
                     f"**Signal:** `{snap.get('macd_signal', '—')}`"
                 )
-                macd_color = _safe_color(snap.get('macd_color', 'gray'))
-                _macd_cross_raw = snap.get('macd_cross', '—')
-                _MACD_LABEL_MAP = {
-                    "Chết": "⬇️ Cắt xuống (Bearish)",
-                    "Vàng": "⬆️ Cắt lên (Bullish)",
-                    "death": "⬇️ Cắt xuống (Bearish)",
-                    "golden": "⬆️ Cắt lên (Bullish)",
-                    "bearish": "⬇️ Bearish",
-                    "bullish": "⬆️ Bullish",
-                }
-                macd_cross = _MACD_LABEL_MAP.get(str(_macd_cross_raw).strip(), _macd_cross_raw)
+                macd_color = snap.get('macd_color', 'gray')
+                macd_cross = snap.get('macd_cross', '—')
                 st.markdown(f"**Trạng thái MACD:** :{macd_color}[{macd_cross}]")
+
                 st.divider()
-                scan_results = st.session_state.get('scan_results', [])
-                breadth = get_market_breadth(scan_results)
+
+                # --- BREADTH THỊ TRƯỜNG ---
+                breadth = get_market_breadth()
                 render_breadth_panel(breadth)
 
-        with col_right2:
-            with st.container(border=True):
-                st.markdown("#### 💡 Khuyến nghị hành động")
-                # DEBUG: hiển thị raw reco để tìm lỗi
-                if reco is None:
-                    st.error("❌ reco = None — market_recommendation() trả về None hoặc bị exception")
-                else:
-                    st.caption(f"🔍 DEBUG reco keys: {list(reco.keys())}")
-                    st.caption(f"color={reco.get('color')} | action={reco.get('action')} | stock={reco.get('stock')} | cash={reco.get('cash')}")
-                    action_color = _safe_color(reco.get('color', 'gray'))
-                    action_label = reco.get('action', '—')
-                    st.markdown(f"### :{action_color}[{action_label}]")
-                    s1, s2 = st.columns(2)
-                    stock_pct = reco.get('stock', 0)
-                    cash_pct  = reco.get('cash', 100)
-                    s1.metric("📈 Nên nắm giữ CP", f"{stock_pct}%")
-                    s2.metric("💵 Nên giữ tiền mặt", f"{cash_pct}%")
-                    st.progress(
-                        min(stock_pct / 100, 1.0),
-                        text=f"Tỷ trọng CP {stock_pct}% / Tiền {cash_pct}%"
-                    )
-                    reasons = reco.get('reasons', [])
-                    if reasons:
-                        with st.expander("📋 Lý do khuyến nghị", expanded=True):
-                            for r in reasons:
-                                st.markdown(f"- {r}")
-                    st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
-
-        # --- Định giá P/E (riêng 1 hàng full-width bên dưới) ---
-        c5, = st.columns(1)
-        with c5:
+        with c4:
             with st.container(border=True):
                 st.markdown("#### 💰 Định giá P/E (20 năm)")
 
@@ -440,98 +345,54 @@ with tab_market:
                     with st.expander("📈 Xem P/E 20 năm", expanded=False):
                         st.line_chart(pe_hist.set_index("date")["pe"], height=200)
 
-    # ============================================================
-    # SỨC KHỎE THỊ TRƯỜNG (Breadth)
-    # ============================================================
-    st.markdown("---")
-    st.markdown("### 🏥 Sức khỏe Thị trường (Breadth)")
-
-    groups = get_index_groups()
-    breadth_full = get_market_breadth()
-
-    with st.container(border=True):
-        st.markdown("#### 📊 Index Groups (cập nhật mỗi 3 phút)")
-
-        h1, h2, h3, h4, h5 = st.columns([2, 1.2, 1.5, 1.5, 1.2])
-        h1.markdown("**Index**")
-        h2.markdown("**% Thay đổi**")
-        h3.markdown("**GTGD hôm nay**")
-        h4.markdown("**GTGD 5 phiên trước**")
-        h5.markdown("**Tỷ lệ GTGD**")
-
-        for g in groups:
-            r1, r2, r3, r4, r5 = st.columns([2, 1.2, 1.5, 1.5, 1.2])
-            chg = g.get("change_pct", 0) or 0
-            chg_color = "green" if chg > 0 else "red" if chg < 0 else "gray"
-            ratio = g.get("value_ratio", 100) or 100
-            ratio_color = "green" if ratio > 100 else "red" if ratio < 80 else "gray"
-
-            r1.markdown(f"**{g.get('name', '—')}**")
-            r2.markdown(f":{chg_color}[{chg:+.2f}%]")
-            r3.markdown(f"{g.get('value_today', 0):,.0f} tỷ")
-            r4.markdown(f"{g.get('value_5d_ago', 0):,.0f} tỷ")
-            r5.markdown(f":{ratio_color}[{ratio:.2f}%]")
-
-    if get_breadth_table_real_time is None:
-        st.info(
-            "ℹ️ Bảng Breadth real-time chưa hiển thị vì hàm `get_breadth_table_real_time()` "
-            "chưa tồn tại trong `market_breadth.py`. Thêm hàm này vào file đó để bật tính năng."
-        )
-    else:
-        try:
-            breadth_table = get_breadth_table_real_time()
-        except Exception as e:
-            breadth_table = None
-            st.warning(f"⚠️ Lỗi khi lấy dữ liệu Breadth real-time: {e}")
-
-        if breadth_table:
+        # --- Hàng 3: Khuyến nghị hành động ---
+        if reco is not None:
             with st.container(border=True):
-                st.markdown("#### 📊 Breadth (Tăng/Giảm & Chỉ báo xu hướng)")
-                st.caption(
-                    f"🔄 Cập nhật lúc: **{breadth_table['last_update']}** "
-                    f"| Tổng: **{breadth_table['total']} mã** "
-                    f"| Verdict: **{breadth_table['verdict']}**"
+                st.markdown("#### 💡 Khuyến nghị hành động")
+
+                # Map màu nội bộ → màu hợp lệ của Streamlit
+                _color_map = {
+                    "danger":  "red",
+                    "warning": "orange",
+                    "success": "green",
+                    "info":    "blue",
+                    "red":     "red",
+                    "green":   "green",
+                    "orange":  "orange",
+                    "blue":    "blue",
+                    "gray":    "gray",
+                    "grey":    "gray",
+                    "violet":  "violet",
+                }
+                raw_color  = reco.get("color", "gray")
+                st_color   = _color_map.get(str(raw_color).lower(), "gray")
+                action_txt = reco.get("action", "—")
+
+                action_emoji = (
+                    "🔴" if st_color == "red"    else
+                    "🟠" if st_color == "orange" else
+                    "🟢" if st_color == "green"  else
+                    "🔵"
+                )
+                st.markdown(f"## {action_emoji} :{st_color}[{action_txt}]")
+
+                stock_pct = reco.get("stock", 0) or 0
+                cash_pct  = reco.get("cash",  0) or 0
+
+                s1, s2 = st.columns(2)
+                s1.metric("📈 Nên nắm giữ CP",   f"{stock_pct}%")
+                s2.metric("💵 Nên giữ tiền mặt", f"{cash_pct}%")
+
+                st.progress(
+                    stock_pct / 100,
+                    text=f"Tỷ trọng CP {stock_pct}% · Tiền mặt {cash_pct}%"
                 )
 
-                rows = breadth_table['rows']
+                with st.expander("📋 Lý do khuyến nghị", expanded=True):
+                    for r in reco.get("reasons", []):
+                        st.markdown(f"- {r}")
 
-                h1, h2, h3, h4, h5, h6 = st.columns([1.5, 0.8, 0.8, 1.2, 1.0, 1.2])
-                h1.markdown("**📊 Chỉ báo**")
-                h2.markdown("**🟢 Tăng**")
-                h3.markdown("**🔴 Giảm**")
-                h4.markdown("**📈 Tỷ lệ**")
-                h5.markdown("**Đánh giá**")
-                h6.markdown("**Xu hướng**")
-
-                st.divider()
-
-                for row in rows:
-                    c1, c2, c3, c4, c5, c6 = st.columns([1.5, 0.8, 0.8, 1.2, 1.0, 1.2])
-                    c1.markdown(f"**{row['label']}**")
-                    c2.markdown(f"`{row['value1']}`")
-                    c3.markdown(f"`{row['value2']}`")
-                    c4.markdown(f"`{row['ratio']}`")
-                    c5.markdown(row['trend'].split(' ')[0])
-                    c6.markdown(row['trend'])
-
-                st.divider()
-                adv = rows[0]["value1"] if rows else 0
-                dec = rows[0]["value2"] if rows else 0
-
-                f1, f2, f3 = st.columns(3)
-                f1.metric("Tổng tăng/giảm", f"{adv}▲ / {dec}▼")
-                f2.metric(
-                    "A/D Ratio", f"{breadth_table['ad_ratio']}",
-                    delta=f"{breadth_table['ad_change']:+.2f}%",
-                    delta_color="inverse"
-                )
-                f3.metric("Verdict", breadth_table['verdict'])
-
-                st.caption(
-                    "⏱ Refresh mỗi 3 phút | "
-                    "🔴 Rất yếu < 30% | 🟠 Yếu 30-50% | "
-                    "🟡 Tốt 50-70% | 🟢 Mạnh > 70%"
-                )
+                st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
 
 # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU
@@ -914,6 +775,10 @@ with tab_backtest:
 # ==========================================
 # TAB 7: BÁO CÁO CTCK
 # ==========================================
+import requests as _req
+import pandas as _pd
+from datetime import datetime as _dt, timedelta as _td
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def _load_reports_json() -> dict:
     import requests as _r
