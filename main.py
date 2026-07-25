@@ -14,10 +14,61 @@ from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_i
 from indicators import calculate_technical_signals
 import trend_engine as te
 from ui_layout import render_sidebar, render_market_tab, render_screener_results, render_screener_signals
-from ux_components import setup_cache_clear_button, render_search_and_export
 import backtester as bt
 import valuation
+import market_breadth as mb
 from market_breadth import get_market_breadth, get_index_groups, render_breadth_panel
+
+# get_breadth_table_real_time la ham "bang breadth real-time" duoc them gan day.
+# Lay bang getattr de app khong bi crash neu ham nay chua ton tai trong market_breadth.py
+get_breadth_table_real_time = getattr(mb, "get_breadth_table_real_time", None)
+
+# ==========================================================
+# ux_components.py da bi xoa khoi repo -> dinh nghia lai truc tiep o day
+# de main.py khong con phu thuoc vao file da mat (tranh loi
+# ModuleNotFoundError: No module named 'ux_components').
+# ==========================================================
+def setup_cache_clear_button():
+    if st.sidebar.button("🧹 XÓA BỘ NHỚ CACHE", use_container_width=True):
+        st.cache_data.clear()
+        st.sidebar.success("Đã làm sạch toàn bộ hệ thống!")
+
+
+@st.cache_data(show_spinner=False)
+def _convert_df_to_csv(df):
+    return df.to_csv(index=False).encode('utf-8-sig')
+
+
+def render_search_and_export(results_df):
+    # 1. Bảo vệ lỗi: rỗng hoặc không phải DataFrame
+    if results_df is None:
+        return results_df
+    if not isinstance(results_df, pd.DataFrame):
+        results_df = pd.DataFrame(results_df)
+    if results_df.empty:
+        return results_df
+
+    # 2. UI thanh tìm kiếm + nút tải CSV
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        search_query = st.text_input("🔍 Nhập mã cổ phiếu cần tìm (VD: SSI, HPG):", "").upper().strip()
+    with col2:
+        csv_data = _convert_df_to_csv(results_df)
+        st.download_button(
+            label="📥 Tải file (CSV)",
+            data=csv_data,
+            file_name="Danh_Sach_Sieu_Co_Phieu.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
+    # 3. Lọc theo mã
+    if search_query and 'Mã CP' in results_df.columns:
+        results_df = results_df[
+            results_df['Mã CP'].astype(str).str.contains(search_query, case=False, na=False)
+        ]
+    return results_df
+
 
 # CSS cho bảng breadth
 st.markdown("""
@@ -314,7 +365,7 @@ with tab_market:
 
                 st.divider()
 
-                # --- BREADTH THỊ TRƯỜNG ---
+                # --- BREADTH THỊ TRƯỜNG (dựa trên kết quả quét gần nhất) ---
                 scan_results = st.session_state.get('scan_results', [])
                 breadth = get_market_breadth(scan_results)
                 render_breadth_panel(breadth)
@@ -411,61 +462,71 @@ with tab_market:
             r4.markdown(f"{g.get('value_5d_ago', 0):,.0f} tỷ")
             r5.markdown(f":{ratio_color}[{ratio:.2f}%]")
 
-    # Trong tab Thị Trường, sau phần Index Groups:
+    # ========================================================
+    # BẢNG BREADTH (real-time) — ĐÃ ĐƯA VÀO TRONG tab_market
+    # (trước đây đoạn này bị viết thụt lề sai, nằm NGOÀI mọi tab)
+    # ========================================================
+    if get_breadth_table_real_time is None:
+        st.info(
+            "ℹ️ Bảng Breadth real-time chưa hiển thị vì hàm `get_breadth_table_real_time()` "
+            "chưa tồn tại trong `market_breadth.py`. Thêm hàm này vào file đó để bật tính năng."
+        )
+    else:
+        try:
+            breadth_table = get_breadth_table_real_time()
+        except Exception as e:
+            breadth_table = None
+            st.warning(f"⚠️ Lỗi khi lấy dữ liệu Breadth real-time: {e}")
 
-# ========================================================
-# BẢNG BREADTH (real-time)
-# ========================================================
-breadth_table = get_breadth_table_real_time()
+        if breadth_table:
+            with st.container(border=True):
+                st.markdown("#### 📊 Breadth (Tăng/Giảm & Chỉ báo xu hướng)")
+                st.caption(
+                    f"🔄 Cập nhật lúc: **{breadth_table['last_update']}** "
+                    f"| Tổng: **{breadth_table['total']} mã** "
+                    f"| Verdict: **{breadth_table['verdict']}**"
+                )
 
-with st.container(border=True):
-    # Header
-    st.markdown("#### 📊 Breadth (Tăng/Giảm & Chỉ báo xu hướng)")
-    st.caption(f"🔄 Cập nhật lúc: **{breadth_table['last_update']}** "
-               f"| Tổng: **{breadth_table['total']} mã** "
-               f"| Verdict: **{breadth_table['verdict']}**")
+                rows = breadth_table['rows']
 
-    rows = breadth_table['rows']
+                h1, h2, h3, h4, h5, h6 = st.columns([1.5, 0.8, 0.8, 1.2, 1.0, 1.2])
+                h1.markdown("**📊 Chỉ báo**")
+                h2.markdown("**🟢 Tăng**")
+                h3.markdown("**🔴 Giảm**")
+                h4.markdown("**📈 Tỷ lệ**")
+                h5.markdown("**Đánh giá**")
+                h6.markdown("**Xu hướng**")
 
-    # Tạo bảng bằng Streamlit columns
-    # Header
-    h1, h2, h3, h4, h5, h6 = st.columns([1.5, 0.8, 0.8, 1.2, 1.0, 1.2])
-    h1.markdown("**📊 Chỉ báo**")
-    h2.markdown("**🟢 Tăng**")
-    h3.markdown("**🔴 Giảm**")
-    h4.markdown("**📈 Tỷ lệ**")
-    h5.markdown("**Đánh giá**")
-    h6.markdown("**Xu hướng**")
+                st.divider()
 
-    st.divider()
+                for row in rows:
+                    c1, c2, c3, c4, c5, c6 = st.columns([1.5, 0.8, 0.8, 1.2, 1.0, 1.2])
+                    c1.markdown(f"**{row['label']}**")
+                    c2.markdown(f"`{row['value1']}`")
+                    c3.markdown(f"`{row['value2']}`")
+                    c4.markdown(f"`{row['ratio']}`")
+                    c5.markdown(row['trend'].split(' ')[0])
+                    c6.markdown(row['trend'])
 
-    # Data rows
-    for row in rows:
-        c1, c2, c3, c4, c5, c6 = st.columns([1.5, 0.8, 0.8, 1.2, 1.0, 1.2])
-        c1.markdown(f"**{row['label']}**")
-        c2.markdown(f"`{row['value1']}`")
-        c3.markdown(f"`{row['value2']}`")
-        c4.markdown(f"`{row['ratio']}`")
+                st.divider()
+                adv = rows[0]["value1"] if rows else 0
+                dec = rows[0]["value2"] if rows else 0
 
-        # Đánh giá = trend text
-        c5.markdown(row['trend'].split(' ')[0])   # emoji
-        c6.markdown(row['trend'])
+                f1, f2, f3 = st.columns(3)
+                f1.metric("Tổng tăng/giảm", f"{adv}▲ / {dec}▼")
+                f2.metric(
+                    "A/D Ratio", f"{breadth_table['ad_ratio']}",
+                    delta=f"{breadth_table['ad_change']:+.2f}%",
+                    delta_color="inverse"
+                )
+                f3.metric("Verdict", breadth_table['verdict'])
 
-    # Footer
-    st.divider()
-    adv = rows[0]["value1"] if rows else 0
-    dec = rows[0]["value2"] if rows else 0
+                st.caption(
+                    "⏱ Refresh mỗi 3 phút | "
+                    "🔴 Rất yếu < 30% | 🟠 Yếu 30-50% | "
+                    "🟡 Tốt 50-70% | 🟢 Mạnh > 70%"
+                )
 
-    f1, f2, f3 = st.columns(3)
-    f1.metric("Tổng tăng/giảm", f"{adv}▲ / {dec}▼")
-    f2.metric("A/D Ratio", f"{breadth_table['ad_ratio']}",
-              delta=f"{breadth_table['ad_change']:+.2f}%",
-              delta_color="inverse")
-    f3.metric("Verdict", breadth_table['verdict'])
-
-    st.caption("⏱ Refresh mỗi 3 phút | "
-               "🔴 Rất yếu < 30% | 🟠 Yếu 30-50% | "
-               "🟡 Tốt 50-70% | 🟢 Mạnh > 70%")
 # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU
 # ==========================================
@@ -847,10 +908,6 @@ with tab_backtest:
 # ==========================================
 # TAB 7: BÁO CÁO CTCK
 # ==========================================
-import requests as _req
-import pandas as _pd
-from datetime import datetime as _dt, timedelta as _td
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def _load_reports_json() -> dict:
     import requests as _r
