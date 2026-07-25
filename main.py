@@ -24,6 +24,27 @@ from market_breadth import get_market_breadth, get_index_groups, render_breadth_
 get_breadth_table_real_time = getattr(mb, "get_breadth_table_real_time", None)
 
 # ==========================================================
+# Streamlit chi hieu mau: red, green, blue, orange, violet, gray/grey, rainbow
+# trend_engine.py dang tra ve ten mau kieu Bootstrap ("danger", "success", "warning", "info"...)
+# -> :danger[...] khong hop le nen Streamlit in thang chu ":danger" ra man hinh.
+# Ham nay anh xa ve ten mau hop le de khong con bi loi hien thi.
+# ==========================================================
+_SEMANTIC_COLOR_MAP = {
+    "danger": "red", "error": "red", "bad": "red",
+    "success": "green", "good": "green", "positive": "green",
+    "warning": "orange", "warn": "orange",
+    "info": "blue", "primary": "blue",
+    "secondary": "gray", "neutral": "gray", "muted": "gray",
+}
+_VALID_ST_COLORS = {"red", "green", "blue", "orange", "violet", "gray", "grey", "rainbow"}
+
+
+def _safe_color(color):
+    c = str(color or "gray").strip().lower()
+    c = _SEMANTIC_COLOR_MAP.get(c, c)
+    return c if c in _VALID_ST_COLORS else "gray"
+
+# ==========================================================
 # ux_components.py da bi xoa khoi repo -> dinh nghia lai truc tiep o day
 # de main.py khong con phu thuoc vao file da mat (tranh loi
 # ModuleNotFoundError: No module named 'ux_components').
@@ -359,7 +380,7 @@ with tab_market:
                     f"**MACD:** `{snap.get('macd', '—')}` &nbsp;|&nbsp; "
                     f"**Signal:** `{snap.get('macd_signal', '—')}`"
                 )
-                macd_color = snap.get('macd_color', 'gray')
+                macd_color = _safe_color(snap.get('macd_color', 'gray'))
                 macd_cross = snap.get('macd_cross', '—')
                 st.markdown(f"**Trạng thái MACD:** :{macd_color}[{macd_cross}]")
 
@@ -413,7 +434,7 @@ with tab_market:
             st.markdown("---")
             st.markdown("### 💡 Khuyến nghị Hành động (tổng hợp tất cả)")
             with st.container(border=True):
-                st.markdown(f"### :{reco.get('color', 'gray')}[{reco.get('action', '—')}]")
+                st.markdown(f"### :{_safe_color(reco.get('color', 'gray'))}[{reco.get('action', '—')}]")
 
                 s1, s2 = st.columns(2)
                 s1.metric("📈 Nên nắm giữ CP", f"{reco.get('stock', 0)}%")
