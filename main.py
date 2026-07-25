@@ -299,7 +299,14 @@ with tab_market:
                     f"**MACD:** `{snap.get('macd', '—')}` &nbsp;|&nbsp; "
                     f"**Signal:** `{snap.get('macd_signal', '—')}`"
                 )
-                macd_color = snap.get('macd_color', 'gray')
+                _macd_color_map = {
+                    "danger": "red", "warning": "orange", "success": "green",
+                    "info": "blue", "red": "red", "green": "green",
+                    "orange": "orange", "blue": "blue", "gray": "gray",
+                }
+                macd_color = _macd_color_map.get(
+                    str(snap.get('macd_color', 'gray')).lower(), "gray"
+                )
                 macd_cross = snap.get('macd_cross', '—')
                 st.markdown(f"**Trạng thái MACD:** :{macd_color}[{macd_cross}]")
 
