@@ -335,7 +335,7 @@ with tab_market:
             st.warning(f"⚠️ Không tính được khuyến nghị: {e}")
             reco = None
 
-        # --- Hàng 1: Xu hướng giá | Dòng tiền ---
+        # --- 2 cột: c1 = Xu hướng giá + Chỉ báo kỹ thuật | c2 = Dòng tiền (Volume) + Khuyến nghị hành động ---
         c1, c2 = st.columns(2)
 
         with c1:
@@ -354,25 +354,6 @@ with tab_market:
                     f"**Kháng cự:** `{snap.get('resistance', 0):.1f}`"
                 )
 
-        with c2:
-            with st.container(border=True):
-                st.markdown("#### 🔊 Dòng tiền (Volume)")
-                st.markdown(f"### {snap.get('vol_text', '—')}")
-
-                v1, v2 = st.columns(2)
-                v1.metric("Vol hôm nay", f"{snap.get('vol_today', 0):,.0f}")
-                v2.metric("TB 20 phiên", f"{snap.get('vol_avg', 0):,.0f}")
-
-                vol_ratio = snap.get("vol_ratio", 0) or 0
-                st.progress(
-                    min(vol_ratio / 2.0, 1.0),
-                    text=f"Tỷ lệ: {vol_ratio}x trung bình"
-                )
-
-        # --- Hàng 2: Chỉ báo KT | Định giá P/E ---
-        c3, c4 = st.columns(2)
-
-        with c3:
             with st.container(border=True):
                 st.markdown("#### 📊 Chỉ báo kỹ thuật")
                 st.markdown(f"**RSI(14):** `{snap.get('rsi', '—')}` — {snap.get('rsi_text', '')}")
@@ -391,7 +372,21 @@ with tab_market:
                 breadth = get_market_breadth(scan_results)
                 render_breadth_panel(breadth)
 
-        with c4:
+        with c2:
+            with st.container(border=True):
+                st.markdown("#### 🔊 Dòng tiền (Volume)")
+                st.markdown(f"### {snap.get('vol_text', '—')}")
+
+                v1, v2 = st.columns(2)
+                v1.metric("Vol hôm nay", f"{snap.get('vol_today', 0):,.0f}")
+                v2.metric("TB 20 phiên", f"{snap.get('vol_avg', 0):,.0f}")
+
+                vol_ratio = snap.get("vol_ratio", 0) or 0
+                st.progress(
+                    min(vol_ratio / 2.0, 1.0),
+                    text=f"Tỷ lệ: {vol_ratio}x trung bình"
+                )
+
             with st.container(border=True):
                 st.markdown("#### 💡 Khuyến nghị hành động")
                 if reco is not None:
@@ -408,7 +403,7 @@ with tab_market:
                 else:
                     st.info("Chưa tính được khuyến nghị hành động (xem cảnh báo phía trên).")
 
-        # --- Hàng 3: Định giá P/E (chuyển xuống riêng 1 hàng, không còn chung với c4) ---
+        # --- Định giá P/E (riêng 1 hàng full-width bên dưới) ---
         c5, = st.columns(1)
         with c5:
             with st.container(border=True):
@@ -447,8 +442,7 @@ with tab_market:
                         st.line_chart(pe_hist.set_index("date")["pe"], height=200)
 
         # ============================================================
-        # 💡 (đã gộp Khuyến nghị Hành động vào cột c4 phía trên — không còn
-        # section riêng toàn chiều ngang bên dưới nữa)
+        # Khuyến nghị Hành động đã nằm trong cột c2 (ngay dưới Dòng tiền/Volume)
         # ============================================================
 
     # ============================================================
