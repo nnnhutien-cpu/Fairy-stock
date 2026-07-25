@@ -402,6 +402,20 @@ with tab_market:
                     st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
                 else:
                     st.info("Chưa tính được khuyến nghị hành động (xem cảnh báo phía trên).")
+        with c4:
+            with st.container(border=True):
+                st.markdown("#### 💡 Khuyến nghị hành động")
+                st.markdown(f"### :{reco['color']}[{reco['action']}]")
+                s1, s2 = st.columns(2)
+                s1.metric("📈 Nên nắm giữ CP", f"{reco['stock']}%")
+                s2.metric("💵 Nên giữ tiền mặt", f"{reco['cash']}%")
+                st.progress(reco["stock"] / 100,
+                    text=f"Tỷ trọng CP {reco['stock']}% / Tiền {reco['cash']}%")
+                with st.expander("📋 Lý do khuyến nghị", expanded=True):
+                    for r in reco["reasons"]:
+                        st.markdown(f"- {r}")
+                st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")    
+    # ==========================================
 
         # --- Định giá P/E (riêng 1 hàng full-width bên dưới) ---
         c5, = st.columns(1)
