@@ -335,8 +335,8 @@ with tab_market:
             st.warning(f"⚠️ Không tính được khuyến nghị: {e}")
             reco = None
 
-        # --- 4 cột: c1 = Xu hướng giá + Chỉ báo kỹ thuật | c2 = Dòng tiền (Volume) | Khuyến nghị hành động ---
-        c1, c2, c3,c4 = st.columns(2)
+        # --- 4 cột ---
+        c1, c2, c3, c4 = st.columns(4)
 
         with c1:
             with st.container(border=True):
@@ -350,10 +350,11 @@ with tab_market:
                 m3.metric("MA200", f"{snap['ma200']:.1f}" if snap.get('ma200') else "—")
 
                 st.markdown(
-                    f"**Hỗ trợ gần:** `{snap.get('support', 0):.1f}` &nbsp;•&nbsp; "
+                    f"**Hỗ trợ:** `{snap.get('support', 0):.1f}` &nbsp;•&nbsp; "
                     f"**Kháng cự:** `{snap.get('resistance', 0):.1f}`"
                 )
 
+        with c2:
             with st.container(border=True):
                 st.markdown("#### 📊 Chỉ báo kỹ thuật")
                 st.markdown(f"**RSI(14):** `{snap.get('rsi', '—')}` — {snap.get('rsi_text', '')}")
@@ -367,12 +368,11 @@ with tab_market:
 
                 st.divider()
 
-                # --- BREADTH THỊ TRƯỜNG (dựa trên kết quả quét gần nhất) ---
                 scan_results = st.session_state.get('scan_results', [])
                 breadth = get_market_breadth(scan_results)
                 render_breadth_panel(breadth)
 
-        with c2:
+        with c3:
             with st.container(border=True):
                 st.markdown("#### 🔊 Dòng tiền (Volume)")
                 st.markdown(f"### {snap.get('vol_text', '—')}")
@@ -387,34 +387,22 @@ with tab_market:
                     text=f"Tỷ lệ: {vol_ratio}x trung bình"
                 )
 
+        with c4:
             with st.container(border=True):
-                st.markdown("#### 💡 Khuyến nghị hành động")
+                st.markdown("#### 💡 Khuyến nghị")
                 if reco is not None:
                     st.markdown(f"### :{_safe_color(reco.get('color', 'gray'))}[{reco['action']}]")
                     s1, s2 = st.columns(2)
-                    s1.metric("📈 Nên nắm giữ CP", f"{reco['stock']}%")
-                    s2.metric("💵 Nên giữ tiền mặt", f"{reco['cash']}%")
+                    s1.metric("📈 Giữ CP", f"{reco['stock']}%")
+                    s2.metric("💵 Tiền mặt", f"{reco['cash']}%")
                     st.progress(reco["stock"] / 100,
-                                text=f"Tỷ trọng CP {reco['stock']}% / Tiền {reco['cash']}%")
-                    with st.expander("📋 Lý do khuyến nghị", expanded=True):
+                                text=f"CP {reco['stock']}% / Tiền {reco['cash']}%")
+                    with st.expander("📋 Lý do", expanded=True):
                         for r in reco["reasons"]:
                             st.markdown(f"- {r}")
-                    st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
+                    st.caption("⚠️ Phân tích kỹ thuật, không phải tư vấn đầu tư.")
                 else:
-                    st.info("Chưa tính được khuyến nghị hành động (xem cảnh báo phía trên).")
-        with c4:
-            with st.container(border=True):
-                st.markdown("#### 💡 Khuyến nghị hành động")
-                st.markdown(f"### :{reco['color']}[{reco['action']}]")
-                s1, s2 = st.columns(2)
-                s1.metric("📈 Nên nắm giữ CP", f"{reco['stock']}%")
-                s2.metric("💵 Nên giữ tiền mặt", f"{reco['cash']}%")
-                st.progress(reco["stock"] / 100,
-                    text=f"Tỷ trọng CP {reco['stock']}% / Tiền {reco['cash']}%")
-                with st.expander("📋 Lý do khuyến nghị", expanded=True):
-                    for r in reco["reasons"]:
-                        st.markdown(f"- {r}")
-                st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")    
+                    st.info("Chưa tính được khuyến nghị.")
     # ==========================================
 
         # --- Định giá P/E (riêng 1 hàng full-width bên dưới) ---
@@ -455,9 +443,6 @@ with tab_market:
                     with st.expander("📈 Xem P/E 20 năm", expanded=False):
                         st.line_chart(pe_hist.set_index("date")["pe"], height=200)
 
-        # ============================================================
-        # Khuyến nghị Hành động đã nằm trong cột c2 (ngay dưới Dòng tiền/Volume)
-        # ============================================================
 
     # ============================================================
     # 🆕 SỨC KHỎE THỊ TRƯỜNG (Breadth)
