@@ -356,7 +356,16 @@ with tab_market:
                     f"**Signal:** `{snap.get('macd_signal', '—')}`"
                 )
                 macd_color = _safe_color(snap.get('macd_color', 'gray'))
-                macd_cross = snap.get('macd_cross', '—')
+                _macd_cross_raw = snap.get('macd_cross', '—')
+                _MACD_LABEL_MAP = {
+                    "Chết": "⬇️ Cắt xuống (Bearish)",
+                    "Vàng": "⬆️ Cắt lên (Bullish)",
+                    "death": "⬇️ Cắt xuống (Bearish)",
+                    "golden": "⬆️ Cắt lên (Bullish)",
+                    "bearish": "⬇️ Bearish",
+                    "bullish": "⬆️ Bullish",
+                }
+                macd_cross = _MACD_LABEL_MAP.get(str(_macd_cross_raw).strip(), _macd_cross_raw)
                 st.markdown(f"**Trạng thái MACD:** :{macd_color}[{macd_cross}]")
                 st.divider()
                 scan_results = st.session_state.get('scan_results', [])
@@ -367,18 +376,28 @@ with tab_market:
             with st.container(border=True):
                 st.markdown("#### 💡 Khuyến nghị hành động")
                 if reco is not None:
-                    st.markdown(f"### :{_safe_color(reco.get('color', 'gray'))}[{reco['action']}]")
+                    action_color = _safe_color(reco.get('color', 'gray'))
+                    action_label = reco.get('action', '—')
+                    st.markdown(f"### :{action_color}[{action_label}]")
                     s1, s2 = st.columns(2)
-                    s1.metric("📈 Nên nắm giữ CP", f"{reco['stock']}%")
-                    s2.metric("💵 Nên giữ tiền mặt", f"{reco['cash']}%")
-                    st.progress(reco["stock"] / 100,
-                                text=f"Tỷ trọng CP {reco['stock']}% / Tiền {reco['cash']}%")
-                    with st.expander("📋 Lý do khuyến nghị", expanded=True):
-                        for r in reco["reasons"]:
-                            st.markdown(f"- {r}")
+                    stock_pct = reco.get('stock', 0)
+                    cash_pct  = reco.get('cash', 100)
+                    s1.metric("📈 Nên nắm giữ CP", f"{stock_pct}%")
+                    s2.metric("💵 Nên giữ tiền mặt", f"{cash_pct}%")
+                    st.progress(
+                        min(stock_pct / 100, 1.0),
+                        text=f"Tỷ trọng CP {stock_pct}% / Tiền {cash_pct}%"
+                    )
+                    reasons = reco.get('reasons', [])
+                    if reasons:
+                        with st.expander("📋 Lý do khuyến nghị", expanded=True):
+                            for r in reasons:
+                                st.markdown(f"- {r}")
                     st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
                 else:
-                    st.info("Chưa tính được khuyến nghị hành động (xem cảnh báo phía trên).")
+                    # reco None -> vẫn hiển thị khung, thông báo lý do
+                    st.warning("⚠️ Chưa tính được khuyến nghị.")
+                    st.caption("Kiểm tra hàm `market_recommendation()` trong `trend_engine.py`.")
 
         # --- Định giá P/E (riêng 1 hàng full-width bên dưới) ---
         c5, = st.columns(1)
