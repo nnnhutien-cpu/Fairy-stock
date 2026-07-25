@@ -249,7 +249,10 @@ with tab_market:
 
     if snap is not None:
         try:
-            reco = market_recommendation(snap)
+            pe_now_r  = valuation.get_current_pe(current_index)
+            pe_hist_r = valuation.get_pe_history(years=20)
+            pe_stats_r = valuation.pe_stats(pe_hist_r, pe_now_r)
+            reco = market_recommendation(snap, pe_stats=pe_stats_r)
         except Exception as e:
             st.warning(f"⚠️ Không tính được khuyến nghị: {e}")
             reco = None
