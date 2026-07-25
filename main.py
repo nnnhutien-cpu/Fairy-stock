@@ -335,8 +335,8 @@ with tab_market:
             st.warning(f"⚠️ Không tính được khuyến nghị: {e}")
             reco = None
 
-        # --- 2 cột: c1 = Xu hướng giá + Chỉ báo kỹ thuật | c2 = Dòng tiền (Volume) + Khuyến nghị hành động ---
-        c1, c2 = st.columns(2)
+        # --- 4 cột: c1 = Xu hướng giá + Chỉ báo kỹ thuật | c2 = Dòng tiền (Volume) | Khuyến nghị hành động ---
+        c1, c2, c3,c4 = st.columns(2)
 
         with c1:
             with st.container(border=True):
