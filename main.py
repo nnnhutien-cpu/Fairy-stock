@@ -397,47 +397,53 @@ with tab_market:
                         st.markdown(f"- {r}")
 
         st.caption("⚠️ Khuyến nghị dựa trên PTKT + định giá, không phải tư vấn đầu tư chính thức.")
+        
     # ============================================================ 
     # BẢNG QUY ĐỔI SCORE → TỶ TRỌNG
     # ============================================================
     with st.expander("📋 Bảng quy đổi Score → Tỷ trọng", expanded=False):
-    st.markdown("**Cách tính Score:**")
-    st.markdown("- **Breadth** (% mã tăng HOSE): -5 đến +5 điểm")
-    st.markdown("- **Trend** (MA20): -2 đến +2 điểm")
-    st.markdown("- **RSI**: -1 / +1 điểm")
-    st.markdown("- **MACD**: -1 / +1 điểm")
-    st.markdown("- **Volume**: -1 / +1 điểm")
-    st.markdown("- **P/E**: -2 đến +2 điểm")
-    st.markdown("- **Tổng**: -11 đến +11 điểm")
+        st.markdown("**Cách tính Score:**")
+        st.markdown("- **Breadth** (% mã tăng HOSE): -5 đến +5 điểm")
+        st.markdown("- **Trend** (MA20): -2 đến +2 điểm")
+        st.markdown("- **RSI**: -1 / +1 điểm")
+        st.markdown("- **MACD**: -1 / +1 điểm")
+        st.markdown("- **Volume**: -1 / +1 điểm")
+        st.markdown("- **P/E**: -2 đến +2 điểm")
+        st.markdown("- **Tổng**: -11 đến +11 điểm")
 
-    st.divider()
+        st.divider()
 
-    # Bảng điểm
-    score_table = [
-        {"score": "≥ 9",  "stock": "80%", "cash": "20%", "action": "🔥 MUA RẤT MẠNH",        "color": "🟢"},
-        {"score": "≥ 7",  "stock": "70%", "cash": "30%", "action": "🚀 MUA MẠNH",             "color": "🟢"},
-        {"score": "≥ 5",  "stock": "65%", "cash": "35%", "action": "🟢 MUA TÍCH CỰC",         "color": "🟢"},
-        {"score": "≥ 3",  "stock": "60%", "cash": "40%", "action": "🟢 MUA/GIỮ",              "color": "🟢"},
-        {"score": "≥ 1",  "stock": "55%", "cash": "45%", "action": "🟢 GIỮ CAO",              "color": "🟢"},
-        {"score": "≥ -1", "stock": "50%", "cash": "50%", "action": "➖ CÂN BẰNG",             "color": "🔵"},
-        {"score": "≥ -3", "stock": "40%", "cash": "60%", "action": "🟠 GIẢM NHẸ",             "color": "🟠"},
-        {"score": "≥ -5", "stock": "30%", "cash": "70%", "action": "⚠️ GIẢM TỶ TRỌNG",       "color": "🟠"},
-        {"score": "≥ -7", "stock": "20%", "cash": "80%", "action": "🔴 PHÒNG THỦ",            "color": "🔴"},
-        {"score": "≥ -9", "stock": "15%", "cash": "85%", "action": "🛡️ PHÒNG THỦ MẠNH",     "color": "🔴"},
-        {"score": "< -9", "stock": "10%", "cash": "90%", "action": "💀 THOÁT KHỎI THỊ TRƯỜNG", "color": "🔴"},
-    ]
+        # Bảng điểm
+        score_table = [
+            {"score": "≥ 9",  "stock": "80%", "cash": "20%", "action": "🔥 MUA RẤT MẠNH",        "color": "🟢"},
+            {"score": "≥ 7",  "stock": "70%", "cash": "30%", "action": "🚀 MUA MẠNH",             "color": "🟢"},
+            {"score": "≥ 5",  "stock": "65%", "cash": "35%", "action": "🟢 MUA TÍCH CỰC",         "color": "🟢"},
+            {"score": "≥ 3",  "stock": "60%", "cash": "40%", "action": "🟢 MUA/GIỮ",              "color": "🟢"},
+            {"score": "≥ 1",  "stock": "55%", "cash": "45%", "action": "🟢 GIỮ CAO",              "color": "🟢"},
+            {"score": "≥ -1", "stock": "50%", "cash": "50%", "action": "➖ CÂN BẰNG",             "color": "🔵"},
+            {"score": "≥ -3", "stock": "40%", "cash": "60%", "action": "🟠 GIẢM NHẸ",             "color": "🟠"},
+            {"score": "≥ -5", "stock": "30%", "cash": "70%", "action": "⚠️ GIẢM TỶ TRỌNG",       "color": "🟠"},
+            {"score": "≥ -7", "stock": "20%", "cash": "80%", "action": "🔴 PHÒNG THỦ",            "color": "🔴"},
+            {"score": "≥ -9", "stock": "15%", "cash": "85%", "action": "🛡️ PHÒNG THỦ MẠNH",      "color": "🔴"},
+            {"score": "< -9", "stock": "10%", "cash": "90%", "action": "💀 THOÁT KHỎI THỊ TRƯỜNG", "color": "🔴"},
+        ]
 
-    # Hiển thị bảng
-    for row in score_table:
-        c1, c2, c3, c4, c5 = st.columns([1.2, 1, 1, 2.5, 1])
-        c1.markdown(f"**{row['score']}**")
-        c2.markdown(f"`{row['stock']}`")
-        c3.markdown(f"`{row['cash']}`")
-        c4.markdown(f"{row['color']} {row['action']}")
-        # Highlight dòng hiện tại
-        if reco and int(row['score'].replace('≥ ', '').replace('< ', '')
-                        .replace('+', '').replace('-', '*')) == reco.get('score', 0):
-            c5.markdown("⬅️ **HIỆN TẠI**")
+        # Hiển thị bảng
+        for row in score_table:
+            c1, c2, c3, c4, c5 = st.columns([1.2, 1, 1, 2.5, 1])
+            c1.markdown(f"**{row['score']}**")
+            c2.markdown(f"`{row['stock']}`")
+            c3.markdown(f"`{row['cash']}`")
+            c4.markdown(f"{row['color']} {row['action']}")
+            
+            # Highlight dòng hiện tại an toàn (tránh lỗi hàm int do dấu âm)
+            if reco and "score" in reco:
+                try:
+                    row_score_val = int(row['score'].replace('≥ ', '').replace('< ', ''))
+                    if row_score_val == reco.get('score', 0):
+                        c5.markdown("⬅️ **HIỆN TẠI**")
+                except ValueError:
+                    pass
 
     st.divider()
 
@@ -451,6 +457,7 @@ with tab_market:
         col_a.metric("📊 Score hiện tại", f"{cur_score:+d}")
         col_b.metric("📈 Tỷ trọng CP",   f"{cur_stock}%")
         col_c.metric("💰 Tiền mặt",       f"{100-cur_stock}%")
+        
     # --- Hàng 3: Định giá P/E (mục riêng — độc lập, không ảnh hưởng khuyến nghị) ---
     with st.container(border=True):
         st.markdown("#### 💰 Định giá P/E (20 năm)")
@@ -938,5 +945,157 @@ with tab_reports:
         payload = _load_reports_json()
 
     if "error" in payload and not payload.get("data"):
-        st.error(f"⚠️ Không tải được reports.json: {payload['error']}")
-         
+        st.error(
+            f"⚠️ Không tải được reports.json: `{payload['error']}`\n\n"
+            "**Kiểm tra:**\n"
+            "1. File `reports.json` đã có trong repo chưa? "
+            "Vào GitHub → Actions → chạy thủ công workflow **Scrape Analyst Reports**.\n"
+            "2. Repo có public không? Nếu private cần thêm token vào secrets.\n"
+        )
+        st.stop()
+
+    updated_at = payload.get("updated_at", "")
+    raw_data   = payload.get("data", [])
+
+    with col_note:
+        st.caption(f"⏱️ Dữ liệu cập nhật lần cuối: **{updated_at}** — {len(raw_data)} báo cáo")
+
+    df_all = pd.DataFrame(raw_data)
+
+    if df_all.empty:
+        st.info(
+            "Kho báo cáo hiện đang trống.\n\n"
+            "Vào **GitHub → Actions → Scrape Analyst Reports → Run workflow** "
+            "để bot cào dữ liệu về ngay."
+        )
+        st.stop()
+
+    for col in ["buy_price", "target_price"]:
+        if col in df_all.columns:
+            df_all[col] = pd.to_numeric(
+                df_all[col].astype(str).str.replace(",", "").str.replace(".", ""),
+                errors="coerce"
+            ).fillna(0)
+
+    mask = (df_all["buy_price"] > 0) & (df_all["target_price"] > 0)
+    df_all["upside_pct"] = 0.0
+    df_all.loc[mask, "upside_pct"] = (
+        (df_all.loc[mask, "target_price"] - df_all.loc[mask, "buy_price"])
+        / df_all.loc[mask, "buy_price"] * 100
+    ).round(1)
+
+    df_show = df_all.copy()
+    if rep_ticker:
+        df_show = df_show[df_show["ticker"].str.upper() == rep_ticker]
+    if filter_action != "Tất cả":
+        df_show = df_show[
+            df_show["action"].str.upper().str.contains(filter_action, na=False)
+        ]
+    if filter_source != "Tất cả":
+        df_show = df_show[df_show["source"] == filter_source]
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("📋 Tổng báo cáo", len(df_show))
+    n_buy  = df_show["action"].str.upper().str.contains("MUA|TÍCH LŨY|KHẢ QUAN|BUY", na=False).sum()
+    n_hold = df_show["action"].str.upper().str.contains("GIỮ|HOLD|NEUTRAL", na=False).sum()
+    n_sell = df_show["action"].str.upper().str.contains("BÁN|SELL", na=False).sum()
+    m2.metric("🟢 Mua / Tích lũy", int(n_buy))
+    m3.metric("🟡 Nắm giữ", int(n_hold))
+    m4.metric("🔴 Bán", int(n_sell))
+
+    st.divider()
+
+    if df_show.empty:
+        st.warning("Không có báo cáo nào khớp bộ lọc.")
+    else:
+        st.dataframe(
+            df_show[["date", "ticker", "company", "action",
+                     "buy_price", "target_price", "upside_pct",
+                     "source", "report_url"]],
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "date":         st.column_config.TextColumn("📅 Ngày"),
+                "ticker":       st.column_config.TextColumn("🏷️ Mã"),
+                "company":      st.column_config.TextColumn("🏢 CTCK"),
+                "action":       st.column_config.TextColumn("⚡ Khuyến Nghị"),
+                "buy_price":    st.column_config.NumberColumn("💰 Giá Khuyến Nghị", format="%d ₫"),
+                "target_price": st.column_config.NumberColumn("🎯 Giá Mục Tiêu",    format="%d ₫"),
+                "upside_pct":   st.column_config.NumberColumn("🚀 Upside",          format="%.1f %%"),
+                "source":       st.column_config.TextColumn("🔗 Nguồn"),
+                "report_url":   st.column_config.LinkColumn("📥 Báo Cáo", display_text="Xem"),
+            },
+        )
+
+        csv_bytes = df_show.to_csv(index=False).encode("utf-8-sig")
+        st.download_button(
+            label="⬇️ Tải CSV",
+            data=csv_bytes,
+            file_name=f"bao_cao_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+        )
+
+# ==========================================
+# TAB 8: CHIẾN LƯỢC TÍCH LŨY
+# ==========================================
+with tab_accum:
+    render_accumulation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift)
+
+# ==========================================
+# TAB 9: KHUYẾN NGHỊ HÀNH ĐỘNG
+# ==========================================
+with tab_reco:
+    col_title_r, col_btn_r = st.columns([4, 1])
+    with col_title_r:
+        st.subheader("💡 KHUYẾN NGHỊ HÀNH ĐỘNG THỊ TRƯỜNG")
+    with col_btn_r:
+        if st.button("🔄 Cập nhật", key="btn_reco_refresh", type="primary", use_container_width=True):
+            st.rerun()
+
+    st.divider()
+
+    # --- Lấy snapshot ---
+    try:
+        snap_r = market_snapshot(symbol="VNINDEX", days=250)
+    except Exception as e:
+        st.error(f"❌ Không lấy được dữ liệu thị trường: {e}")
+        snap_r = None
+
+    if snap_r is not None:
+        # === BLOCK 1: TỔNG QUAN GIÁ ===
+        with st.container(border=True):
+            st.markdown("### 📊 Tình trạng thị trường")
+            b1, b2, b3, b4 = st.columns(4)
+            b1.metric(
+                "VNINDEX",
+                f"{snap_r.get('price', 0):,.2f}",
+                delta=f"{snap_r.get('change_pct', 0):+.2f}%",
+                delta_color="normal"
+            )
+            b2.metric("MA20",  f"{snap_r['ma20']:.1f}"  if snap_r.get('ma20')  else "—")
+            b3.metric("MA50",  f"{snap_r['ma50']:.1f}"  if snap_r.get('ma50')  else "—")
+            b4.metric("MA200", f"{snap_r['ma200']:.1f}" if snap_r.get('ma200') else "—")
+
+            st.markdown(
+                f"**Xu hướng:** {snap_r.get('trend_text', '—')} &nbsp;|&nbsp; "
+                f"**Hỗ trợ:** `{snap_r.get('support', 0):.1f}` &nbsp;|&nbsp; "
+                f"**Kháng cự:** `{snap_r.get('resistance', 0):.1f}`"
+            )
+
+        st.markdown("")
+
+        # === BLOCK 2: CHỈ BÁO KỸ THUẬT ===
+        with st.container(border=True):
+            st.markdown("### 📡 Chỉ báo kỹ thuật")
+            i1, i2, i3 = st.columns(3)
+
+            # RSI
+            rsi_val = snap_r.get('rsi', 50)
+            with i1:
+                st.markdown("**RSI(14)**")
+                st.markdown(f"### `{rsi_val:.1f}`")
+                st.caption(snap_r.get('rsi_text', ''))
+                st.progress(min(rsi_val / 100, 1.0), text=f"RSI = {rsi_val:.1f}")
+
+            # MACD
+            _cmap = {"danger
