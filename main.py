@@ -1098,4 +1098,102 @@ with tab_reco:
                 st.progress(min(rsi_val / 100, 1.0), text=f"RSI = {rsi_val:.1f}")
 
             # MACD
-            _cmap = {"danger
+            _cmap = {"danger": "red", "warning": "orange", "success": "green", "info": "blue"}
+            macd_color = _cmap.get(str(snap_r.get('macd_color', 'info')).lower(), "blue")
+            with i2:
+                st.markdown("**MACD**")
+                st.markdown(f"**MACD:** `{snap_r.get('macd', 0):.3f}`")
+                st.markdown(f"**Signal:** `{snap_r.get('macd_signal', 0):.3f}`")
+                st.markdown(f"**Trạng thái:** :{macd_color}[{snap_r.get('macd_cross', '—')}]")
+
+            # Volume
+            with i3:
+                st.markdown("**Volume**")
+                st.markdown(snap_r.get('vol_text', '—'))
+                vol_ratio = snap_r.get('vol_ratio', 1.0) or 1.0
+                st.progress(min(vol_ratio / 2.0, 1.0), text=f"{vol_ratio:.1f}x TB 20 phiên")
+
+        st.markdown("")
+
+        # === BLOCK 3: KHUYẾN NGHỊ CHÍNH ===
+        pe_stats_tab = None
+        try:
+            _price_for_pe = snap_r.get("price") or 0
+            pe_now_tab  = valuation.get_current_pe(_price_for_pe if _price_for_pe > 0 else None)
+            pe_hist_tab = valuation.get_pe_history(years=20)
+            pe_stats_tab = valuation.pe_stats(pe_hist_tab, pe_now_tab)
+        except Exception:
+            pe_stats_tab = None
+
+        try:
+            reco_tab = market_recommendation(snap_r, pe_stats=pe_stats_tab)
+        except Exception as e:
+            st.warning(f"⚠️ Không tính được khuyến nghị: {e}")
+            reco_tab = None
+
+        if reco_tab is not None:
+            _color_map_tab = {
+                "danger": "red", "warning": "orange", "success": "green",
+                "info": "blue", "red": "red", "green": "green",
+                "orange": "orange", "blue": "blue", "gray": "gray", "grey": "gray",
+            }
+            raw_color_tab = reco_tab.get("color", "gray")
+            st_color_tab  = _color_map_tab.get(str(raw_color_tab).lower(), "gray")
+            action_txt_tab = reco_tab.get("action", "—")
+            action_emoji_tab = (
+                "🔴" if st_color_tab == "red"    else
+                "🟠" if st_color_tab == "orange" else
+                "🟢" if st_color_tab == "green"  else
+                "🔵"
+            )
+
+            with st.container(border=True):
+                st.markdown("### 💡 Quyết định hành động")
+                st.markdown(f"## {action_emoji_tab} :{st_color_tab}[{action_txt_tab}]")
+
+                stock_pct_tab = reco_tab.get("stock", 0) or 0
+                cash_pct_tab  = reco_tab.get("cash",  0) or 0
+                score_tab     = reco_tab.get("score", 0)
+
+                col_a, col_b, col_c = st.columns(3)
+                col_a.metric("📈 Nắm giữ CP",    f"{stock_pct_tab}%")
+                col_b.metric("💵 Tiền mặt",      f"{cash_pct_tab}%")
+                col_c.metric("🎯 Điểm tổng hợp", f"{score_tab:+d} điểm")
+
+                st.progress(
+                    stock_pct_tab / 100,
+                    text=f"Cổ phiếu {stock_pct_tab}%  ·  Tiền mặt {cash_pct_tab}%"
+                )
+
+                st.markdown("")
+                st.markdown("#### 📋 Lý do khuyến nghị")
+                for r in reco_tab.get("reasons", []):
+                    st.markdown(f"- {r}")
+
+                # P/E summary nếu có
+                if pe_stats_tab:
+                    st.divider()
+                    pct_pe = pe_stats_tab.get('percentile')
+                    pe_now_disp = pe_stats_tab.get('pe_now')
+                    pe_mean_disp = pe_stats_tab.get('mean')
+                    p1, p2 = st.columns(2)
+                    p1.metric(
+                        "P/E hiện tại",
+                        f"{pe_now_disp:.1f}x" if pe_now_disp else "—",
+                        delta=f"{pe_stats_tab.get('pct_vs_avg', 0):+.1f}% vs TB" if pe_stats_tab.get('pct_vs_avg') else None,
+                        delta_color="inverse"
+                    )
+                    p2.metric(
+                        "TB 20 năm",
+                        f"{pe_mean_disp:.1f}x" if pe_mean_disp else "—",
+                        delta=f"{pe_stats_tab.get('zscore', 0):+.2f}σ" if pe_stats_tab.get('zscore') else None
+                    )
+                    if pct_pe is not None:
+                        color_pe = "🟢" if pct_pe < 25 else "🟡" if pct_pe < 75 else "🔴"
+                        label_pe = "RẺ" if pct_pe < 25 else "HỢP LÝ" if pct_pe < 75 else "ĐẮT"
+                        st.progress(pct_pe / 100, text=f"{color_pe} P/E Percentile: {pct_pe:.0f}% — {label_pe}")
+
+                st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
+
+    else:
+        st.info("⏳ Không lấy được dữ liệu thị trường để phân tích. Vui lòng thử lại.")
