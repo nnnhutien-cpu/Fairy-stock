@@ -156,86 +156,152 @@ def get_latest_snapshot(df_engine) -> dict:
     }
 
 
-def market_recommendation(snap: dict, pe_stats: dict = None) -> dict:
+def market_recommendation(snap: dict, pe_stats: dict = None,
+                          breadth: dict = None) -> dict:
     """
-    Khuyến nghị tổng hợp: Trend + Volume + RSI + MACD + P/E
-    Dùng .get() để không crash khi thiếu key.
+    Khuyến nghị dựa trên:
+    - Layer 1: Breadth (A/D từ HOSE)     → -5 đến +5
+    - Layer 2: PTKT (Trend, RSI, MACD)   → -4 đến +4
+    - Layer 3: P/E                       → -2 đến +2
+    ----------------------------------------------
+    TỔNG SCORE: -11 đến +11
     """
     score, reasons = 0, []
 
-    # ===== TREND =====
+    # ========================================================
+    # LAYER 1: BREADTH (A/D ratio từ ~400 mã HOSE)
+    # ========================================================
+    ad_pct = None
+    adv = dec = 0
+    if breadth and breadth.get("total", 0) > 0:
+        adv = breadth.get("advance", 0)
+        dec = breadth.get("decline", 0)
+        total = breadth.get("total", adv + dec)
+        ad_pct = adv / max(total, 1) * 100
+        avg_chg = breadth.get("ad_change", 0)
+
+        if ad_pct > 70:
+            score += 5
+            reasons.append(f"🟢 Breadth RẤT MẠNH ({adv}/{dec} - {ad_pct:.0f}% mã tăng)")
+        elif ad_pct > 60:
+            score += 4
+            reasons.append(f"🟢 Breadth MẠNH ({adv}/{dec} - {ad_pct:.0f}% mã tăng)")
+        elif ad_pct > 50:
+            score += 3
+            reasons.append(f"🟢 Breadth KHÁ ({adv}/{dec} - {ad_pct:.0f}% mã tăng)")
+        elif ad_pct > 40:
+            score += 1
+            reasons.append(f"🟡 Breadth TRUNG TÍNH ({adv}/{dec} - {ad_pct:.0f}%)")
+        elif ad_pct > 30:
+            score -= 1
+            reasons.append(f"🟠 Breadth YẾU ({adv}/{dec} - chỉ {ad_pct:.0f}% mã tăng)")
+        elif ad_pct > 20:
+            score -= 3
+            reasons.append(f"🟠 Breadth RẤT YẾU ({adv}/{dec} - {ad_pct:.0f}%)")
+        else:
+            score -= 5
+            reasons.append(f"🔴 Breadth PANIC ({adv}/{dec} - {ad_pct:.0f}% - thị trường sụp)")
+
+    # ========================================================
+    # LAYER 2: PTKT
+    # ========================================================
+    # TREND
     t = snap.get("trend_text", "")
-    if "tăng mạnh" in t.lower():
-        score += 2; reasons.append("✅ Xu hướng tăng mạnh — nên duy trì/vào thêm")
-    elif "chậm lại" in t.lower():
-        score += 1; reasons.append("↗️ Tăng chậm lại — giữ, không mua đuổi")
-    elif "gãy ma20" in t.lower() or "gãy" in t.lower():
-        score -= 1; reasons.append("⚠️ Vừa gãy MA20 — cân nhắc giảm tỷ trọng")
+    if "tăng mạnh" in t:
+        score += 2
+        reasons.append("📈 Trend tăng mạnh (giá trên MA20 + MA20 dốc lên)")
+    elif "chậm lại" in t:
+        score += 1
+        reasons.append("↗️ Trend tăng chậm lại")
+    elif "gãy MA20" in t:
+        score -= 1
+        reasons.append("⚠️ Vừa gãy MA20")
     else:
-        score -= 2; reasons.append("📉 Xu hướng giảm — nên giảm tỷ trọng")
+        score -= 2
+        reasons.append("📉 Trend giảm")
 
-    # ===== RSI =====
-    rsi = snap.get("rsi") or 50
-    try:
-        rsi = float(rsi)
-    except Exception:
-        rsi = 50
+    # RSI
+    rsi = snap.get("rsi", 50)
     if rsi >= 70:
-        score -= 1; reasons.append(f"🔴 RSI={rsi:.1f} quá mua — chốt lời một phần")
+        score -= 1
+        reasons.append(f"🔴 RSI={rsi} quá mua")
     elif rsi <= 30:
-        score += 1; reasons.append(f"🟢 RSI={rsi:.1f} quá bán — cơ hội tích lũy dần")
+        score += 1
+        reasons.append(f"🟢 RSI={rsi} quá bán - cơ hội")
     else:
-        reasons.append(f"🟡 RSI={rsi:.1f} trung tính — quan sát thêm")
+        reasons.append(f"🟡 RSI={rsi} trung tính")
 
-    # ===== MACD =====
-    macd_cross = snap.get("macd_cross", "")
-    if "vàng" in str(macd_cross).lower() or "golden" in str(macd_cross).lower():
-        score += 1; reasons.append("✅ MACD cắt lên — tín hiệu tích cực")
+    # MACD
+    if snap.get("macd_cross") == "Vàng":
+        score += 1
+        reasons.append("✅ MACD vàng (cắt lên)")
     else:
-        score -= 1; reasons.append("⚠️ MACD cắt xuống — tín hiệu tiêu cực")
+        score -= 1
+        reasons.append("⚠️ MACD chết (cắt xuống)")
 
-    # ===== VOLUME =====
-    vr = snap.get("vol_ratio") or 1.0
-    try:
-        vr = float(vr)
-    except Exception:
-        vr = 1.0
-    if vr >= 1.5:
-        reasons.append(f"🔥 Volume đột biến {vr:.1f}x — dòng tiền hỗ trợ")
-    elif vr < 0.7:
-        score -= 1; reasons.append(f"💤 Volume yếu {vr:.1f}x — thiếu dòng tiền")
+    # VOLUME
+    vol_ratio = snap.get("vol_ratio", 1)
+    if vol_ratio >= 1.5:
+        score += 1
+        reasons.append(f"🔥 Volume đột biến {vol_ratio}x")
+    elif vol_ratio < 0.7:
+        score -= 1
+        reasons.append(f"💤 Volume yếu {vol_ratio}x")
 
-    # ===== P/E =====
+    # ========================================================
+    # LAYER 3: P/E
+    # ========================================================
     if pe_stats and pe_stats.get("percentile") is not None:
         pct = pe_stats["percentile"]
-        if pct < 15:
+        if pct < 20:
             score += 2
-            reasons.append(f"💰 P/E percentile {pct:.0f}% — RẺ kỷ lục, cơ hội tích lũy")
+            reasons.append(f"💰 P/E rẻ kỷ lục (percentile {pct:.0f}%)")
         elif pct < 30:
             score += 1
-            reasons.append(f"💰 P/E percentile {pct:.0f}% — vùng rẻ, ưu tiên mua gom")
-        elif pct > 85:
+            reasons.append(f"💰 P/E vùng rẻ (percentile {pct:.0f}%)")
+        elif pct > 80:
             score -= 2
-            reasons.append(f"💰 P/E percentile {pct:.0f}% — ĐẮT, nên chốt lời dần")
+            reasons.append(f"💰 P/E đắt kỷ lục (percentile {pct:.0f}%)")
         elif pct > 70:
             score -= 1
-            reasons.append(f"💰 P/E percentile {pct:.0f}% — vùng đắt, hạn chế mua mới")
+            reasons.append(f"💰 P/E vùng đắt (percentile {pct:.0f}%)")
         else:
-            reasons.append(f"💰 P/E percentile {pct:.0f}% — định giá hợp lý")
+            reasons.append(f"💰 P/E hợp lý (percentile {pct:.0f}%)")
 
-    # ===== PHÂN BỔ =====
-    if score >= 4:
-        stock, cash, action, color = 75, 25, "🚀 MUA MẠNH - VÙNG ĐẸP", "green"
-    elif score >= 2:
-        stock, cash, action, color = 65, 35, "🟢 MUA / GIỮ TỶ TRỌNG CAO", "green"
-    elif score >= 0:
-        stock, cash, action, color = 50, 50, "➖ GIỮ - CÂN BẰNG", "blue"
-    elif score >= -2:
-        stock, cash, action, color = 35, 65, "⚠️ GIẢM TỶ TRỌNG", "orange"
+    # ========================================================
+    # TỔNG SCORE → TỶ TRỌNG (12 MỨC)
+    # ========================================================
+    if score >= 9:
+        stock, cash, action, color = 80, 20, "🔥 MUA RẤT MẠNH", "success"
+    elif score >= 7:
+        stock, cash, action, color = 70, 30, "🚀 MUA MẠNH", "success"
+    elif score >= 5:
+        stock, cash, action, color = 65, 35, "🟢 MUA TÍCH CỰC", "success"
+    elif score >= 3:
+        stock, cash, action, color = 60, 40, "🟢 MUA/GIỮ", "success"
+    elif score >= 1:
+        stock, cash, action, color = 55, 45, "🟢 GIỮ TỶ TRỌNG CAO", "info"
+    elif score >= -1:
+        stock, cash, action, color = 50, 50, "➖ CÂN BẰNG", "info"
+    elif score >= -3:
+        stock, cash, action, color = 40, 60, "🟠 GIẢM NHẸ", "warning"
+    elif score >= -5:
+        stock, cash, action, color = 30, 70, "⚠️ GIẢM TỶ TRỌNG", "warning"
+    elif score >= -7:
+        stock, cash, action, color = 20, 80, "🔴 PHÒNG THỦ", "danger"
+    elif score >= -9:
+        stock, cash, action, color = 15, 85, "🛡️ PHÒNG THỦ MẠNH", "danger"
     else:
-        stock, cash, action, color = 20, 80, "🛡️ PHÒNG THỦ - GIỮ TIỀN MẶT", "red"
+        stock, cash, action, color = 10, 90, "💀 THOÁT KHỎI THỊ TRƯỜNG", "danger"
 
     return {
-        "score": score, "action": action, "stock": stock,
-        "cash": cash, "color": color, "reasons": reasons,
+        "score":        score,
+        "action":       action,
+        "stock":        stock,
+        "cash":         cash,
+        "color":        color,
+        "reasons":      reasons,
+        "ad_pct":       ad_pct,
+        "ad_advance":   adv,
+        "ad_decline":   dec,
     }
