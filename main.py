@@ -235,7 +235,7 @@ with tab_market:
 
     render_market_tab(chart_df, df_today)
 
-    # ============================================================
+# ============================================================
 # PHÂN TÍCH XU HƯỚNG & KHUYẾN NGHỊ THỊ TRƯỜNG
 # ============================================================
 st.markdown("---")
@@ -369,7 +369,32 @@ with c4:
             st_color = color_map.get(reco.get("color", "gray"), "gray")
 
             action_map = {
-                "danger
+                "danger": "🔴", "warning": "🟠",
+                "success": "🟢", "info": "🔵"
+            }
+            action_emoji = action_map.get(reco.get("color", "info"), "🔵")
+
+            st.markdown(f"## {action_emoji} :{st_color}[{reco['action']}]")
+
+            stock_pct = reco.get("stock", 50) or 50
+            cash_pct  = reco.get("cash", 50)  or 50
+
+            s1, s2 = st.columns(2)
+            s1.metric("📈 Nắm giữ CP",  f"{stock_pct}%")
+            s2.metric("💵 Tiền mặt",    f"{cash_pct}%")
+
+            # Progress bar
+            st.progress(
+                stock_pct / 100,
+                text=f"Tỷ trọng: CP {stock_pct}% / Tiền {cash_pct}%"
+            )
+
+            # Lý do
+            with st.expander("📋 Lý do khuyến nghị", expanded=True):
+                for r in reco.get("reasons", []):
+                    st.markdown(f"- {r}")
+
+    st.caption("⚠️ Khuyến nghị dựa trên PTKT + định giá, không phải tư vấn đầu tư chính thức.")
 
         # --- Hàng 3: Định giá P/E (mục riêng — độc lập, không ảnh hưởng khuyến nghị) ---
         with st.container(border=True):
