@@ -888,5 +888,10 @@ with tab_reports:
         st.error(
             f"⚠️ Không tải được reports.json: `{payload['error']}`\n\n"
             "**Kiểm tra:**\n"
-            "1. File `reports.json` đã có trong repo chưa? "
-            "Vào GitHub → Actions → chạy thủ công workflow **Scrape Analyst Reports**
+            1. File `reports.json` đã có trong repo chưa?
+        2. Vào GitHub → Actions → chạy thủ công workflow **Scrape Analyst Reports**
+        3. Đợi workflow chạy xong (~3-5 phút)
+        4. Refresh trang này
+        Nếu vẫn lỗi → kiểm tra tab Logs của workflow 
+        """
+        )
