@@ -248,15 +248,6 @@ with tab_market:
         snap = None
 
     if snap is not None:
-        try:
-            pe_now_r  = valuation.get_current_pe(current_index)
-            pe_hist_r = valuation.get_pe_history(years=20)
-            pe_stats_r = valuation.pe_stats(pe_hist_r, pe_now_r)
-            reco = market_recommendation(snap, pe_stats=pe_stats_r)
-        except Exception as e:
-            st.warning(f"⚠️ Không tính được khuyến nghị: {e}")
-            reco = None
-
         # --- Hàng 1: Xu hướng giá | Dòng tiền ---
         c1, c2 = st.columns(2)
 
@@ -291,7 +282,7 @@ with tab_market:
                     text=f"Tỷ lệ: {vol_ratio}x trung bình"
                 )
 
-        # --- Hàng 2: Chỉ báo KT | Định giá P/E ---
+        # --- Hàng 2: Chỉ báo KT | Khuyến nghị hành động (ĐÚNG CẤU TRÚC GỐC 2x2) ---
         c3, c4 = st.columns(2)
 
         with c3:
@@ -316,18 +307,84 @@ with tab_market:
                 st.divider()
 
                 # --- BREADTH THỊ TRƯỜNG ---
-                breadth = get_market_breadth()
-                render_breadth_panel(breadth)
+                try:
+                    breadth = get_market_breadth()
+                    render_breadth_panel(breadth)
+                except Exception as e:
+                    st.caption(f"ℹ️ Không tải được breadth thị trường: {e}")
 
         with c4:
             with st.container(border=True):
-                st.markdown("#### 💰 Định giá P/E (20 năm)")
+                st.markdown("#### 💡 Khuyến nghị hành động")
 
+                # Tính P/E RIÊNG — lỗi P/E KHÔNG được phép làm mất khuyến nghị
+                pe_stats_r = None
+                try:
+                    pe_now_r = valuation.get_current_pe(current_index)
+                    pe_hist_r = valuation.get_pe_history(years=20)
+                    pe_stats_r = valuation.pe_stats(pe_hist_r, pe_now_r)
+                except Exception:
+                    pe_stats_r = None
+
+                try:
+                    reco = market_recommendation(snap, pe_stats=pe_stats_r)
+                except Exception as e:
+                    st.warning(f"⚠️ Không tính được khuyến nghị: {e}")
+                    reco = None
+
+                if reco is not None:
+                    _color_map = {
+                        "danger":  "red",
+                        "warning": "orange",
+                        "success": "green",
+                        "info":    "blue",
+                        "red":     "red",
+                        "green":   "green",
+                        "orange":  "orange",
+                        "blue":    "blue",
+                        "gray":    "gray",
+                        "grey":    "gray",
+                        "violet":  "violet",
+                    }
+                    raw_color  = reco.get("color", "gray")
+                    st_color   = _color_map.get(str(raw_color).lower(), "gray")
+                    action_txt = reco.get("action", "—")
+
+                    action_emoji = (
+                        "🔴" if st_color == "red"    else
+                        "🟠" if st_color == "orange" else
+                        "🟢" if st_color == "green"  else
+                        "🔵"
+                    )
+                    st.markdown(f"## {action_emoji} :{st_color}[{action_txt}]")
+
+                    stock_pct = reco.get("stock", 0) or 0
+                    cash_pct  = reco.get("cash",  0) or 0
+
+                    s1, s2 = st.columns(2)
+                    s1.metric("📈 Nên nắm giữ CP",   f"{stock_pct}%")
+                    s2.metric("💵 Nên giữ tiền mặt", f"{cash_pct}%")
+
+                    st.progress(
+                        stock_pct / 100,
+                        text=f"Tỷ trọng CP {stock_pct}% · Tiền mặt {cash_pct}%"
+                    )
+
+                    with st.expander("📋 Lý do khuyến nghị", expanded=True):
+                        for r in reco.get("reasons", []):
+                            st.markdown(f"- {r}")
+
+                    st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
+
+        # --- Hàng 3: Định giá P/E (mục riêng — độc lập, không ảnh hưởng khuyến nghị) ---
+        with st.container(border=True):
+            st.markdown("#### 💰 Định giá P/E (20 năm)")
+            try:
                 pe_now   = valuation.get_current_pe(current_index)
                 pe_hist  = valuation.get_pe_history(years=20)
                 pe_stats = valuation.pe_stats(pe_hist, pe_now)
 
-                col_pe1, col_pe2 = st.columns([1, 1])
+                col_pe1, col_pe2 = st.columns(2)
                 with col_pe1:
                     st.metric(
                         "P/E hiện tại",
@@ -351,58 +408,18 @@ with tab_market:
                 if pe_stats.get('comment'):
                     st.info(pe_stats['comment'])
 
+                try:
+                    pe_source = valuation.get_current_pe_source()
+                    if pe_source:
+                        st.caption(f"🔗 Nguồn P/E: **{pe_source}** (cập nhật hàng ngày)")
+                except Exception:
+                    pass
+
                 if pe_hist is not None and not pe_hist.empty:
                     with st.expander("📈 Xem P/E 20 năm", expanded=False):
                         st.line_chart(pe_hist.set_index("date")["pe"], height=200)
-
-        # --- Hàng 3: Khuyến nghị hành động ---
-        if reco is not None:
-            with st.container(border=True):
-                st.markdown("#### 💡 Khuyến nghị hành động")
-
-                # Map màu nội bộ → màu hợp lệ của Streamlit
-                _color_map = {
-                    "danger":  "red",
-                    "warning": "orange",
-                    "success": "green",
-                    "info":    "blue",
-                    "red":     "red",
-                    "green":   "green",
-                    "orange":  "orange",
-                    "blue":    "blue",
-                    "gray":    "gray",
-                    "grey":    "gray",
-                    "violet":  "violet",
-                }
-                raw_color  = reco.get("color", "gray")
-                st_color   = _color_map.get(str(raw_color).lower(), "gray")
-                action_txt = reco.get("action", "—")
-
-                action_emoji = (
-                    "🔴" if st_color == "red"    else
-                    "🟠" if st_color == "orange" else
-                    "🟢" if st_color == "green"  else
-                    "🔵"
-                )
-                st.markdown(f"## {action_emoji} :{st_color}[{action_txt}]")
-
-                stock_pct = reco.get("stock", 0) or 0
-                cash_pct  = reco.get("cash",  0) or 0
-
-                s1, s2 = st.columns(2)
-                s1.metric("📈 Nên nắm giữ CP",   f"{stock_pct}%")
-                s2.metric("💵 Nên giữ tiền mặt", f"{cash_pct}%")
-
-                st.progress(
-                    stock_pct / 100,
-                    text=f"Tỷ trọng CP {stock_pct}% · Tiền mặt {cash_pct}%"
-                )
-
-                with st.expander("📋 Lý do khuyến nghị", expanded=True):
-                    for r in reco.get("reasons", []):
-                        st.markdown(f"- {r}")
-
-                st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
+            except Exception as e:
+                st.warning(f"⚠️ Không tải được dữ liệu P/E: {e}")
 
 # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU
