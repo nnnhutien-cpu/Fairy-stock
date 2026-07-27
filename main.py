@@ -236,174 +236,140 @@ with tab_market:
     render_market_tab(chart_df, df_today)
 
     # ============================================================
-    # PHÂN TÍCH XU HƯỚNG & KHUYẾN NGHỊ THỊ TRƯỜNG
-    # ============================================================
-    st.markdown("---")
-    st.markdown("### 🧠 Phân tích Xu hướng & Khuyến nghị Thị trường")
+# PHÂN TÍCH XU HƯỚNG & KHUYẾN NGHỊ THỊ TRƯỜNG
+# ============================================================
+st.markdown("---")
+st.markdown("### 📊 Phân tích Xu hướng & Khuyến nghị Thị trường")
 
-    _snap_error = None
-    try:
-        snap = market_snapshot(symbol="VNINDEX", days=250)
-        if snap is None:
-            snap = {
-                "price": 0, "change": 0, "change_pct": 0,
-                "ma20": None, "ma50": None, "ma200": None,
-                "trend_text": "⏳ Đang tải…", "ma20_text": "—", "ma20_alert": "info",
-                "vol_today": 0, "vol_avg": 0, "vol_ratio": 0, "vol_text": "—",
-                "rsi": 50, "rsi_text": "—", "rsi_color": "info",
-                "macd": 0, "macd_signal": 0, "macd_cross": "—", "macd_color": "info",
-                "support": 0, "resistance": 0,
-            }
-    except Exception as e:
-        _snap_error = str(e)
+# --- Snapshot thị trường ---
+snap_error = None
+try:
+    snap = market_snapshot(symbol="VNINDEX", days=250)
+    if snap is None:
         snap = {
             "price": 0, "change": 0, "change_pct": 0,
             "ma20": None, "ma50": None, "ma200": None,
-            "trend_text": "⏳ Đang tải…", "ma20_text": "—", "ma20_alert": "info",
-            "vol_today": 0, "vol_avg": 0, "vol_ratio": 0, "vol_text": "—",
+            "trend_text": "⏳ Đang tải…", "ma20_text": "—",
+            "ma20_alert": "info",
+            "vol_today": 0, "vol_avg": 0, "vol_ratio": 0,
+            "vol_text": "—",
             "rsi": 50, "rsi_text": "—", "rsi_color": "info",
             "macd": 0, "macd_signal": 0, "macd_cross": "—", "macd_color": "info",
             "support": 0, "resistance": 0,
         }
+except Exception as e:
+    snap_error = str(e)
+    snap = {
+        "price": 0, "change": 0, "change_pct": 0,
+        "ma20": None, "ma50": None, "ma200": None,
+        "trend_text": "⏳ Đang tải…", "ma20_text": "—",
+        "ma20_alert": "info",
+        "vol_today": 0, "vol_avg": 0, "vol_ratio": 0,
+        "vol_text": "—",
+        "rsi": 50, "rsi_text": "—", "rsi_color": "info",
+        "macd": 0, "macd_signal": 0, "macd_cross": "—", "macd_color": "info",
+        "support": 0, "resistance": 0,
+    }
 
-    if _snap_error:
-        st.caption(f"ℹ️ Dữ liệu kỹ thuật chưa tải được ({_snap_error}) — hiển thị khung chờ.")
+if snap_error:
+    st.caption(f"⚠️ Đang tải thị trường... ({snap_error[:50]})")
 
-    if True:  # luôn render 4 container, dữ liệu sẽ điền khi API sẵn sàng
-        # --- Hàng 1: Xu hướng giá | Dòng tiền ---
-        c1, c2 = st.columns(2)
+# --- Tính khuyến nghị 1 LẦN duy nhất ---
+try:
+    pe_now   = get_current_pe("VNINDEX")
+    pe_hist  = get_pe_history(years=20)
+    stats    = pe_stats(pe_hist, pe_now)
+    reco     = market_recommendation(snap, pe_stats=stats)
+except Exception as e:
+    stats = None
+    reco  = None
 
-        with c1:
-            with st.container(border=True):
-                st.markdown("#### 📈 Xu hướng giá")
-                st.markdown(f"### {snap.get('trend_text', '—')}")
-                st.caption(snap.get("ma20_text", ""))
+# ============================================================
+# HÀNG 1: XU HƯỚNG GIÁ | DÒNG TIỀN
+# ============================================================
+c1, c2 = st.columns(2)
 
-                m1, m2, m3 = st.columns(3)
-                m1.metric("MA20",  f"{snap['ma20']:.1f}"  if snap.get('ma20')  else "—")
-                m2.metric("MA50",  f"{snap['ma50']:.1f}"  if snap.get('ma50')  else "—")
-                m3.metric("MA200", f"{snap['ma200']:.1f}" if snap.get('ma200') else "—")
+with c1:
+    with st.container(border=True):
+        st.markdown("#### 📈 Xu hướng giá")
+        st.markdown(f"### {snap['trend_text']}")
+        st.caption(snap.get("ma20_text", "—"))
 
-                st.markdown(
-                    f"**Hỗ trợ gần:** `{snap.get('support', 0):.1f}` &nbsp;•&nbsp; "
-                    f"**Kháng cự:** `{snap.get('resistance', 0):.1f}`"
-                )
+        m1, m2, m3 = st.columns(3)
+        m1.metric("MA20",  f"{snap['ma20']:.1f}"  if snap.get('ma20')  else "—")
+        m2.metric("MA50",  f"{snap['ma50']:.1f}"  if snap.get('ma50')  else "—")
+        m3.metric("MA200", f"{snap['ma200']:.1f}" if snap.get('ma200') else "—")
 
-        with c2:
-            with st.container(border=True):
-                st.markdown("#### 🔊 Dòng tiền (Volume)")
-                st.markdown(f"### {snap.get('vol_text', '—')}")
+        st.markdown(
+            f"**🟢 Hỗ trợ:** `{snap['support']:.1f}` &nbsp;•&nbsp; "
+            f"**🔴 Kháng cự:** `{snap['resistance']:.1f}`"
+        )
 
-                v1, v2 = st.columns(2)
-                v1.metric("Vol hôm nay", f"{snap.get('vol_today', 0):,.0f}")
-                v2.metric("TB 20 phiên", f"{snap.get('vol_avg', 0):,.0f}")
+with c2:
+    with st.container(border=True):
+        st.markdown("#### 🔊 Dòng tiền (Volume)")
+        st.markdown(f"### {snap['vol_text']}")
 
-                vol_ratio = snap.get("vol_ratio", 0) or 0
-                st.progress(
-                    min(vol_ratio / 2.0, 1.0),
-                    text=f"Tỷ lệ: {vol_ratio}x trung bình"
-                )
+        v1, v2 = st.columns(2)
+        v1.metric("Vol hôm nay", f"{snap['vol_today']:,.0f}")
+        v2.metric("TB 20 phiên", f"{snap['vol_avg']:,.0f}")
 
-        # --- Hàng 2: Chỉ báo KT | Khuyến nghị hành động (ĐÚNG CẤU TRÚC GỐC 2x2) ---
-        c3, c4 = st.columns(2)
+        vol_ratio = snap.get('vol_ratio', 0) or 0
+        st.progress(
+            min(vol_ratio / 2.0, 1.0),
+            text=f"Tỷ lệ: {vol_ratio}x trung bình"
+        )
 
-        with c3:
-            with st.container(border=True):
-                st.markdown("#### 📊 Chỉ báo kỹ thuật")
-                st.markdown(f"**RSI(14):** `{snap.get('rsi', '—')}` — {snap.get('rsi_text', '')}")
-                st.markdown(
-                    f"**MACD:** `{snap.get('macd', '—')}` &nbsp;|&nbsp; "
-                    f"**Signal:** `{snap.get('macd_signal', '—')}`"
-                )
-                _macd_color_map = {
-                    "danger": "red", "warning": "orange", "success": "green",
-                    "info": "blue", "red": "red", "green": "green",
-                    "orange": "orange", "blue": "blue", "gray": "gray",
-                }
-                macd_color = _macd_color_map.get(
-                    str(snap.get('macd_color', 'gray')).lower(), "gray"
-                )
-                macd_cross = snap.get('macd_cross', '—')
-                macd_label = "🟢 Cắt lên (Vàng)" if macd_cross == "Vàng" else "🔴 Cắt xuống (Chết)"
-                st.markdown(f"**Trạng thái MACD:** :{macd_color}[{macd_label}]")
+# ============================================================
+# HÀNG 2: CHỈ BÁO KT | KHUYẾN NGHỊ HÀNH ĐỘNG
+# ============================================================
+c3, c4 = st.columns(2)
 
-                st.divider()
+with c3:
+    with st.container(border=True):
+        st.markdown("#### 📊 Chỉ báo Kỹ thuật")
 
-                # --- BREADTH THỊ TRƯỜNG ---
-                try:
-                    breadth = get_market_breadth()
-                    render_breadth_panel(breadth)
-                except Exception as e:
-                    st.caption(f"ℹ️ Không tải được breadth thị trường: {e}")
+        # RSI
+        rsi_val = snap['rsi']
+        if rsi_val >= 70:    rsi_emoji = "🔴"
+        elif rsi_val <= 30:  rsi_emoji = "🟢"
+        else:                rsi_emoji = "🟡"
+        st.markdown(f"**RSI(14):** {rsi_emoji} `{rsi_val}` — {snap['rsi_text']}")
 
-        with c4:
-            with st.container(border=True):
-                st.markdown("#### 💡 Khuyến nghị hành động")
+        # MACD
+        st.markdown(
+            f"**MACD:** `{snap['macd']}` &nbsp;|&nbsp; "
+            f"**Signal:** `{snap['macd_signal']}`"
+        )
 
-                # Tính P/E RIÊNG — lỗi P/E KHÔNG được phép làm mất khuyến nghị
-                pe_stats_r = None
-                try:
-                    pe_now_r = valuation.get_current_pe(current_index)
-                    pe_hist_r = valuation.get_pe_history(years=20)
-                    pe_stats_r = valuation.pe_stats(pe_hist_r, pe_now_r)
-                except Exception:
-                    pe_stats_r = None
+        macd_color = snap.get('macd_color', 'gray')
+        macd_cross = snap.get('macd_cross', '—')
 
-                try:
-                    reco = market_recommendation(snap, pe_stats=pe_stats_r)
-                except Exception as e:
-                    st.warning(f"⚠️ Không tính được khuyến nghị: {e}")
-                    reco = None
+        if macd_cross == "Vàng":
+            macd_emoji = "🟢"
+            macd_label = "Cắt lên (Vàng)"
+        else:
+            macd_emoji = "🔴"
+            macd_label = "Cắt xuống (Chết)"
 
-                if reco is None:
-                    st.markdown("## ⏳ :gray[Đang chờ dữ liệu…]")
-                    s1, s2 = st.columns(2)
-                    s1.metric("📈 Nên nắm giữ CP", "—")
-                    s2.metric("💵 Nên giữ tiền mặt", "—")
-                    st.caption("Dữ liệu thị trường chưa sẵn sàng. Bấm 🔄 CẬP NHẬT để thử lại.")
-                else:
-                    _color_map = {
-                        "danger":  "red",
-                        "warning": "orange",
-                        "success": "green",
-                        "info":    "blue",
-                        "red":     "red",
-                        "green":   "green",
-                        "orange":  "orange",
-                        "blue":    "blue",
-                        "gray":    "gray",
-                        "grey":    "gray",
-                        "violet":  "violet",
-                    }
-                    raw_color  = reco.get("color", "gray")
-                    st_color   = _color_map.get(str(raw_color).lower(), "gray")
-                    action_txt = reco.get("action", "—")
+        st.markdown(f"**Trạng thái:** {macd_emoji} {macd_label}")
 
-                    action_emoji = (
-                        "🔴" if st_color == "red"    else
-                        "🟠" if st_color == "orange" else
-                        "🟢" if st_color == "green"  else
-                        "🔵"
-                    )
-                    st.markdown(f"## {action_emoji} :{st_color}[{action_txt}]")
+with c4:
+    with st.container(border=True):
+        st.markdown("#### 💡 Khuyến nghị Hành động")
 
-                    stock_pct = reco.get("stock", 0) or 0
-                    cash_pct  = reco.get("cash",  0) or 0
+        if reco is None:
+            st.warning("⚠️ Đang tính toán...")
+        else:
+            # Hành động chính
+            color_map = {
+                "danger": "red", "warning": "orange", "success": "green",
+                "info": "blue", "gray": "gray"
+            }
+            st_color = color_map.get(reco.get("color", "gray"), "gray")
 
-                    s1, s2 = st.columns(2)
-                    s1.metric("📈 Nên nắm giữ CP",   f"{stock_pct}%")
-                    s2.metric("💵 Nên giữ tiền mặt", f"{cash_pct}%")
-
-                    st.progress(
-                        stock_pct / 100,
-                        text=f"Tỷ trọng CP {stock_pct}% · Tiền mặt {cash_pct}%"
-                    )
-
-                    with st.expander("📋 Lý do khuyến nghị", expanded=True):
-                        for r in reco.get("reasons", []):
-                            st.markdown(f"- {r}")
-
-                    st.caption("⚠️ Khuyến nghị dựa trên phân tích kỹ thuật, không phải tư vấn đầu tư chính thức.")
+            action_map = {
+                "danger
 
         # --- Hàng 3: Định giá P/E (mục riêng — độc lập, không ảnh hưởng khuyến nghị) ---
         with st.container(border=True):
