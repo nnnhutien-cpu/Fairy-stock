@@ -397,7 +397,60 @@ with tab_market:
                         st.markdown(f"- {r}")
 
         st.caption("⚠️ Khuyến nghị dựa trên PTKT + định giá, không phải tư vấn đầu tư chính thức.")
+    # ============================================================ 
+    # BẢNG QUY ĐỔI SCORE → TỶ TRỌNG
+    # ============================================================
+    with st.expander("📋 Bảng quy đổi Score → Tỷ trọng", expanded=False):
+    st.markdown("**Cách tính Score:**")
+    st.markdown("- **Breadth** (% mã tăng HOSE): -5 đến +5 điểm")
+    st.markdown("- **Trend** (MA20): -2 đến +2 điểm")
+    st.markdown("- **RSI**: -1 / +1 điểm")
+    st.markdown("- **MACD**: -1 / +1 điểm")
+    st.markdown("- **Volume**: -1 / +1 điểm")
+    st.markdown("- **P/E**: -2 đến +2 điểm")
+    st.markdown("- **Tổng**: -11 đến +11 điểm")
 
+    st.divider()
+
+    # Bảng điểm
+    score_table = [
+        {"score": "≥ 9",  "stock": "80%", "cash": "20%", "action": "🔥 MUA RẤT MẠNH",        "color": "🟢"},
+        {"score": "≥ 7",  "stock": "70%", "cash": "30%", "action": "🚀 MUA MẠNH",             "color": "🟢"},
+        {"score": "≥ 5",  "stock": "65%", "cash": "35%", "action": "🟢 MUA TÍCH CỰC",         "color": "🟢"},
+        {"score": "≥ 3",  "stock": "60%", "cash": "40%", "action": "🟢 MUA/GIỮ",              "color": "🟢"},
+        {"score": "≥ 1",  "stock": "55%", "cash": "45%", "action": "🟢 GIỮ CAO",              "color": "🟢"},
+        {"score": "≥ -1", "stock": "50%", "cash": "50%", "action": "➖ CÂN BẰNG",             "color": "🔵"},
+        {"score": "≥ -3", "stock": "40%", "cash": "60%", "action": "🟠 GIẢM NHẸ",             "color": "🟠"},
+        {"score": "≥ -5", "stock": "30%", "cash": "70%", "action": "⚠️ GIẢM TỶ TRỌNG",       "color": "🟠"},
+        {"score": "≥ -7", "stock": "20%", "cash": "80%", "action": "🔴 PHÒNG THỦ",            "color": "🔴"},
+        {"score": "≥ -9", "stock": "15%", "cash": "85%", "action": "🛡️ PHÒNG THỦ MẠNH",     "color": "🔴"},
+        {"score": "< -9", "stock": "10%", "cash": "90%", "action": "💀 THOÁT KHỎI THỊ TRƯỜNG", "color": "🔴"},
+    ]
+
+    # Hiển thị bảng
+    for row in score_table:
+        c1, c2, c3, c4, c5 = st.columns([1.2, 1, 1, 2.5, 1])
+        c1.markdown(f"**{row['score']}**")
+        c2.markdown(f"`{row['stock']}`")
+        c3.markdown(f"`{row['cash']}`")
+        c4.markdown(f"{row['color']} {row['action']}")
+        # Highlight dòng hiện tại
+        if reco and int(row['score'].replace('≥ ', '').replace('< ', '')
+                        .replace('+', '').replace('-', '*')) == reco.get('score', 0):
+            c5.markdown("⬅️ **HIỆN TẠI**")
+
+    st.divider()
+
+    # Hiển thị score hiện tại nổi bật
+    if reco is not None:
+        cur_score = reco.get('score', 0)
+        cur_action = reco.get('action', '')
+        cur_stock = reco.get('stock', 50)
+
+        col_a, col_b, col_c = st.columns(3)
+        col_a.metric("📊 Score hiện tại", f"{cur_score:+d}")
+        col_b.metric("📈 Tỷ trọng CP",   f"{cur_stock}%")
+        col_c.metric("💰 Tiền mặt",       f"{100-cur_stock}%")
     # --- Hàng 3: Định giá P/E (mục riêng — độc lập, không ảnh hưởng khuyến nghị) ---
     with st.container(border=True):
         st.markdown("#### 💰 Định giá P/E (20 năm)")
