@@ -194,7 +194,7 @@ with tab_market:
         pass
 
     # --- Intraday data ---
-   intraday_df = get_intraday_vnindex()
+    intraday_df = get_intraday_vnindex()
     chart_df, df_today = None, None
     current_index = 0
 
