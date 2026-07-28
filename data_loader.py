@@ -180,10 +180,22 @@ _INTRADAY_HEADERS = {
 }
 
 def _day_timestamps(day_str: str):
-    """Trả về (t_from, t_to) dạng unix timestamp cho 1 ngày giao dịch."""
-    dt = datetime.strptime(day_str, "%Y-%m-%d")
-    t_from = int(datetime(dt.year, dt.month, dt.day, 9, 0).timestamp())
-    t_to   = int(datetime(dt.year, dt.month, dt.day, 15, 5).timestamp())
+    """
+    Trả về (t_from, t_to) dạng unix timestamp cho 1 ngày giao dịch.
+    Server Streamlit Cloud chạy UTC — phải gắn timezone UTC+7 (Asia/Ho_Chi_Minh)
+    rõ ràng, không dùng naive datetime.timestamp() vì sẽ bị lệch 7 tiếng.
+    """
+    try:
+        import pytz
+        tz_vn = pytz.timezone("Asia/Ho_Chi_Minh")
+        dt = datetime.strptime(day_str, "%Y-%m-%d")
+        t_from = int(tz_vn.localize(datetime(dt.year, dt.month, dt.day,  9, 0)).timestamp())
+        t_to   = int(tz_vn.localize(datetime(dt.year, dt.month, dt.day, 15, 5)).timestamp())
+    except ImportError:
+        # Fallback: cộng thủ công 7h = 25200s
+        dt = datetime.strptime(day_str, "%Y-%m-%d")
+        t_from = int(datetime(dt.year, dt.month, dt.day, 9, 0).timestamp()) - 25200
+        t_to   = int(datetime(dt.year, dt.month, dt.day, 15, 5).timestamp()) - 25200
     return t_from, t_to
 
 def _build_ohlcv_df(t_list, o, h, l, c, v) -> pd.DataFrame:
@@ -231,28 +243,67 @@ def _fetch_intraday_dnse(day_str: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 def _fetch_intraday_ssi(day_str: str) -> pd.DataFrame:
-    """SSI iBoard public API."""
+    """SSI iBoard public API — thử nhiều endpoint version."""
     key = f"VNINDEX|1m|SSI|{day_str}"
+    t_from, t_to = _day_timestamps(day_str)
+    endpoints = [
+        "https://iboard-query.ssi.com.vn/v2/stock/history",
+        "https://iboard-query.ssi.com.vn/v1/stock/chart",
+        "https://iboard.ssi.com.vn/dchart/api/history",
+    ]
+    headers = {
+        **_INTRADAY_HEADERS,
+        "Referer": "https://iboard.ssi.com.vn/",
+        "Origin": "https://iboard.ssi.com.vn",
+    }
+    params = {"symbol": "VNINDEX", "resolution": "1", "from": t_from, "to": t_to}
+    for url in endpoints:
+        try:
+            r = _requests.get(url, params=params, headers=headers, timeout=10)
+            if r.status_code == 404:
+                continue
+            r.raise_for_status()
+            data = r.json()
+            t_list = data.get("t") or []
+            if not t_list:
+                continue
+            LAST_ERRORS.pop(key, None)
+            return _build_ohlcv_df(
+                t_list, data["o"], data["h"], data["l"], data["c"], data.get("v")
+            )
+        except Exception:
+            continue
+    LAST_ERRORS[key] = f"SSI: tất cả endpoints đều fail (404/403/empty) cho {day_str}"
+    return pd.DataFrame()
+
+
+def _fetch_intraday_wifeed(day_str: str) -> pd.DataFrame:
+    """Wifeed / Fmarket public API."""
+    key = f"VNINDEX|1m|WIFEED|{day_str}"
     try:
         t_from, t_to = _day_timestamps(day_str)
-        url = "https://iboard-query.ssi.com.vn/v2/stock/history"
+        url = "https://wifeed.vn/api/thong-tin-co-phieu/lich-su-gia-theo-phut"
         params = {
             "symbol": "VNINDEX",
-            "resolution": "1",
             "from": t_from,
             "to":   t_to,
+            "resolution": "1",
         }
-        headers = {**_INTRADAY_HEADERS, "Referer": "https://iboard.ssi.com.vn/"}
-        r = _requests.get(url, params=params, headers=headers, timeout=10)
+        r = _requests.get(url, params=params, headers=_INTRADAY_HEADERS, timeout=10)
         r.raise_for_status()
         data = r.json()
-        t_list = data.get("t") or []
+        t_list = data.get("t") or data.get("time") or []
         if not t_list:
-            LAST_ERRORS[key] = "SSI trả về rỗng (có thể ngày nghỉ)."
+            LAST_ERRORS[key] = "Wifeed trả về rỗng."
             return pd.DataFrame()
         LAST_ERRORS.pop(key, None)
         return _build_ohlcv_df(
-            t_list, data["o"], data["h"], data["l"], data["c"], data.get("v")
+            t_list,
+            data.get("o") or data.get("open", []),
+            data.get("h") or data.get("high", []),
+            data.get("l") or data.get("low", []),
+            data.get("c") or data.get("close", []),
+            data.get("v") or data.get("volume"),
         )
     except Exception as e:
         LAST_ERRORS[key] = f"{type(e).__name__}: {e}"
@@ -348,6 +399,7 @@ def _fetch_intraday_day(symbol: str, day_str: str) -> pd.DataFrame:
         for fetcher in [
             _fetch_intraday_dnse,
             _fetch_intraday_ssi,
+            _fetch_intraday_wifeed,
             _fetch_intraday_tcbs,
             _fetch_intraday_vndirect,
         ]:
