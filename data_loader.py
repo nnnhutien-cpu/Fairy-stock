@@ -2,9 +2,18 @@ import streamlit as st
 import pandas as pd
 import time
 import threading
+import requests as _requests
 from datetime import datetime, timedelta
-from vnstock.api.quote import Quote
-from vnstock.api.listing import Listing
+
+# ==========================================================
+# IMPORT VNSTOCK (API MỚI)
+# ==========================================================
+try:
+    from vnstock.api.quote import Quote
+    from vnstock.api.listing import Listing
+    _VNSTOCK_OK = True
+except ImportError:
+    _VNSTOCK_OK = False
 
 # ==========================================================
 # CACHE DÀI HẠN TỪ SUPABASE (DO BOT NỀN BƠM SẴN 1 LẦN/NGÀY)
@@ -27,7 +36,6 @@ def _get_supabase():
     return _supabase_client
 
 def _read_from_cache(ticker, days_back, max_staleness_days=4):
-    """Đọc lịch sử giá từ Supabase nếu có và đủ mới. Trả về None nếu không có/quá cũ -> gọi API sống."""
     sb = _get_supabase()
     if sb is None:
         return None
@@ -43,11 +51,9 @@ def _read_from_cache(ticker, days_back, max_staleness_days=4):
         rows = resp.data or []
         if not rows:
             return None
-
         newest_date = pd.to_datetime(rows[0]["date"])
         if (datetime.now() - newest_date).days > max_staleness_days:
             return None
-
         df = pd.DataFrame(rows)
         df = df.rename(columns={"date": "time"})
         return _normalize(df)
@@ -82,16 +88,16 @@ def _throttle():
 FALLBACK_TICKERS = ["HPG", "SSI", "VND", "FPT", "TCB", "MBB", "MWG", "VIC", "VHM", "VNM"]
 
 # ==========================================================
-# CHẨN ĐOÁN LỖI (MỚI): thay vì "except Exception: continue" âm thầm,
-# lưu lại lỗi thật gần nhất để app.py / bạn có thể hiển thị ra và biết
-# CHÍNH XÁC vì sao 1 nguồn dữ liệu bị fail, thay vì chỉ thấy "đang chờ dữ liệu".
+# LƯU LỖI ĐỂ DEBUG
 # ==========================================================
-LAST_ERRORS = {}  # { "VNINDEX|1m|VCI": "thông báo lỗi..." }
+LAST_ERRORS: dict = {}
 
 def get_last_errors() -> dict:
-    """Gọi hàm này từ app.py để hiển thị lý do fail thật gần nhất (debug)."""
     return dict(LAST_ERRORS)
 
+# ==========================================================
+# NORMALIZE
+# ==========================================================
 def _normalize(df):
     if df is None or len(df) == 0:
         return pd.DataFrame()
@@ -115,32 +121,36 @@ def _normalize(df):
 
     return df
 
+# ==========================================================
+# YAHOO FINANCE (fallback cho dữ liệu daily)
+# ==========================================================
 def _fetch_yahoo(symbol, start, end):
     try:
         import yfinance as yf
         yf_symbol = "^VNINDEX" if symbol == "VNINDEX" else f"{symbol}.VN"
-
         df = yf.download(yf_symbol, start=start, end=end, progress=False, auto_adjust=True)
         if df is None or df.empty:
             return pd.DataFrame()
-
         df = df.reset_index()
         df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
         df.columns = [str(c).lower().strip() for c in df.columns]
-
         if 'date' in df.columns:
             df.rename(columns={'date': 'time'}, inplace=True)
-
         return _normalize(df)
     except Exception as e:
         LAST_ERRORS[f"{symbol}|yahoo"] = str(e)
         return pd.DataFrame()
 
+# ==========================================================
+# FETCH DAILY (dùng cho lịch sử dài hạn)
+# ==========================================================
 def _fetch(symbol, start, end, interval):
-    """Lấy dữ liệu OHLC theo NGÀY (1D/1W/1M). Dùng cho lịch sử dài hạn, KHÔNG dùng cho dữ liệu phút
-    (xem _fetch_intraday_day bên dưới — vnstock chỉ hỗ trợ lấy intraday theo từng ngày một)."""
-    sources = ['VCI', 'MSN']
+    if not _VNSTOCK_OK:
+        if interval == '1D':
+            return _fetch_yahoo(symbol, start, end)
+        return pd.DataFrame()
 
+    sources = ['VCI', 'MSN']
     for src in sources:
         key = f"{symbol}|{interval}|{src}"
         try:
@@ -151,7 +161,7 @@ def _fetch(symbol, start, end, interval):
             if df is not None and not df.empty:
                 LAST_ERRORS.pop(key, None)
                 return _normalize(df)
-            LAST_ERRORS[key] = "API trả về DataFrame rỗng (không lỗi, nhưng không có dữ liệu)."
+            LAST_ERRORS[key] = "API trả về DataFrame rỗng."
         except Exception as e:
             LAST_ERRORS[key] = f"{type(e).__name__}: {e}"
             continue
@@ -161,122 +171,159 @@ def _fetch(symbol, start, end, interval):
 
     return pd.DataFrame()
 
-# data_loader.py — thay hàm _fetch_intraday_day và get_intraday_vnindex
+# ==========================================================
+# INTRADAY — CÁC NGUỒN THAY THẾ (không qua vnstock)
+# ==========================================================
+_INTRADAY_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Accept": "application/json",
+}
 
-import requests as _requests
+def _day_timestamps(day_str: str):
+    """Trả về (t_from, t_to) dạng unix timestamp cho 1 ngày giao dịch."""
+    dt = datetime.strptime(day_str, "%Y-%m-%d")
+    t_from = int(datetime(dt.year, dt.month, dt.day, 9, 0).timestamp())
+    t_to   = int(datetime(dt.year, dt.month, dt.day, 15, 5).timestamp())
+    return t_from, t_to
+
+def _build_ohlcv_df(t_list, o, h, l, c, v) -> pd.DataFrame:
+    """Dựng DataFrame chuẩn từ các list t/o/h/l/c/v (unix timestamp)."""
+    times = (
+        pd.to_datetime(t_list, unit="s", utc=True)
+        .tz_convert("Asia/Ho_Chi_Minh")
+        .tz_localize(None)
+    )
+    df = pd.DataFrame({
+        "time":   times,
+        "open":   o,
+        "high":   h,
+        "low":    l,
+        "close":  c,
+        "volume": v if v else [0] * len(t_list),
+    })
+    return _normalize(df)
 
 def _fetch_intraday_dnse(day_str: str) -> pd.DataFrame:
-    """DNSE entrade API — public, không cần auth."""
+    """DNSE / Entrade public chart API — không cần auth."""
+    key = f"VNINDEX|1m|DNSE|{day_str}"
     try:
-        from datetime import datetime
-        import time as _time
-        dt = datetime.strptime(day_str, "%Y-%m-%d")
-        t_from = int(datetime(dt.year, dt.month, dt.day, 9, 0).timestamp())
-        t_to   = int(datetime(dt.year, dt.month, dt.day, 15, 1).timestamp())
+        t_from, t_to = _day_timestamps(day_str)
         url = "https://services.entrade.com.vn/chart-api/v2/ohlcs/index"
-        params = {"symbol": "VNINDEX", "resolution": "1", "from": t_from, "to": t_to}
-        r = _requests.get(url, params=params,
-                          headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        params = {
+            "symbol": "VNINDEX",
+            "resolution": "1",
+            "from": t_from,
+            "to":   t_to,
+        }
+        r = _requests.get(url, params=params, headers=_INTRADAY_HEADERS, timeout=10)
         r.raise_for_status()
         data = r.json()
-        if not data.get("t"):
+        t_list = data.get("t") or []
+        if not t_list:
+            LAST_ERRORS[key] = "DNSE trả về rỗng (có thể ngày nghỉ)."
             return pd.DataFrame()
-        df = pd.DataFrame({
-            "time":   pd.to_datetime(data["t"], unit="s", utc=True).tz_convert("Asia/Ho_Chi_Minh").tz_localize(None),
-            "open":   data["o"],
-            "high":   data["h"],
-            "low":    data["l"],
-            "close":  data["c"],
-            "volume": data.get("v", [0] * len(data["t"])),
-        })
-        return _normalize(df)
+        LAST_ERRORS.pop(key, None)
+        return _build_ohlcv_df(
+            t_list, data["o"], data["h"], data["l"], data["c"], data.get("v")
+        )
     except Exception as e:
-        LAST_ERRORS[f"VNINDEX|1m|DNSE|{day_str}"] = f"{type(e).__name__}: {e}"
+        LAST_ERRORS[key] = f"{type(e).__name__}: {e}"
         return pd.DataFrame()
-
 
 def _fetch_intraday_ssi(day_str: str) -> pd.DataFrame:
     """SSI iBoard public API."""
+    key = f"VNINDEX|1m|SSI|{day_str}"
     try:
-        from datetime import datetime
-        dt = datetime.strptime(day_str, "%Y-%m-%d")
-        t_from = int(datetime(dt.year, dt.month, dt.day, 9, 0).timestamp())
-        t_to   = int(datetime(dt.year, dt.month, dt.day, 15, 1).timestamp())
+        t_from, t_to = _day_timestamps(day_str)
         url = "https://iboard-query.ssi.com.vn/v2/stock/history"
-        params = {"symbol": "VNINDEX", "resolution": "1", "from": t_from, "to": t_to}
-        r = _requests.get(url, params=params,
-                          headers={"User-Agent": "Mozilla/5.0",
-                                   "Referer": "https://iboard.ssi.com.vn/"}, timeout=10)
+        params = {
+            "symbol": "VNINDEX",
+            "resolution": "1",
+            "from": t_from,
+            "to":   t_to,
+        }
+        headers = {**_INTRADAY_HEADERS, "Referer": "https://iboard.ssi.com.vn/"}
+        r = _requests.get(url, params=params, headers=headers, timeout=10)
         r.raise_for_status()
         data = r.json()
-        # SSI trả về {"t": [...], "o": [...], "h": [...], "l": [...], "c": [...], "v": [...]}
         t_list = data.get("t") or []
         if not t_list:
+            LAST_ERRORS[key] = "SSI trả về rỗng (có thể ngày nghỉ)."
             return pd.DataFrame()
-        df = pd.DataFrame({
-            "time":   pd.to_datetime(t_list, unit="s", utc=True).tz_convert("Asia/Ho_Chi_Minh").tz_localize(None),
-            "open":   data["o"],
-            "high":   data["h"],
-            "low":    data["l"],
-            "close":  data["c"],
-            "volume": data.get("v", [0] * len(t_list)),
-        })
-        return _normalize(df)
+        LAST_ERRORS.pop(key, None)
+        return _build_ohlcv_df(
+            t_list, data["o"], data["h"], data["l"], data["c"], data.get("v")
+        )
     except Exception as e:
-        LAST_ERRORS[f"VNINDEX|1m|SSI|{day_str}"] = f"{type(e).__name__}: {e}"
+        LAST_ERRORS[key] = f"{type(e).__name__}: {e}"
         return pd.DataFrame()
 
-
 def _fetch_intraday_tcbs(day_str: str) -> pd.DataFrame:
-    """TCBS public API."""
+    """TCBS public chart API."""
+    key = f"VNINDEX|1m|TCBS|{day_str}"
     try:
-        from datetime import datetime
-        dt = datetime.strptime(day_str, "%Y-%m-%d")
-        t_from = int(datetime(dt.year, dt.month, dt.day, 9, 0).timestamp())
-        t_to   = int(datetime(dt.year, dt.month, dt.day, 15, 1).timestamp())
+        t_from, t_to = _day_timestamps(day_str)
         url = "https://apipubaws.tcbs.com.vn/stock-insight/v1/index/intraday"
-        params = {"ticker": "VNINDEX", "type": "1", "from": t_from, "to": t_to}
-        r = _requests.get(url, params=params,
-                          headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        params = {
+            "ticker": "VNINDEX",
+            "type": "1",
+            "from": t_from,
+            "to":   t_to,
+        }
+        r = _requests.get(url, params=params, headers=_INTRADAY_HEADERS, timeout=10)
         r.raise_for_status()
         data = r.json()
         items = data.get("data") or []
         if not items:
+            LAST_ERRORS[key] = "TCBS trả về rỗng."
             return pd.DataFrame()
         df = pd.DataFrame(items)
-        df = df.rename(columns={"tradingDate": "time", "closeIndex": "close",
-                                 "openIndex": "open", "highIndex": "high",
-                                 "lowIndex": "low", "tradingVolume": "volume"})
+        rename_map = {
+            "tradingDate": "time",
+            "closeIndex":  "close",
+            "openIndex":   "open",
+            "highIndex":   "high",
+            "lowIndex":    "low",
+            "tradingVolume": "volume",
+        }
+        df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+        LAST_ERRORS.pop(key, None)
         return _normalize(df)
     except Exception as e:
-        LAST_ERRORS[f"VNINDEX|1m|TCBS|{day_str}"] = f"{type(e).__name__}: {e}"
+        LAST_ERRORS[key] = f"{type(e).__name__}: {e}"
         return pd.DataFrame()
 
+def _fetch_intraday_vndirect(day_str: str) -> pd.DataFrame:
+    """VNDirect market data API."""
+    key = f"VNINDEX|1m|VNDIRECT|{day_str}"
+    try:
+        # VNDirect dùng endpoint khác, lấy theo date string
+        url = "https://api.vndirect.com.vn/v4/market-data/index/history"
+        params = {
+            "code": "VNINDEX",
+            "startDate": day_str,
+            "endDate": day_str,
+            "size": 400,
+        }
+        r = _requests.get(url, params=params, headers=_INTRADAY_HEADERS, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        items = data.get("data") or []
+        if not items:
+            LAST_ERRORS[key] = "VNDirect trả về rỗng."
+            return pd.DataFrame()
+        df = pd.DataFrame(items)
+        LAST_ERRORS.pop(key, None)
+        return _normalize(df)
+    except Exception as e:
+        LAST_ERRORS[key] = f"{type(e).__name__}: {e}"
+        return pd.DataFrame()
 
-def _fetch_intraday_day(symbol, day_str):
-    """
-    Thử theo thứ tự: DNSE → SSI → TCBS → vnstock VCI → vnstock MSN
-    Các nguồn đầu không qua vnstock nên không bị rate limit.
-    """
-    # --- Nguồn 1: DNSE (nhanh nhất, ít bị chặn nhất) ---
-    if symbol == "VNINDEX":
-        df = _fetch_intraday_dnse(day_str)
-        if not df.empty:
-            return df
-
-        # --- Nguồn 2: SSI ---
-        df = _fetch_intraday_ssi(day_str)
-        if not df.empty:
-            return df
-
-        # --- Nguồn 3: TCBS ---
-        df = _fetch_intraday_tcbs(day_str)
-        if not df.empty:
-            return df
-
-    # --- Nguồn 4 & 5: vnstock (fallback cuối, dễ bị rate limit) ---
-    sources = ['VCI', 'MSN']
-    for src in sources:
+def _fetch_intraday_vnstock(symbol: str, day_str: str) -> pd.DataFrame:
+    """vnstock VCI/MSN — fallback cuối, dễ bị rate limit."""
+    if not _VNSTOCK_OK:
+        return pd.DataFrame()
+    for src in ['VCI', 'MSN']:
         key = f"{symbol}|1m|{src}|{day_str}"
         try:
             _throttle()
@@ -286,9 +333,101 @@ def _fetch_intraday_day(symbol, day_str):
             if df is not None and not df.empty:
                 LAST_ERRORS.pop(key, None)
                 return _normalize(df)
-            LAST_ERRORS[key] = "API trả về rỗng."
+            LAST_ERRORS[key] = "vnstock trả về rỗng."
         except Exception as e:
             LAST_ERRORS[key] = f"{type(e).__name__}: {e}"
             continue
-
     return pd.DataFrame()
+
+def _fetch_intraday_day(symbol: str, day_str: str) -> pd.DataFrame:
+    """
+    Lấy dữ liệu 1 phút cho 1 ngày.
+    Thứ tự ưu tiên: DNSE → SSI → TCBS → VNDirect → vnstock (VCI/MSN)
+    """
+    if symbol == "VNINDEX":
+        for fetcher in [
+            _fetch_intraday_dnse,
+            _fetch_intraday_ssi,
+            _fetch_intraday_tcbs,
+            _fetch_intraday_vndirect,
+        ]:
+            df = fetcher(day_str)
+            if not df.empty:
+                return df
+
+    # Fallback cuối: vnstock
+    return _fetch_intraday_vnstock(symbol, day_str)
+
+# ==========================================================
+# PUBLIC API
+# ==========================================================
+@st.cache_data(ttl=86400)
+def get_all_tickers(exchange='all'):
+    if not _VNSTOCK_OK:
+        return FALLBACK_TICKERS
+
+    for src in ['vci', 'kbs']:
+        try:
+            _throttle()
+            df = Listing(source=src).symbols_by_exchange()
+            df.columns = [str(c).lower().strip() for c in df.columns]
+
+            type_col = next((c for c in df.columns if 'type' in c), None)
+            if type_col:
+                df = df[df[type_col].astype(str).str.upper().isin(['STOCK', 'CP', 'CỔ PHIẾU'])]
+
+            if 'exchange' in df.columns:
+                df = df[df['exchange'].astype(str).str.upper().isin(['HOSE', 'HSX', 'HNX', 'UPCOM'])]
+                if exchange != 'all':
+                    tgt = ['HOSE', 'HSX'] if str(exchange).upper() in ('HOSE', 'HSX') else [str(exchange).upper()]
+                    df = df[df['exchange'].astype(str).str.upper().isin(tgt)]
+
+            col = 'symbol' if 'symbol' in df.columns else ('ticker' if 'ticker' in df.columns else None)
+            if col:
+                lst = [str(t).strip().upper() for t in df[col].dropna().tolist() if str(t).strip()]
+                if lst:
+                    return lst
+        except Exception as e:
+            LAST_ERRORS[f"get_all_tickers|{src}"] = f"{type(e).__name__}: {e}"
+            continue
+
+    return FALLBACK_TICKERS
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_stock_data(ticker, days_back=200):
+    cached = _read_from_cache(ticker, days_back)
+    if cached is not None and len(cached) >= min(60, days_back // 2):
+        return cached
+
+    end_date   = datetime.now().strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+    return _fetch(ticker, start_date, end_date, '1D')
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_vnindex_data(ticker="VNINDEX", days_back=365):
+    end_date   = datetime.now().strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+    return _fetch('VNINDEX', start_date, end_date, '1D')
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_intraday_vnindex():
+    """
+    Lấy dữ liệu intraday VNINDEX 1 phút.
+    Thử tối đa 6 ngày gần nhất, thu đủ 2 phiên có dữ liệu thì dừng.
+    Thứ tự nguồn: DNSE → SSI → TCBS → VNDirect → vnstock
+    """
+    frames = []
+    for offset in range(6):
+        day = (datetime.now() - timedelta(days=offset)).strftime('%Y-%m-%d')
+        df_day = _fetch_intraday_day('VNINDEX', day)
+        if not df_day.empty:
+            frames.append(df_day)
+        if len(frames) >= 2:
+            break
+
+    if not frames:
+        return pd.DataFrame()
+
+    result = pd.concat(frames, ignore_index=True)
+    result = result.dropna(subset=['time']).sort_values('time').reset_index(drop=True)
+    return result
