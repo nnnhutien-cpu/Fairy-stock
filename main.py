@@ -246,14 +246,26 @@ with tab_market:
                 st.warning("⚠️ Chưa có dữ liệu trong giờ giao dịch hôm nay.")
     else:
         st.warning("⚠️ Đang chờ dữ liệu VN-INDEX. Vui lòng tải lại sau ít phút...")
+        with st.expander("🔧 Debug: xem lý do thật vì sao dữ liệu rỗng", expanded=True):
+            try:
+                from data_loader import get_last_errors
+                errs = get_last_errors()
+                if errs:
+                    st.code("\n".join(f"{k}  ->  {v}" for k, v in errs.items()), language="text")
+                else:
+                    st.info(
+                        "get_last_errors() không có gì -> các nguồn không báo lỗi và cũng không "
+                        "trả rỗng gần đây nhất; có thể do cache 60s đang trả lại kết quả rỗng cũ. "
+                        "Bấm '🔄 CẬP NHẬT DỮ LIỆU' lần nữa hoặc đợi ~1 phút rồi thử lại."
+                    )
+            except ImportError:
+                st.error(
+                    "Chưa thấy get_last_errors() trong data_loader.py — "
+                    "kiểm tra lại file đã deploy đúng bản vá chưa."
+                )
 
-    # SECTION 2 — NHỊP ĐẬP THỊ TRƯỜNG (gọi 1 lần duy nhất)
-    st.markdown("---")
-    st.markdown("### 💓 NHỊP ĐẬP THỊ TRƯỜNG")
-    render_market_tab(chart_df, df_today)
-    # ══════════════════════════════════════════════════════════════
-    # SECTION 2 — NHỊP ĐẬP THỊ TRƯỜNG
-    # ══════════════════════════════════════════════════════════════
+    # SECTION 2 — NHỊP ĐẬP THỊ TRƯỜNG (gọi ĐÚNG 1 LẦN — trước đây bị gọi lặp 2 lần liên tiếp
+    # ở đây, đó là lý do ảnh chụp màn hình bạn gửi thấy khối "NHỊP ĐẬP THỊ TRƯỜNG" hiện 2 lần)
     st.markdown("---")
     st.markdown("### 💓 NHỊP ĐẬP THỊ TRƯỜNG")
     render_market_tab(chart_df, df_today)
