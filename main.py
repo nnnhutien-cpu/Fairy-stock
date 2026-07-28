@@ -232,38 +232,41 @@ with tab_market:
                     pd.date_range("09:00", "11:30", freq="min").strftime('%H:%M').tolist() +
                     pd.date_range("13:00", "15:00", freq="min").strftime('%H:%M').tolist()
                 )
-                chart_df = (
-                    pd.DataFrame({'hour_min': times})
-                    .merge(
-                        df_today.groupby('hour_min')['Vol_Hôm_Nay'].last().reset_index(),
-                        on='hour_min', how='left'
-                    )
-                )
-                chart_df['Vol_Hôm_Nay'] = chart_df['Vol_Hôm_Nay'].ffill()
-                chart_df.loc[chart_df['hour_min'] > max_time_actual, 'Vol_Hôm_Nay'] = None
-                chart_df.set_index('hour_min', inplace=True)
-            else:
-                st.warning("⚠️ Chưa có dữ liệu trong giờ giao dịch hôm nay.")
-    else:
-        st.warning("⚠️ Đang chờ dữ liệu VN-INDEX. Vui lòng tải lại sau ít phút...")
-        with st.expander("🔧 Debug: xem lý do thật vì sao dữ liệu rỗng", expanded=True):
-            try:
-                from data_loader import get_last_errors
-                errs = get_last_errors()
-                if errs:
-                    st.code("\n".join(f"{k}  ->  {v}" for k, v in errs.items()), language="text")
-                else:
-                    st.info(
-                        "get_last_errors() không có gì -> các nguồn không báo lỗi và cũng không "
-                        "trả rỗng gần đây nhất; có thể do cache 60s đang trả lại kết quả rỗng cũ. "
-                        "Bấm '🔄 CẬP NHẬT DỮ LIỆU' lần nữa hoặc đợi ~1 phút rồi thử lại."
-                    )
-            except ImportError:
-                st.error(
-                    "Chưa thấy get_last_errors() trong data_loader.py — "
-                    "kiểm tra lại file đã deploy đúng bản vá chưa."
-                )
+                # Build hôm nay
+chart_today = (
+    pd.DataFrame({'hour_min': times})
+    .merge(
+        df_today.groupby('hour_min')['Vol_Hôm_Nay'].last().reset_index(),
+        on='hour_min', how='left'
+    )
+)
+chart_today['Vol_Hôm_Nay'] = chart_today['Vol_Hôm_Nay'].ffill()
+chart_today.loc[chart_today['hour_min'] > max_time_actual, 'Vol_Hôm_Nay'] = None
 
+# Build hôm qua (nếu có trong intraday_df)
+today_date = df_today['time'].dt.date.iloc[-1]
+df_yesterday = intraday_df[intraday_df['time'].dt.date < today_date].copy()
+
+chart_df = chart_today.set_index('hour_min')
+
+if not df_yesterday.empty:
+    df_yesterday['hour_min'] = df_yesterday['time'].dt.strftime('%H:%M')
+    df_yesterday = df_yesterday[
+        (df_yesterday['hour_min'] >= '09:00') &
+        (df_yesterday['hour_min'] <= '15:00')
+    ].copy()
+    if not df_yesterday.empty:
+        df_yesterday['Vol_Hôm_Qua'] = df_yesterday['volume'].cumsum()
+        yday_agg = (
+            pd.DataFrame({'hour_min': times})
+            .merge(
+                df_yesterday.groupby('hour_min')['Vol_Hôm_Qua'].last().reset_index(),
+                on='hour_min', how='left'
+            )
+        )
+        yday_agg['Vol_Hôm_Qua'] = yday_agg['Vol_Hôm_Qua'].ffill()
+        yday_agg = yday_agg.set_index('hour_min')
+        chart_df = chart_df.join(yday_agg, how='left')
     # SECTION 2 — NHỊP ĐẬP THỊ TRƯỜNG (gọi ĐÚNG 1 LẦN — trước đây bị gọi lặp 2 lần liên tiếp
     # ở đây, đó là lý do ảnh chụp màn hình bạn gửi thấy khối "NHỊP ĐẬP THỊ TRƯỜNG" hiện 2 lần)
     st.markdown("---")
