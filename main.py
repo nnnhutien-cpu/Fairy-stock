@@ -236,46 +236,7 @@ with tab_market:
 
     render_market_tab(chart_df, df_today)
 
-    # ══════════════════════════════════════════════════════════════
-    # SECTION 1 — TỔNG QUAN VN-INDEX
-    # ══════════════════════════════════════════════════════════════
-    st.markdown("---")
-    if has_intraday:
-        index_change  = current_index - prev_index
-        index_chg_pct = index_change / prev_index * 100 if prev_index else 0
-        vol_change    = current_vol - prev_vol
-
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("📊 VN-INDEX",
-                  f"{current_index:,.2f}",
-                  f"{index_change:+,.2f} ({index_chg_pct:+.2f}%)")
-        c2.metric("💰 Vol hôm nay",
-                  f"{current_vol/1e6:,.1f}M CP")
-        c3.metric("⏳ Vol hôm qua",
-                  f"{prev_vol/1e6:,.1f}M CP")
-        c4.metric("🔄 So sánh vol",
-                  f"{vol_change/1e6:+,.1f}M CP")
-        c5.metric("🕒 Dữ liệu đến",
-                  max_time_actual or "—")
-    else:
-        # Ngoài giờ giao dịch — vẫn show P (từ snapshot)
-        snap_price     = snap.get("price") or 0
-        snap_chg_pct   = snap.get("change_pct") or 0
-        snap_vol_today = snap.get("vol_today") or 0
-        snap_vol_avg   = snap.get("vol_avg") or 0
-
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("📊 VN-INDEX (phiên gần nhất)",
-                  f"{snap_price:,.2f}" if snap_price else "—",
-                  f"{snap_chg_pct:+.2f}%" if snap_chg_pct else None)
-        c2.metric("💰 Vol phiên gần nhất",
-                  f"{snap_vol_today/1e6:,.1f}M CP" if snap_vol_today else "—")
-        c3.metric("📊 TB Vol 20 phiên",
-                  f"{snap_vol_avg/1e6:,.1f}M CP" if snap_vol_avg else "—")
-        c4.metric("📡 Trạng thái",  "Ngoài giờ GD")
-        st.caption("⏰ Dữ liệu intraday chỉ có trong giờ giao dịch (9:00–15:00). "
-                   "Đang hiển thị số liệu phiên gần nhất.")
-
+    
     # ══════════════════════════════════════════════════════════════
     # SECTION 2 — NHỊP ĐẬP THỊ TRƯỜNG (chart vol intraday)
     # ══════════════════════════════════════════════════════════════
