@@ -255,7 +255,7 @@ with tab_market:
     # Panel A — Xu hướng giá
     with row1_l:
         with st.container(border=True):
-            st.markdown("#### 📈 Xu hướng giá")
+        st.markdown("#### 📈 Xu hướng giá")
 
             trend_txt = snap.get("trend_text") or "—"
             ma20_txt  = snap.get("ma20_text")  or ""
