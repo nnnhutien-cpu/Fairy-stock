@@ -3,7 +3,7 @@ name: Scan Breadth Daily
 
 on:
   schedule:
-    - cron: '30 3 * * 1-5'   # 10:30 SA giờ VN (UTC+7)
+    - cron: '30 3 * * 1-5'   # 8:30 SA giờ VN (UTC+7)
     - cron: '30 8 * * 1-5'   # 15:30 CH giờ VN
   workflow_dispatch:           # chạy thủ công được
 
