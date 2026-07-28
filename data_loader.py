@@ -71,29 +71,26 @@ def _read_from_cache(ticker, days_back, max_staleness_days=4):
 # Giải pháp: chủ động rải đều request theo đúng nhịp cho phép, KHÔNG bao giờ để
 # thư viện phải tự chặn -> tốc độ ổn định, có thể ước tính chính xác, không bị "kẹt".
 _rate_lock = threading.Lock()
-from collections import deque
-_call_timestamps = deque()   # deque: popleft() O(1) thay vì list.pop(0) O(n)
-_rate_limit_per_min = 18
+_call_timestamps = []
+_rate_limit_per_min = 18  # mặc định an toàn dưới mức 20/phút của tài khoản khách
 
 def set_rate_limit(requests_per_minute: int):
-    """Gọi từ main.py khi có API key để tăng tốc (vd: 55/phút)."""
+    """Gọi hàm này từ main.py khi người dùng có API key để tăng tốc (vd: 55/phút)."""
     global _rate_limit_per_min
     _rate_limit_per_min = max(1, int(requests_per_minute))
 
 def _throttle():
     with _rate_lock:
         now = time.time()
-        cutoff = now - 60
-        while _call_timestamps and _call_timestamps[0] < cutoff:
-            _call_timestamps.popleft()
+        while _call_timestamps and now - _call_timestamps[0] > 60:
+            _call_timestamps.pop(0)
         if len(_call_timestamps) >= _rate_limit_per_min:
-            wait = 60 - (now - _call_timestamps[0]) + 0.05  # 50ms padding, bớt 50ms so với trước
+            wait = 60 - (now - _call_timestamps[0]) + 0.1
             if wait > 0:
                 time.sleep(wait)
             now = time.time()
-            cutoff = now - 60
-            while _call_timestamps and _call_timestamps[0] < cutoff:
-                _call_timestamps.popleft()
+            while _call_timestamps and now - _call_timestamps[0] > 60:
+                _call_timestamps.pop(0)
         _call_timestamps.append(now)
 
 # Danh sách dự phòng nếu xui xẻo cả 3 CTCK cùng sập API
@@ -145,33 +142,27 @@ def _fetch_yahoo(symbol, start, end):
     except Exception:
         return pd.DataFrame()
 
-def _fetch_one(symbol, start, end, interval, src, timeout=12):
-    """Gọi 1 nguồn với timeout cứng — tránh bị treo vô hạn khi API chậm."""
-    import concurrent.futures as _cf
-    with _cf.ThreadPoolExecutor(max_workers=1) as ex:
-        fut = ex.submit(
-            lambda: Quote(symbol=symbol, source=src).history(
+def _fetch(symbol, start, end, interval):
+    # CƠ CHẾ DỰ PHÒNG: Thử lần lượt các nguồn còn được vnstock>=4 hỗ trợ.
+    # LƯU Ý: 'TCBS' đã bị gỡ bỏ khỏi vnstock từ bản 4.x nên KHÔNG dùng nữa (luôn lỗi ngầm trước đây).
+    # Dùng Quote (vnstock.api.quote) thay vì Vnstock().stock(...) vì class cũ đã bị deprecated
+    # và khi khởi tạo sẽ tự động load thêm Company/Finance/Dividend... gây tốn API call
+    # và dễ bị nguồn dữ liệu chặn (403) khi quét nhiều mã cùng lúc -> đây là nguyên nhân chính khiến
+    # tab Bộ Lọc bị "kẹt" không ra dữ liệu.
+    sources = ['VCI', 'MSN']
+
+    for src in sources:
+        try:
+            _throttle()
+            df = Quote(symbol=symbol, source=src).history(
                 start=start, end=end, interval=interval
             )
-        )
-        try:
-            df = fut.result(timeout=timeout)
             if df is not None and not df.empty:
                 return _normalize(df)
         except Exception:
-            pass
-    return None
+            continue # Nếu lỗi API nguồn này, nhảy sang thử nguồn khác
 
-def _fetch(symbol, start, end, interval):
-    """Fallback chain: VCI → MSN → Yahoo (chỉ 1D). Mỗi nguồn có timeout 12s."""
-    sources = ['VCI', 'MSN']
-    for src in sources:
-        _throttle()
-        result = _fetch_one(symbol, start, end, interval, src, timeout=12)
-        if result is not None:
-            return result
-
-    # Nếu cả nội địa đều sập, cầu cứu Yahoo Finance
+    # Nếu cả các nguồn nội địa đều sập, cầu cứu Yahoo Finance
     if interval == '1D':
         return _fetch_yahoo(symbol, start, end)
 
@@ -211,40 +202,29 @@ def get_all_tickers(exchange='all'):
     # Chỉ khi mạng rớt sạch thì mới phải dùng 10 mã dự bị
     return FALLBACK_TICKERS
 
-def _ttl_until_next_open():
-    """
-    Trả về số giây còn lại đến 9:00 sáng ngày giao dịch tiếp theo.
-    Dữ liệu kết phiên (1D) không thay đổi cho đến khi phiên mới mở —
-    cache đến lúc đó giúp tránh hoàn toàn việc refetch thừa trong phiên.
-    """
-    now = datetime.now()
-    # Nếu trước 9:00 sáng hôm nay -> cache đến 9:00 hôm nay
-    target = now.replace(hour=9, minute=0, second=0, microsecond=0)
-    if now >= target:
-        # Sau 9:00 -> cache đến 9:00 ngày mai (bỏ qua cuối tuần không cần thiết)
-        target += timedelta(days=1)
-    return max(int((target - now).total_seconds()), 300)  # tối thiểu 5 phút
-
-@st.cache_data(ttl=_ttl_until_next_open(), show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_stock_data(ticker, days_back=200):
-    """Dữ liệu lịch sử 1D — cache đến đầu phiên kế tiếp, không refetch trong phiên."""
+    # 1. Ưu tiên đọc từ cache Supabase (bot nền bơm sẵn hàng ngày) -> TỨC THÌ, không tốn quota API.
     cached = _read_from_cache(ticker, days_back)
     if cached is not None and len(cached) >= min(60, days_back // 2):
         return cached
-    end_date   = datetime.now().strftime('%Y-%m-%d')
+
+    # 2. Không có cache / cache quá cũ -> gọi API sống như bình thường (chậm hơn nhưng luôn đúng).
+    end_date = datetime.now().strftime('%Y-%m-%d')
     start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
     return _fetch(ticker, start_date, end_date, '1D')
 
-@st.cache_data(ttl=_ttl_until_next_open(), show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_vnindex_data(ticker="VNINDEX", days_back=365):
-    """Dữ liệu lịch sử VNINDEX 1D — cache đến đầu phiên kế tiếp."""
-    end_date   = datetime.now().strftime('%Y-%m-%d')
+    end_date = datetime.now().strftime('%Y-%m-%d')
     start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
     return _fetch('VNINDEX', start_date, end_date, '1D')
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_intraday_vnindex():
-    """Dữ liệu tick 1m hôm nay — cache 60s."""
-    today = datetime.now().strftime('%Y-%m-%d')
-    df = _fetch('VNINDEX', today, today, '1m')
-    return df if df is not None and not df.empty else pd.DataFrame()
+    end_date = datetime.now().strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
+    df = _fetch('VNINDEX', start_date, end_date, '1m')
+    if not df.empty:
+        return df
+    return pd.DataFrame()
