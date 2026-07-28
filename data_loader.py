@@ -242,10 +242,9 @@ def get_vnindex_data(ticker="VNINDEX", days_back=365):
     start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
     return _fetch('VNINDEX', start_date, end_date, '1D')
 
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def get_intraday_vnindex():
-    """Dữ liệu tick 1m — cache 30s, dùng riêng cho Tab 1 (real-time chart)."""
-    end_date   = datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
-    df = _fetch('VNINDEX', start_date, end_date, '1m')
-    return df if not df.empty else pd.DataFrame()
+    """Dữ liệu tick 1m hôm nay — cache 60s."""
+    today = datetime.now().strftime('%Y-%m-%d')
+    df = _fetch('VNINDEX', today, today, '1m')
+    return df if df is not None and not df.empty else pd.DataFrame()
