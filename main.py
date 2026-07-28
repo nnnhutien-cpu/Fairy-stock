@@ -248,7 +248,7 @@ with tab_market:
     # SECTION 3 — PHÂN TÍCH XU HƯỚNG (2 × 2 grid)
     # ══════════════════════════════════════════════════════════════
     st.markdown("---")
-    st.markdown("### 📊 PHÂN TÍCH XU HƯỚNG")
+        st.markdown("### 🧠 PHÂN TÍCH XU HƯỚNG")
 
     row1_l, row1_r = st.columns(2)
 
@@ -259,26 +259,27 @@ with tab_market:
 
             trend_txt = snap.get("trend_text") or "—"
             ma20_txt  = snap.get("ma20_text")  or ""
-            support   = snap.get("support")    or 0
-            resist    = snap.get("resistance") or 0
+            support    = snap.get("support")    or 0
+            resist     = snap.get("resistance") or 0
 
-            # Chỉ show "Đang tải" nếu thực sự đang load, còn không có data thì show "—"
+            # Chỉ show "Đang tải" nếu thực sự đang load
             if snap_error and not snap.get("ma20"):
-                st.caption(f"⚠️ Chưa có dữ liệu kỹ thuật")
+                st.caption(f"⚠️ {snap_error[:60]}")
             else:
                 st.markdown(f"**{trend_txt}**")
                 if ma20_txt and ma20_txt != "—":
                     st.caption(ma20_txt)
 
             ma_c1, ma_c2, ma_c3 = st.columns(3)
-            ma_c1.metric("MA20",  f"{snap['ma20']:.1f}"  if snap.get('ma20')  else "—")
-            ma_c2.metric("MA50",  f"{snap['ma50']:.1f}"  if snap.get('ma50')  else "—")
-            ma_c3.metric("MA200", f"{snap['ma200']:.1f}" if snap.get('ma200') else "—")
+            ma_c1.metric("MA20",  f"{snap.get('ma20'):.1f}"  if snap.get('ma20')  else "—")
+            ma_c2.metric("MA50",  f"{snap.get('ma50'):.1f}"  if snap.get('ma50')  else "—")
+            ma_c3.metric("MA200", f"{snap.get('ma200'):.1f}" if snap.get('ma200') else "—")
 
             if support or resist:
                 st.markdown(
-                    f"🟢 **Hỗ trợ:** `{support:.1f}` &nbsp;·&nbsp; "
-                    f"🔴 **Kháng cự:** `{resist:.1f}`"
+                    f"**🟢 Hỗ trợ:** `{support:.1f}` "
+                    f"&nbsp;•&nbsp; "
+                    f"**🔴 Kháng cự:** `{resist:.1f}`"
                 )
 
     # Panel B — Định giá P/E
