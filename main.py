@@ -162,6 +162,38 @@ with tab_market:
             st.rerun()
     st.divider()
 
+    # --- Khởi tạo snapshot & các biến phụ thuộc ---
+    snap = {}
+    snap_error = None
+    pe_stats_data = None
+    pe_hist = None
+    breadth = None
+    reco = None
+
+    try:
+        snap = market_snapshot(symbol="VNINDEX", days=250) or {}
+    except Exception as e:
+        snap_error = str(e)
+
+    try:
+        _price = snap.get("price") or 0
+        pe_now_val = valuation.get_current_pe(_price if _price > 0 else None)
+        pe_hist    = valuation.get_pe_history(years=20)
+        pe_stats_data = valuation.pe_stats(pe_hist, pe_now_val)
+    except Exception:
+        pass
+
+    try:
+        breadth = get_market_breadth()
+    except Exception:
+        pass
+
+    try:
+        reco = market_recommendation(snap, pe_stats=pe_stats_data)
+    except Exception:
+        pass
+
+    # --- Intraday data ---
     intraday_df = get_intraday_vnindex()
     chart_df, df_today = None, None
     current_index = 0
@@ -181,47 +213,45 @@ with tab_market:
 
         if 'time' in intraday_df.columns and 'volume' in intraday_df.columns and 'close' in intraday_df.columns:
             intraday_df['volume'] = pd.to_numeric(intraday_df['volume'], errors='coerce').fillna(0)
-            intraday_df['close'] = pd.to_numeric(intraday_df['close'], errors='coerce').fillna(0)
-            intraday_df['time'] = pd.to_datetime(intraday_df['time'])
-            intraday_df['date'] = intraday_df['time'].dt.date
+            intraday_df['close']  = pd.to_numeric(intraday_df['close'],  errors='coerce').fillna(0)
+            intraday_df['time']   = pd.to_datetime(intraday_df['time'])
+            intraday_df['date']   = intraday_df['time'].dt.date
             intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
-
             intraday_df = intraday_df[(intraday_df['hour_min'] >= '09:00') & (intraday_df['hour_min'] <= '15:00')]
 
             dates = sorted(intraday_df['date'].unique())
             if len(dates) >= 2:
                 today_date = dates[-1]
-                yest_date = dates[-2]
+                yest_date  = dates[-2]
 
                 df_today = intraday_df[intraday_df['date'] == today_date].copy()
-                df_yest = intraday_df[intraday_df['date'] == yest_date].copy()
+                df_yest  = intraday_df[intraday_df['date'] == yest_date].copy()
 
                 df_today['Vol_Hôm_Nay'] = df_today['volume'].cumsum()
-                df_yest['Vol_Hôm_Qua'] = df_yest['volume'].cumsum()
+                df_yest['Vol_Hôm_Qua']  = df_yest['volume'].cumsum()
 
                 current_index = df_today['close'].iloc[-1] if not df_today.empty else 0
-                prev_index = df_yest['close'].iloc[-1] if not df_yest.empty else current_index
-                index_change = current_index - prev_index
+                prev_index    = df_yest['close'].iloc[-1]  if not df_yest.empty  else current_index
+                index_change  = current_index - prev_index
 
                 current_vol = df_today['Vol_Hôm_Nay'].iloc[-1] if not df_today.empty else 0
-                prev_vol = df_yest['Vol_Hôm_Qua'].iloc[-1] if not df_yest.empty else 0
-                vol_change = current_vol - prev_vol
+                prev_vol    = df_yest['Vol_Hôm_Qua'].iloc[-1]  if not df_yest.empty  else 0
+                vol_change  = current_vol - prev_vol
 
                 m1, m2, m3 = st.columns(3)
-                m1.metric("📊 Chỉ số VN-INDEX", f"{current_index:,.2f} đ", f"{index_change:,.2f} đ")
-                m2.metric("💰 Thanh khoản Hôm Nay", f"{current_vol:,.0f} CP", f"{vol_change:,.0f} CP" if vol_change != 0 else None)
+                m1.metric("📊 Chỉ số VN-INDEX",        f"{current_index:,.2f} đ", f"{index_change:,.2f} đ")
+                m2.metric("💰 Thanh khoản Hôm Nay",    f"{current_vol:,.0f} CP",  f"{vol_change:,.0f} CP" if vol_change != 0 else None)
                 m3.metric("⏳ Thanh khoản Hôm Qua (EOD)", f"{prev_vol:,.0f} CP")
 
-                times_morning = pd.date_range("09:00", "11:30", freq="min").strftime('%H:%M').tolist()
+                times_morning   = pd.date_range("09:00", "11:30", freq="min").strftime('%H:%M').tolist()
                 times_afternoon = pd.date_range("13:00", "15:00", freq="min").strftime('%H:%M').tolist()
                 time_df = pd.DataFrame({'hour_min': times_morning + times_afternoon})
 
-                df_yest_agg = df_yest.groupby('hour_min')['Vol_Hôm_Qua'].last().reset_index()
+                df_yest_agg  = df_yest.groupby('hour_min')['Vol_Hôm_Qua'].last().reset_index()
                 df_today_agg = df_today.groupby('hour_min')['Vol_Hôm_Nay'].last().reset_index()
 
-                chart_df = pd.merge(time_df, df_yest_agg, on='hour_min', how='left')
+                chart_df = pd.merge(time_df, df_yest_agg,  on='hour_min', how='left')
                 chart_df = pd.merge(chart_df, df_today_agg, on='hour_min', how='left')
-
                 chart_df['Vol_Hôm_Qua'] = chart_df['Vol_Hôm_Qua'].ffill()
 
                 if not df_today.empty:
@@ -236,9 +266,8 @@ with tab_market:
 
     render_market_tab(chart_df, df_today)
 
-    
     # ══════════════════════════════════════════════════════════════
-    # SECTION 2 — NHỊP ĐẬP THỊ TRƯỜNG (chart vol intraday)
+    # SECTION 2 — NHỊP ĐẬP THỊ TRƯỜNG
     # ══════════════════════════════════════════════════════════════
     st.markdown("---")
     st.markdown("### 💓 NHỊP ĐẬP THỊ TRƯỜNG")
@@ -255,14 +284,13 @@ with tab_market:
     # Panel A — Xu hướng giá
     with row1_l:
         with st.container(border=True):
-        st.markdown("#### 📈 Xu hướng giá")
+            st.markdown("#### 📈 Xu hướng giá")
 
             trend_txt = snap.get("trend_text") or "—"
             ma20_txt  = snap.get("ma20_text")  or ""
-            support    = snap.get("support")    or 0
-            resist     = snap.get("resistance") or 0
+            support   = snap.get("support")    or 0
+            resist    = snap.get("resistance") or 0
 
-            # Chỉ show "Đang tải" nếu thực sự đang load
             if snap_error and not snap.get("ma20"):
                 st.caption(f"⚠️ {snap_error[:60]}")
             else:
@@ -320,7 +348,7 @@ with tab_market:
                 except Exception:
                     pass
 
-    # Hàng 2: Chỉ báo KT | Dòng tiền
+    # Hàng 2
     row2_l, row2_r = st.columns(2)
 
     # Panel C — Chỉ báo kỹ thuật
@@ -337,15 +365,12 @@ with tab_market:
             rsi_emoji = "🔴" if rsi_val >= 70 else ("🟢" if rsi_val <= 30 else "🟡")
             st.markdown(f"**RSI(14):** {rsi_emoji} `{rsi_val:.1f}` — {rsi_txt}")
             st.progress(min(rsi_val / 100, 1.0), text=f"RSI = {rsi_val:.1f}")
-
             st.divider()
 
             macd_emoji = "🟢" if macd_cross == "Vàng" else "🔴"
             macd_label = "Cắt lên (Vàng)" if macd_cross == "Vàng" else (
                          "Cắt xuống (Chết)" if macd_cross not in ["—", None] else "—")
-            st.markdown(
-                f"**MACD:** `{macd_val:.3f}` &nbsp;·&nbsp; **Signal:** `{macd_sig:.3f}`"
-            )
+            st.markdown(f"**MACD:** `{macd_val:.3f}` &nbsp;·&nbsp; **Signal:** `{macd_sig:.3f}`")
             if macd_cross not in ["—", None]:
                 st.markdown(f"**Trạng thái:** {macd_emoji} {macd_label}")
             else:
@@ -365,8 +390,8 @@ with tab_market:
                 st.markdown(f"**{vol_txt}**")
 
             v1, v2 = st.columns(2)
-            v1.metric("Vol phiên GD",  f"{vol_today/1e6:,.1f}M" if vol_today else "—")
-            v2.metric("TB 20 phiên",   f"{vol_avg/1e6:,.1f}M"   if vol_avg   else "—")
+            v1.metric("Vol phiên GD", f"{vol_today/1e6:,.1f}M" if vol_today else "—")
+            v2.metric("TB 20 phiên",  f"{vol_avg/1e6:,.1f}M"   if vol_avg   else "—")
 
             if vol_ratio and vol_avg:
                 st.progress(
@@ -377,7 +402,7 @@ with tab_market:
                 st.caption("Chưa có dữ liệu volume phiên")
 
     # ══════════════════════════════════════════════════════════════
-    # SECTION 4 — SỨC KHỎE THỊ TRƯỜNG (breadth từ JSON)
+    # SECTION 4 — SỨC KHỎE THỊ TRƯỜNG
     # ══════════════════════════════════════════════════════════════
     st.markdown("---")
     st.markdown("### 🏥 SỨC KHỎE THỊ TRƯỜNG (400 mã HOSE)")
@@ -399,19 +424,16 @@ with tab_market:
         st.caption(f"🕒 Cập nhật: **{b_updated}** — {b_total} mã hợp lệ")
 
         bb1, bb2, bb3, bb4 = st.columns(4)
-        bb1.metric("📈 A/D%",
-                   f"{b_ad:.1f}%",
+        bb1.metric("📈 A/D%", f"{b_ad:.1f}%",
                    delta="Tăng giá" if b_ad >= 50 else "Giảm giá",
                    delta_color="normal" if b_ad >= 50 else "inverse")
         bb2.metric("📊 % trên MA20", f"{b_ma20:.1f}%")
         bb3.metric("📊 % trên MA50", f"{b_ma50:.1f}%")
-
         bs_color = "🟢" if b_score >= 3 else ("🔴" if b_score <= -3 else "🟡")
         bb4.metric("🎯 Breadth Score", f"{b_score:+d}", delta=f"{bs_color}")
 
-        # Progress bars
-        ad_color  = "🟢" if b_ad  >= 50 else "🔴"
-        ma_color  = "🟢" if b_ma50 >= 50 else ("🟡" if b_ma50 >= 30 else "🔴")
+        ad_color = "🟢" if b_ad   >= 50 else "🔴"
+        ma_color = "🟢" if b_ma50 >= 50 else ("🟡" if b_ma50 >= 30 else "🔴")
         st.progress(b_ad  / 100, text=f"{ad_color} A/D: {b_ad:.1f}% mã tăng giá")
         st.progress(b_ma50 / 100, text=f"{ma_color} Cấu trúc: {b_ma50:.1f}% mã trên MA50")
 
@@ -458,7 +480,6 @@ with tab_market:
 
         st.caption("⚠️ Khuyến nghị dựa trên PTKT + định giá, không phải tư vấn đầu tư chính thức.")
 
-        # Bảng quy đổi Score → Tỷ trọng
         with st.expander("📋 Bảng quy đổi Score → Tỷ trọng", expanded=False):
             st.caption(
                 "Tổng Score = Breadth (–8→+8) + PTKT (–5→+5) + P/E (–2→+2) = khung –15 đến +15"
@@ -479,12 +500,10 @@ with tab_market:
                 (-99,  5, "95%", "💀 THOÁT KHỎI THỊ TRƯỜNG"),
             ]
 
-            # Header
             h = st.columns([1.2, 1, 1, 2.5, 1.2])
             for col, lbl in zip(h, ["Score", "CP%", "Tiền%", "Hành động", ""]):
                 col.markdown(f"**{lbl}**")
 
-            # Tìm dòng hiện tại
             matched = None
             for i, (thr, cp, cash, act) in enumerate(score_table):
                 if cur_score >= thr:
