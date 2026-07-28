@@ -151,358 +151,355 @@ tab_market, tab_screener, tab_results, tab_signals, tab_simulation, tab_backtest
 ])
 
 # ==========================================
-# TAB 1: THỊ TRƯỜNG CHUNG
+# TAB 1: THỊ TRƯỜNG CHUNG — BỐ CỤC MỚI
 # ==========================================
 with tab_market:
+
+    # ── HEADER ──────────────────────────────────────────────────
     col_title, col_btn = st.columns([4, 1])
     with col_title:
         st.subheader("🌟 TỔNG QUAN THỊ TRƯỜNG REAL-TIME")
     with col_btn:
-        if st.button("🔄 CẬP NHẬT DỮ LIỆU", type="primary", use_container_width=True):
+        if st.button("🔄 CẬP NHẬT", type="primary", use_container_width=True):
             get_intraday_vnindex.clear()
             st.rerun()
-    st.divider()
 
+    # ═══════════════════════════════════════════════════════════════
+    # SECTION 1 — TỔNG QUAN THỊ TRƯỜNG (intraday metrics)
+    # ═══════════════════════════════════════════════════════════════
     intraday_df = get_intraday_vnindex()
     chart_df, df_today = None, None
     current_index = 0
 
     if intraday_df is not None and not intraday_df.empty:
+        # Chuẩn hoá tên cột
         col_mapping = {}
         for col in intraday_df.columns:
-            lower_col = str(col).lower().strip()
-            if lower_col in ['close', 'price', 'c', 'điểm', 'index', 'indexvalue']:
+            lc = str(col).lower().strip()
+            if lc in ['close', 'price', 'c', 'điểm', 'index', 'indexvalue']:
                 col_mapping[col] = 'close'
-            elif lower_col in ['volume', 'vol', 'v', 'khối lượng', 'matchvolume']:
+            elif lc in ['volume', 'vol', 'v', 'khối lượng', 'matchvolume']:
                 col_mapping[col] = 'volume'
-            elif lower_col in ['time', 't', 'thời gian']:
+            elif lc in ['time', 't', 'thời gian']:
                 col_mapping[col] = 'time'
-
         intraday_df.rename(columns=col_mapping, inplace=True)
 
-        if 'time' in intraday_df.columns and 'volume' in intraday_df.columns and 'close' in intraday_df.columns:
+        if {'time', 'volume', 'close'}.issubset(intraday_df.columns):
             intraday_df['volume'] = pd.to_numeric(intraday_df['volume'], errors='coerce').fillna(0)
-            intraday_df['close'] = pd.to_numeric(intraday_df['close'], errors='coerce').fillna(0)
-            intraday_df['time'] = pd.to_datetime(intraday_df['time'])
-            intraday_df['date'] = intraday_df['time'].dt.date
+            intraday_df['close']  = pd.to_numeric(intraday_df['close'],  errors='coerce').fillna(0)
+            intraday_df['time']   = pd.to_datetime(intraday_df['time'])
+            intraday_df['date']   = intraday_df['time'].dt.date
             intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
-
-            intraday_df = intraday_df[(intraday_df['hour_min'] >= '09:00') & (intraday_df['hour_min'] <= '15:00')]
+            intraday_df = intraday_df[
+                (intraday_df['hour_min'] >= '09:00') &
+                (intraday_df['hour_min'] <= '15:00')
+            ]
 
             dates = sorted(intraday_df['date'].unique())
             if len(dates) >= 2:
                 today_date = dates[-1]
-                yest_date = dates[-2]
-
+                yest_date  = dates[-2]
                 df_today = intraday_df[intraday_df['date'] == today_date].copy()
-                df_yest = intraday_df[intraday_df['date'] == yest_date].copy()
+                df_yest  = intraday_df[intraday_df['date'] == yest_date].copy()
 
                 df_today['Vol_Hôm_Nay'] = df_today['volume'].cumsum()
-                df_yest['Vol_Hôm_Qua'] = df_yest['volume'].cumsum()
+                df_yest['Vol_Hôm_Qua']  = df_yest['volume'].cumsum()
 
                 current_index = df_today['close'].iloc[-1] if not df_today.empty else 0
-                prev_index = df_yest['close'].iloc[-1] if not df_yest.empty else current_index
-                index_change = current_index - prev_index
+                prev_index    = df_yest['close'].iloc[-1]  if not df_yest.empty  else current_index
+                index_change  = current_index - prev_index
 
                 current_vol = df_today['Vol_Hôm_Nay'].iloc[-1] if not df_today.empty else 0
-                prev_vol = df_yest['Vol_Hôm_Qua'].iloc[-1] if not df_yest.empty else 0
-                vol_change = current_vol - prev_vol
+                prev_vol    = df_yest['Vol_Hôm_Qua'].iloc[-1]  if not df_yest.empty  else 0
+                vol_change  = current_vol - prev_vol
 
-                m1, m2, m3 = st.columns(3)
-                m1.metric("📊 Chỉ số VN-INDEX", f"{current_index:,.2f} đ", f"{index_change:,.2f} đ")
-                m2.metric("💰 Thanh khoản Hôm Nay", f"{current_vol:,.0f} CP", f"{vol_change:,.0f} CP" if vol_change != 0 else None)
-                m3.metric("⏳ Thanh khoản Hôm Qua (EOD)", f"{prev_vol:,.0f} CP")
+                # ── 6 metric cards ─────────────────────────────────────
+                m1, m2, m3, m4, m5, m6 = st.columns(6)
+                m1.metric("📊 VN-INDEX",          f"{current_index:,.2f}",  f"{index_change:+,.2f}")
+                m2.metric("📈 Thay đổi %",
+                          f"{index_change / prev_index * 100:+.2f}%" if prev_index else "—")
+                m3.metric("💰 Vol Hôm Nay",        f"{current_vol/1e6:,.1f}M CP")
+                m4.metric("⏳ Vol Hôm Qua",        f"{prev_vol/1e6:,.1f}M CP")
+                m5.metric("🔄 So sánh Vol",
+                          f"{vol_change/1e6:+,.1f}M CP" if vol_change != 0 else "=")
+                m6.metric("⏱ Giá trị giao dịch",  "—")   # tuỳ data thực tế
 
-                times_morning = pd.date_range("09:00", "11:30", freq="min").strftime('%H:%M').tolist()
-                times_afternoon = pd.date_range("13:00", "15:00", freq="min").strftime('%H:%M').tolist()
-                time_df = pd.DataFrame({'hour_min': times_morning + times_afternoon})
+                # ── Xây chart_df cho render_market_tab ─────────────────
+                times_all = (
+                    pd.date_range("09:00", "11:30", freq="min").strftime('%H:%M').tolist() +
+                    pd.date_range("13:00", "15:00", freq="min").strftime('%H:%M').tolist()
+                )
+                time_df = pd.DataFrame({'hour_min': times_all})
 
-                df_yest_agg = df_yest.groupby('hour_min')['Vol_Hôm_Qua'].last().reset_index()
+                df_yest_agg  = df_yest.groupby('hour_min')['Vol_Hôm_Qua'].last().reset_index()
                 df_today_agg = df_today.groupby('hour_min')['Vol_Hôm_Nay'].last().reset_index()
 
-                chart_df = pd.merge(time_df, df_yest_agg, on='hour_min', how='left')
+                chart_df = pd.merge(time_df, df_yest_agg,  on='hour_min', how='left')
                 chart_df = pd.merge(chart_df, df_today_agg, on='hour_min', how='left')
-
                 chart_df['Vol_Hôm_Qua'] = chart_df['Vol_Hôm_Qua'].ffill()
 
                 if not df_today.empty:
                     max_time_actual = df_today['hour_min'].max()
                     chart_df['Vol_Hôm_Nay'] = chart_df['Vol_Hôm_Nay'].ffill()
                     chart_df.loc[chart_df['hour_min'] > max_time_actual, 'Vol_Hôm_Nay'] = None
-                    st.info(f"🕒 Tình trạng luồng dữ liệu: API VN-INDEX đang trả số thực tế đến mốc **{max_time_actual}**")
 
                 chart_df.set_index('hour_min', inplace=True)
+
     else:
-        st.warning("⚠️ Đang chờ dữ liệu VN-INDEX từ API. Vui lòng tải lại trang sau ít phút...")
+        st.warning("⚠️ Đang chờ dữ liệu VN-INDEX từ API. Vui lòng tải lại sau ít phút...")
 
-    render_market_tab(chart_df, df_today)
-
-    # ============================================================
-    # PHÂN TÍCH XU HƯỚNG & KHUYẾN NGHỊ THỊ TRƯỜNG
-    # ============================================================
+    # ═══════════════════════════════════════════════════════════════
+    # SECTION 2 — NHỊP ĐẬP THỊ TRƯỜNG (chart volume theo phút)
+    # ═══════════════════════════════════════════════════════════════
     st.markdown("---")
-    st.markdown("### 📊 Phân tích Xu hướng & Khuyến nghị Thị trường")
+    st.markdown("### 💓 NHỊP ĐẬP THỊ TRƯỜNG")
+    render_market_tab(chart_df, df_today)   # hàm render chart volume intraday
 
-    # --- Snapshot thị trường ---
+    # ── Tải snapshot 1 lần duy nhất (dùng cho Section 3 + Section 5) ──
     snap_error = None
     try:
         snap = market_snapshot(symbol="VNINDEX", days=250)
         if snap is None:
-            snap = {
-                "price": 0, "change": 0, "change_pct": 0,
-                "ma20": None, "ma50": None, "ma200": None,
-                "trend_text": "⏳ Đang tải…", "ma20_text": "—",
-                "ma20_alert": "info",
-                "vol_today": 0, "vol_avg": 0, "vol_ratio": 0,
-                "vol_text": "—",
-                "rsi": 50, "rsi_text": "—", "rsi_color": "info",
-                "macd": 0, "macd_signal": 0, "macd_cross": "—", "macd_color": "info",
-                "support": 0, "resistance": 0,
-            }
+            raise ValueError("market_snapshot trả None")
     except Exception as e:
         snap_error = str(e)
         snap = {
-            "price": 0, "change": 0, "change_pct": 0,
+            "price": current_index, "change": 0, "change_pct": 0,
             "ma20": None, "ma50": None, "ma200": None,
-            "trend_text": "⏳ Đang tải…", "ma20_text": "—",
-            "ma20_alert": "info",
-            "vol_today": 0, "vol_avg": 0, "vol_ratio": 0,
-            "vol_text": "—",
+            "trend_text": "⏳ Đang tải…", "ma20_text": "—", "ma20_alert": "info",
+            "vol_today": 0, "vol_avg": 0, "vol_ratio": 0, "vol_text": "—",
             "rsi": 50, "rsi_text": "—", "rsi_color": "info",
             "macd": 0, "macd_signal": 0, "macd_cross": "—", "macd_color": "info",
             "support": 0, "resistance": 0,
         }
 
-    if snap_error:
-        st.caption(f"⚠️ Đang tải thị trường... ({snap_error[:50]})")
-
-    # --- Tính khuyến nghị 1 LẦN duy nhất ---
+    # ── Tải P/E + khuyến nghị 1 lần duy nhất ──────────────────────
+    pe_stats_data = None
+    reco = None
     try:
-        pe_now   = valuation.get_current_pe("VNINDEX")
-        pe_hist  = valuation.get_pe_history(years=20)
-        stats    = valuation.pe_stats(pe_hist, pe_now)
-        reco     = market_recommendation(snap, pe_stats=stats)
+        pe_now  = valuation.get_current_pe("VNINDEX")
+        pe_hist = valuation.get_pe_history(years=20)
+        pe_stats_data = valuation.pe_stats(pe_hist, pe_now)
+        reco = market_recommendation(snap, pe_stats=pe_stats_data)
     except Exception as e:
-        stats = None
-        reco  = None
+        if snap_error is None:
+            st.caption(f"⚠️ Không tính được P/E / Khuyến nghị: {str(e)[:60]}")
 
-    # ============================================================
-    # HÀNG 1: XU HƯỚNG GIÁ | DÒNG TIỀN
-    # ============================================================
-    c1, c2 = st.columns(2)
+    # ═══════════════════════════════════════════════════════════════
+    # SECTION 3 — PHÂN TÍCH XU HƯỚNG (2x2 grid)
+    # ═══════════════════════════════════════════════════════════════
+    st.markdown("---")
+    st.markdown("### 📊 PHÂN TÍCH XU HƯỚNG")
 
-    with c1:
+    if snap_error:
+        st.caption(f"⚠️ Đang tải dữ liệu kỹ thuật... ({snap_error[:60]})")
+
+    row1_c1, row1_c2 = st.columns(2)
+
+    # ── Panel A: Xu hướng giá ──────────────────────────────────────
+    with row1_c1:
         with st.container(border=True):
             st.markdown("#### 📈 Xu hướng giá")
-            st.markdown(f"### {snap['trend_text']}")
-            st.caption(snap.get("ma20_text", "—"))
+            st.markdown(f"**{snap['trend_text']}**")
+            if snap.get('ma20_text'):
+                st.caption(snap['ma20_text'])
 
-            m1, m2, m3 = st.columns(3)
-            m1.metric("MA20",  f"{snap['ma20']:.1f}"  if snap.get('ma20')  else "—")
-            m2.metric("MA50",  f"{snap['ma50']:.1f}"  if snap.get('ma50')  else "—")
-            m3.metric("MA200", f"{snap['ma200']:.1f}" if snap.get('ma200') else "—")
+            ma1, ma2, ma3 = st.columns(3)
+            ma1.metric("MA20",  f"{snap['ma20']:.1f}"  if snap.get('ma20')  else "—")
+            ma2.metric("MA50",  f"{snap['ma50']:.1f}"  if snap.get('ma50')  else "—")
+            ma3.metric("MA200", f"{snap['ma200']:.1f}" if snap.get('ma200') else "—")
 
             st.markdown(
-                f"**🟢 Hỗ trợ:** `{snap['support']:.1f}` &nbsp;•&nbsp; "
-                f"**🔴 Kháng cự:** `{snap['resistance']:.1f}`"
+                f"🟢 **Hỗ trợ:** `{snap['support']:.1f}` &nbsp;·&nbsp; "
+                f"🔴 **Kháng cự:** `{snap['resistance']:.1f}`"
             )
 
-    with c2:
+    # ── Panel B: Định giá P/E ──────────────────────────────────────
+    with row1_c2:
         with st.container(border=True):
-            st.markdown("#### 🔊 Dòng tiền (Volume)")
-            st.markdown(f"### {snap['vol_text']}")
-
-            v1, v2 = st.columns(2)
-            v1.metric("Vol hôm nay", f"{snap['vol_today']:,.0f}")
-            v2.metric("TB 20 phiên", f"{snap['vol_avg']:,.0f}")
-
-            vol_ratio = snap.get('vol_ratio', 0) or 0
-            st.progress(
-                min(vol_ratio / 2.0, 1.0),
-                text=f"Tỷ lệ: {vol_ratio}x trung bình"
-            )
-
-    # ============================================================
-    # HÀNG 2: CHỈ BÁO KT | KHUYẾN NGHỊ HÀNH ĐỘNG
-    # ============================================================
-    c3, c4 = st.columns(2)
-
-    with c3:
-        with st.container(border=True):
-            st.markdown("#### 📊 Chỉ báo Kỹ thuật")
-
-            # RSI
-            rsi_val = snap['rsi']
-            if rsi_val >= 70:    rsi_emoji = "🔴"
-            elif rsi_val <= 30:  rsi_emoji = "🟢"
-            else:                rsi_emoji = "🟡"
-            st.markdown(f"**RSI(14):** {rsi_emoji} `{rsi_val}` — {snap['rsi_text']}")
-
-            # MACD
-            st.markdown(
-                f"**MACD:** `{snap['macd']}` &nbsp;|&nbsp; "
-                f"**Signal:** `{snap['macd_signal']}`"
-            )
-
-            macd_color = snap.get('macd_color', 'gray')
-            macd_cross = snap.get('macd_cross', '—')
-
-            if macd_cross == "Vàng":
-                macd_emoji = "🟢"
-                macd_label = "Cắt lên (Vàng)"
+            st.markdown("#### 💰 Định giá P/E (20 năm)")
+            if pe_stats_data is None:
+                st.info("⏳ Đang tải P/E...")
             else:
-                macd_emoji = "🔴"
-                macd_label = "Cắt xuống (Chết)"
-
-            st.markdown(f"**Trạng thái:** {macd_emoji} {macd_label}")
-
-    with c4:
-        with st.container(border=True):
-            st.markdown("#### 💡 Khuyến nghị Hành động")
-
-            if reco is None:
-                st.warning("⚠️ Đang tính toán...")
-            else:
-                # Hành động chính
-                color_map = {
-                    "danger": "red", "warning": "orange", "success": "green",
-                    "info": "blue", "gray": "gray"
-                }
-                st_color = color_map.get(reco.get("color", "gray"), "gray")
-
-                action_map = {
-                    "danger": "🔴", "warning": "🟠",
-                    "success": "🟢", "info": "🔵"
-                }
-                action_emoji = action_map.get(reco.get("color", "info"), "🔵")
-
-                st.markdown(f"## {action_emoji} :{st_color}[{reco['action']}]")
-
-                stock_pct = reco.get("stock", 50) or 50
-                cash_pct  = reco.get("cash", 50)  or 50
-
-                s1, s2 = st.columns(2)
-                s1.metric("📈 Nắm giữ CP",  f"{stock_pct}%")
-                s2.metric("💵 Tiền mặt",    f"{cash_pct}%")
-
-                # Progress bar
-                st.progress(
-                    stock_pct / 100,
-                    text=f"Tỷ trọng: CP {stock_pct}% / Tiền {cash_pct}%"
-                )
-
-                # Lý do
-                with st.expander("📋 Lý do khuyến nghị", expanded=True):
-                    for r in reco.get("reasons", []):
-                        st.markdown(f"- {r}")
-
-        st.caption("⚠️ Khuyến nghị dựa trên PTKT + định giá, không phải tư vấn đầu tư chính thức.")
-        
-    # ============================================================ 
-    # BẢNG QUY ĐỔI SCORE → TỶ TRỌNG
-    # ============================================================
-    with st.expander("📋 Bảng quy đổi Score → Tỷ trọng", expanded=False):
-        st.markdown("**Cách tính Score:**")
-        st.markdown("- **Breadth** (% mã tăng HOSE): -5 đến +5 điểm")
-        st.markdown("- **Trend** (MA20): -2 đến +2 điểm")
-        st.markdown("- **RSI**: -1 / +1 điểm")
-        st.markdown("- **MACD**: -1 / +1 điểm")
-        st.markdown("- **Volume**: -1 / +1 điểm")
-        st.markdown("- **P/E**: -2 đến +2 điểm")
-        st.markdown("- **Tổng**: -11 đến +11 điểm")
-
-        st.divider()
-
-        # Bảng điểm
-        score_table = [
-            {"score": "≥ 9",  "stock": "80%", "cash": "20%", "action": "🔥 MUA RẤT MẠNH",        "color": "🟢"},
-            {"score": "≥ 7",  "stock": "70%", "cash": "30%", "action": "🚀 MUA MẠNH",             "color": "🟢"},
-            {"score": "≥ 5",  "stock": "65%", "cash": "35%", "action": "🟢 MUA TÍCH CỰC",         "color": "🟢"},
-            {"score": "≥ 3",  "stock": "60%", "cash": "40%", "action": "🟢 MUA/GIỮ",              "color": "🟢"},
-            {"score": "≥ 1",  "stock": "55%", "cash": "45%", "action": "🟢 GIỮ CAO",              "color": "🟢"},
-            {"score": "≥ -1", "stock": "50%", "cash": "50%", "action": "➖ CÂN BẰNG",             "color": "🔵"},
-            {"score": "≥ -3", "stock": "40%", "cash": "60%", "action": "🟠 GIẢM NHẸ",             "color": "🟠"},
-            {"score": "≥ -5", "stock": "30%", "cash": "70%", "action": "⚠️ GIẢM TỶ TRỌNG",       "color": "🟠"},
-            {"score": "≥ -7", "stock": "20%", "cash": "80%", "action": "🔴 PHÒNG THỦ",            "color": "🔴"},
-            {"score": "≥ -9", "stock": "15%", "cash": "85%", "action": "🛡️ PHÒNG THỦ MẠNH",      "color": "🔴"},
-            {"score": "< -9", "stock": "10%", "cash": "90%", "action": "💀 THOÁT KHỎI THỊ TRƯỜNG", "color": "🔴"},
-        ]
-
-        # Hiển thị bảng
-        for row in score_table:
-            c1, c2, c3, c4, c5 = st.columns([1.2, 1, 1, 2.5, 1])
-            c1.markdown(f"**{row['score']}**")
-            c2.markdown(f"`{row['stock']}`")
-            c3.markdown(f"`{row['cash']}`")
-            c4.markdown(f"{row['color']} {row['action']}")
-            
-            # Highlight dòng hiện tại an toàn (tránh lỗi hàm int do dấu âm)
-            if reco and "score" in reco:
-                try:
-                    row_score_val = int(row['score'].replace('≥ ', '').replace('< ', ''))
-                    if row_score_val == reco.get('score', 0):
-                        c5.markdown("⬅️ **HIỆN TẠI**")
-                except ValueError:
-                    pass
-
-    st.divider()
-
-    # Hiển thị score hiện tại nổi bật
-    if reco is not None:
-        cur_score = reco.get('score', 0)
-        cur_action = reco.get('action', '')
-        cur_stock = reco.get('stock', 50)
-
-        col_a, col_b, col_c = st.columns(3)
-        col_a.metric("📊 Score hiện tại", f"{cur_score:+d}")
-        col_b.metric("📈 Tỷ trọng CP",   f"{cur_stock}%")
-        col_c.metric("💰 Tiền mặt",       f"{100-cur_stock}%")
-        
-    # --- Hàng 3: Định giá P/E (mục riêng — độc lập, không ảnh hưởng khuyến nghị) ---
-    with st.container(border=True):
-        st.markdown("#### 💰 Định giá P/E (20 năm)")
-        try:
-            pe_now   = valuation.get_current_pe(current_index)
-            pe_hist  = valuation.get_pe_history(years=20)
-            pe_stats = valuation.pe_stats(pe_hist, pe_now)
-
-            col_pe1, col_pe2 = st.columns(2)
-            with col_pe1:
-                st.metric(
+                pe1, pe2 = st.columns(2)
+                pe1.metric(
                     "P/E hiện tại",
-                    f"{pe_stats['pe_now']:.1f}x" if pe_stats['pe_now'] else "—",
-                    delta=f"{pe_stats['pct_vs_avg']:+.1f}% vs TB" if pe_stats.get('pct_vs_avg') else None,
+                    f"{pe_stats_data['pe_now']:.1f}x" if pe_stats_data.get('pe_now') else "—",
+                    delta=f"{pe_stats_data.get('pct_vs_avg', 0):+.1f}% vs TB" if pe_stats_data.get('pct_vs_avg') else None,
                     delta_color="inverse"
                 )
-            with col_pe2:
-                st.metric(
-                    "Trung bình 20 năm",
-                    f"{pe_stats['mean']:.1f}x" if pe_stats.get('mean') else "—",
-                    delta=f"{pe_stats['zscore']:+.2f}σ" if pe_stats.get('zscore') else None
+                pe2.metric(
+                    "TB 20 năm",
+                    f"{pe_stats_data['mean']:.1f}x" if pe_stats_data.get('mean') else "—",
+                    delta=f"{pe_stats_data.get('zscore', 0):+.2f}σ" if pe_stats_data.get('zscore') else None,
                 )
 
-            pct = pe_stats.get('percentile')
-            if pct is not None:
-                color = "🟢" if pct < 25 else "🟡" if pct < 75 else "🔴"
-                label = "RẺ" if pct < 25 else "HỢP LÝ" if pct < 75 else "ĐẮT"
-                st.progress(pct / 100, text=f"{color} Percentile: {pct:.0f}% — {label}")
+                pct = pe_stats_data.get('percentile')
+                if pct is not None:
+                    color_pe = "🟢" if pct < 25 else "🟡" if pct < 75 else "🔴"
+                    label_pe = "RẺ"  if pct < 25 else "HỢP LÝ" if pct < 75 else "ĐẮT"
+                    st.progress(pct / 100, text=f"{color_pe} Percentile: {pct:.0f}% — {label_pe}")
 
-            if pe_stats.get('comment'):
-                st.info(pe_stats['comment'])
+                if pe_stats_data.get('comment'):
+                    st.caption(pe_stats_data['comment'])
 
-            try:
-                pe_source = valuation.get_current_pe_source()
-                if pe_source:
-                    st.caption(f"🔗 Nguồn P/E: **{pe_source}** (cập nhật hàng ngày)")
-            except Exception:
-                pass
+                # mini chart P/E lịch sử
+                if pe_hist is not None and not pe_hist.empty:
+                    with st.expander("📈 Xem P/E lịch sử 20 năm", expanded=False):
+                        st.line_chart(pe_hist.set_index("date")["pe"], height=180)
 
-            if pe_hist is not None and not pe_hist.empty:
-                with st.expander("📈 Xem P/E 20 năm", expanded=False):
-                    st.line_chart(pe_hist.set_index("date")["pe"], height=200)
-        except Exception as e:
-            st.warning(f"⚠️ Không tải được dữ liệu P/E: {e}")
+                # nguồn dữ liệu
+                try:
+                    pe_source = valuation.get_current_pe_source()
+                    if pe_source:
+                        st.caption(f"🔗 Nguồn: **{pe_source}** — cập nhật sau ~1 ngày giao dịch")
+                except Exception:
+                    pass
 
+    # ── Hàng 2: Chỉ báo KT | Dòng tiền ───────────────────────────
+    row2_c1, row2_c2 = st.columns(2)
+
+    # ── Panel C: Chỉ báo kỹ thuật ─────────────────────────────────
+    with row2_c1:
+        with st.container(border=True):
+            st.markdown("#### 📊 Chỉ báo kỹ thuật")
+
+            rsi_val = snap.get('rsi', 50) or 50
+            rsi_emoji = "🔴" if rsi_val >= 70 else ("🟢" if rsi_val <= 30 else "🟡")
+            st.markdown(f"**RSI(14):** {rsi_emoji} `{rsi_val:.1f}` — {snap.get('rsi_text', '—')}")
+            st.progress(min(rsi_val / 100, 1.0), text=f"RSI = {rsi_val:.1f}")
+
+            st.divider()
+
+            macd_raw   = snap.get('macd', 0) or 0
+            macd_sig   = snap.get('macd_signal', 0) or 0
+            macd_cross = snap.get('macd_cross', '—')
+            macd_emoji = "🟢" if macd_cross == "Vàng" else "🔴"
+            macd_label = "Cắt lên (Vàng)" if macd_cross == "Vàng" else "Cắt xuống (Chết)"
+
+            st.markdown(
+                f"**MACD:** `{macd_raw:.3f}` &nbsp;·&nbsp; "
+                f"**Signal:** `{macd_sig:.3f}`"
+            )
+            st.markdown(f"**Trạng thái:** {macd_emoji} {macd_label}")
+
+    # ── Panel D: Dòng tiền ────────────────────────────────────────
+    with row2_c2:
+        with st.container(border=True):
+            st.markdown("#### 🔊 Dòng tiền (Volume)")
+
+            vol_text  = snap.get('vol_text', '—')
+            vol_today = snap.get('vol_today', 0) or 0
+            vol_avg   = snap.get('vol_avg', 0) or 0
+            vol_ratio = snap.get('vol_ratio', 0) or 0
+
+            st.markdown(f"**{vol_text}**")
+
+            v1, v2 = st.columns(2)
+            v1.metric("Vol hôm nay",  f"{vol_today:,.0f}")
+            v2.metric("TB 20 phiên",  f"{vol_avg:,.0f}")
+
+            st.progress(
+                min(vol_ratio / 2.0, 1.0),
+                text=f"Tỷ lệ: {vol_ratio:.2f}x trung bình"
+            )
+
+    # ═══════════════════════════════════════════════════════════════
+    # SECTION 4 — SỨC KHỎE THỊ TRƯỜNG (Market Breadth)
+    # ═══════════════════════════════════════════════════════════════
+    st.markdown("---")
+    st.markdown("### 🏥 SỨC KHỎE THỊ TRƯỜNG (400 mã HOSE)")
+    try:
+        breadth_data = get_market_breadth()
+        render_breadth_panel(breadth_data)
+    except Exception as e:
+        st.warning(f"⚠️ Không tải được dữ liệu breadth: {e}")
+
+    # ═══════════════════════════════════════════════════════════════
+    # SECTION 5 — KHUYẾN NGHỊ HÀNH ĐỘNG
+    # ═══════════════════════════════════════════════════════════════
+    st.markdown("---")
+    st.markdown("### 💡 KHUYẾN NGHỊ HÀNH ĐỘNG")
+
+    if reco is None:
+        st.warning("⚠️ Đang tính toán khuyến nghị...")
+    else:
+        color_map = {
+            "danger": "red", "warning": "orange",
+            "success": "green", "info": "blue", "gray": "gray",
+        }
+        emoji_map = {
+            "danger": "🔴", "warning": "🟠", "success": "🟢", "info": "🔵",
+        }
+        st_color    = color_map.get(reco.get("color", "gray"), "gray")
+        action_emoji = emoji_map.get(reco.get("color", "info"), "🔵")
+
+        stock_pct = reco.get("stock", 50) or 50
+        cash_pct  = reco.get("cash",  50) or 50
+        cur_score = reco.get("score", 0)
+
+        # ── Hành động chính + score ──────────────────────────────
+        with st.container(border=True):
+            ka, kb, kc, kd = st.columns([2, 1, 1, 1])
+            with ka:
+                st.markdown(f"## {action_emoji} :{st_color}[{reco['action']}]")
+            kb.metric("📊 Score",      f"{cur_score:+d}")
+            kc.metric("📈 Tỷ trọng CP", f"{stock_pct}%")
+            kd.metric("💵 Tiền mặt",    f"{cash_pct}%")
+
+            st.progress(
+                stock_pct / 100,
+                text=f"Cổ phiếu {stock_pct}%  ·  Tiền mặt {cash_pct}%"
+            )
+
+            with st.expander("📋 Lý do khuyến nghị", expanded=True):
+                for r in reco.get("reasons", []):
+                    st.markdown(f"- {r}")
+
+        st.caption("⚠️ Khuyến nghị dựa trên PTKT + định giá, không phải tư vấn đầu tư chính thức.")
+
+        # ── Bảng quy đổi Score → Tỷ trọng ───────────────────────
+        with st.expander("📋 Bảng quy đổi Score → Tỷ trọng", expanded=False):
+            st.markdown("**Cách tính Score** (Tổng –11 đến +11 điểm):")
+            st.caption(
+                "Breadth (–5 → +5)  ·  Trend MA20 (–2 → +2)  ·  "
+                "RSI (±1)  ·  MACD (±1)  ·  Volume (±1)  ·  P/E (–2 → +2)"
+            )
+            st.divider()
+
+            score_table = [
+                ("≥ 9",  "80%", "20%", "🔥 MUA RẤT MẠNH",         9),
+                ("≥ 7",  "70%", "30%", "🚀 MUA MẠNH",              7),
+                ("≥ 5",  "65%", "35%", "🟢 MUA TÍCH CỰC",          5),
+                ("≥ 3",  "60%", "40%", "🟢 MUA / GIỮ",             3),
+                ("≥ 1",  "55%", "45%", "🟢 GIỮ CAO",               1),
+                ("≥ -1", "50%", "50%", "➖ CÂN BẰNG",             -1),
+                ("≥ -3", "40%", "60%", "🟠 GIẢM NHẸ",             -3),
+                ("≥ -5", "30%", "70%", "⚠️ GIẢM TỶ TRỌNG",       -5),
+                ("≥ -7", "20%", "80%", "🔴 PHÒNG THỦ",            -7),
+                ("≥ -9", "15%", "85%", "🛡️ PHÒNG THỦ MẠNH",      -9),
+                ("< -9", "10%", "90%", "💀 THOÁT KHỎI THỊ TRƯỜNG",-10),
+            ]
+
+            hdr = st.columns([1.2, 1, 1, 2.5, 1.2])
+            for col, label in zip(hdr, ["Score", "CP", "Tiền", "Hành động", ""]):
+                col.markdown(f"**{label}**")
+
+            # Tìm dòng khớp: dòng đầu tiên (threshold cao nhất) mà cur_score >= threshold
+            matched_idx = None
+            for i, (_, _, _, _, threshold) in enumerate(score_table):
+                if cur_score >= threshold:
+                    matched_idx = i
+                    break
+
+            for i, (score_str, cp, cash, action, _) in enumerate(score_table):
+                cols = st.columns([1.2, 1, 1, 2.5, 1.2])
+                cols[0].markdown(f"**{score_str}**")
+                cols[1].markdown(f"`{cp}`")
+                cols[2].markdown(f"`{cash}`")
+                cols[3].markdown(action)
+                if i == matched_idx:
+                    cols[4].markdown("⬅️ **Hiện tại**")
 
 # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU
