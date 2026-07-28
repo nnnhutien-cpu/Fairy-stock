@@ -161,14 +161,120 @@ def _fetch(symbol, start, end, interval):
 
     return pd.DataFrame()
 
+# data_loader.py — thay hàm _fetch_intraday_day và get_intraday_vnindex
+
+import requests as _requests
+
+def _fetch_intraday_dnse(day_str: str) -> pd.DataFrame:
+    """DNSE entrade API — public, không cần auth."""
+    try:
+        from datetime import datetime
+        import time as _time
+        dt = datetime.strptime(day_str, "%Y-%m-%d")
+        t_from = int(datetime(dt.year, dt.month, dt.day, 9, 0).timestamp())
+        t_to   = int(datetime(dt.year, dt.month, dt.day, 15, 1).timestamp())
+        url = "https://services.entrade.com.vn/chart-api/v2/ohlcs/index"
+        params = {"symbol": "VNINDEX", "resolution": "1", "from": t_from, "to": t_to}
+        r = _requests.get(url, params=params,
+                          headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        if not data.get("t"):
+            return pd.DataFrame()
+        df = pd.DataFrame({
+            "time":   pd.to_datetime(data["t"], unit="s", utc=True).tz_convert("Asia/Ho_Chi_Minh").tz_localize(None),
+            "open":   data["o"],
+            "high":   data["h"],
+            "low":    data["l"],
+            "close":  data["c"],
+            "volume": data.get("v", [0] * len(data["t"])),
+        })
+        return _normalize(df)
+    except Exception as e:
+        LAST_ERRORS[f"VNINDEX|1m|DNSE|{day_str}"] = f"{type(e).__name__}: {e}"
+        return pd.DataFrame()
+
+
+def _fetch_intraday_ssi(day_str: str) -> pd.DataFrame:
+    """SSI iBoard public API."""
+    try:
+        from datetime import datetime
+        dt = datetime.strptime(day_str, "%Y-%m-%d")
+        t_from = int(datetime(dt.year, dt.month, dt.day, 9, 0).timestamp())
+        t_to   = int(datetime(dt.year, dt.month, dt.day, 15, 1).timestamp())
+        url = "https://iboard-query.ssi.com.vn/v2/stock/history"
+        params = {"symbol": "VNINDEX", "resolution": "1", "from": t_from, "to": t_to}
+        r = _requests.get(url, params=params,
+                          headers={"User-Agent": "Mozilla/5.0",
+                                   "Referer": "https://iboard.ssi.com.vn/"}, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        # SSI trả về {"t": [...], "o": [...], "h": [...], "l": [...], "c": [...], "v": [...]}
+        t_list = data.get("t") or []
+        if not t_list:
+            return pd.DataFrame()
+        df = pd.DataFrame({
+            "time":   pd.to_datetime(t_list, unit="s", utc=True).tz_convert("Asia/Ho_Chi_Minh").tz_localize(None),
+            "open":   data["o"],
+            "high":   data["h"],
+            "low":    data["l"],
+            "close":  data["c"],
+            "volume": data.get("v", [0] * len(t_list)),
+        })
+        return _normalize(df)
+    except Exception as e:
+        LAST_ERRORS[f"VNINDEX|1m|SSI|{day_str}"] = f"{type(e).__name__}: {e}"
+        return pd.DataFrame()
+
+
+def _fetch_intraday_tcbs(day_str: str) -> pd.DataFrame:
+    """TCBS public API."""
+    try:
+        from datetime import datetime
+        dt = datetime.strptime(day_str, "%Y-%m-%d")
+        t_from = int(datetime(dt.year, dt.month, dt.day, 9, 0).timestamp())
+        t_to   = int(datetime(dt.year, dt.month, dt.day, 15, 1).timestamp())
+        url = "https://apipubaws.tcbs.com.vn/stock-insight/v1/index/intraday"
+        params = {"ticker": "VNINDEX", "type": "1", "from": t_from, "to": t_to}
+        r = _requests.get(url, params=params,
+                          headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        items = data.get("data") or []
+        if not items:
+            return pd.DataFrame()
+        df = pd.DataFrame(items)
+        df = df.rename(columns={"tradingDate": "time", "closeIndex": "close",
+                                 "openIndex": "open", "highIndex": "high",
+                                 "lowIndex": "low", "tradingVolume": "volume"})
+        return _normalize(df)
+    except Exception as e:
+        LAST_ERRORS[f"VNINDEX|1m|TCBS|{day_str}"] = f"{type(e).__name__}: {e}"
+        return pd.DataFrame()
+
+
 def _fetch_intraday_day(symbol, day_str):
     """
-    Lấy dữ liệu 1 phút cho ĐÚNG 1 NGÀY (start=end=day_str).
-    LƯU Ý QUAN TRỌNG: dữ liệu intraday theo phút của vnstock chỉ được hỗ trợ
-    lấy theo TỪNG PHIÊN GIAO DỊCH (1 ngày), KHÔNG lấy nguyên 1 khoảng nhiều
-    ngày cùng lúc như dữ liệu daily -> đây là lý do bản cũ (xin 5 ngày cùng
-    lúc với interval='1m') hay bị trả về rỗng/lỗi im lặng.
+    Thử theo thứ tự: DNSE → SSI → TCBS → vnstock VCI → vnstock MSN
+    Các nguồn đầu không qua vnstock nên không bị rate limit.
     """
+    # --- Nguồn 1: DNSE (nhanh nhất, ít bị chặn nhất) ---
+    if symbol == "VNINDEX":
+        df = _fetch_intraday_dnse(day_str)
+        if not df.empty:
+            return df
+
+        # --- Nguồn 2: SSI ---
+        df = _fetch_intraday_ssi(day_str)
+        if not df.empty:
+            return df
+
+        # --- Nguồn 3: TCBS ---
+        df = _fetch_intraday_tcbs(day_str)
+        if not df.empty:
+            return df
+
+    # --- Nguồn 4 & 5: vnstock (fallback cuối, dễ bị rate limit) ---
     sources = ['VCI', 'MSN']
     for src in sources:
         key = f"{symbol}|1m|{src}|{day_str}"
@@ -180,81 +286,9 @@ def _fetch_intraday_day(symbol, day_str):
             if df is not None and not df.empty:
                 LAST_ERRORS.pop(key, None)
                 return _normalize(df)
-            LAST_ERRORS[key] = "API trả về DataFrame rỗng cho ngày này (có thể ngày nghỉ / chưa vào phiên)."
+            LAST_ERRORS[key] = "API trả về rỗng."
         except Exception as e:
             LAST_ERRORS[key] = f"{type(e).__name__}: {e}"
             continue
+
     return pd.DataFrame()
-
-@st.cache_data(ttl=86400)
-def get_all_tickers(exchange='all'):
-    for src in ['vci', 'kbs']:
-        try:
-            _throttle()
-            df = Listing(source=src).symbols_by_exchange()
-            df.columns = [str(c).lower().strip() for c in df.columns]
-
-            type_col = next((c for c in df.columns if 'type' in c), None)
-            if type_col:
-                df = df[df[type_col].astype(str).str.upper().isin(['STOCK', 'CP', 'CỔ PHIẾU'])]
-
-            if 'exchange' in df.columns:
-                df = df[df['exchange'].astype(str).str.upper().isin(['HOSE', 'HSX', 'HNX', 'UPCOM'])]
-                if exchange != 'all':
-                    tgt = ['HOSE', 'HSX'] if str(exchange).upper() in ('HOSE', 'HSX') else [str(exchange).upper()]
-                    df = df[df['exchange'].astype(str).str.upper().isin(tgt)]
-
-            col = 'symbol' if 'symbol' in df.columns else ('ticker' if 'ticker' in df.columns else None)
-
-            if col:
-                lst = [str(t).strip().upper() for t in df[col].dropna().tolist() if str(t).strip()]
-                if lst:
-                    return lst
-        except Exception as e:
-            LAST_ERRORS[f"get_all_tickers|{src}"] = f"{type(e).__name__}: {e}"
-            continue
-
-    return FALLBACK_TICKERS
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_stock_data(ticker, days_back=200):
-    cached = _read_from_cache(ticker, days_back)
-    if cached is not None and len(cached) >= min(60, days_back // 2):
-        return cached
-
-    end_date = datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
-    return _fetch(ticker, start_date, end_date, '1D')
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_vnindex_data(ticker="VNINDEX", days_back=365):
-    end_date = datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
-    return _fetch('VNINDEX', start_date, end_date, '1D')
-
-@st.cache_data(ttl=60, show_spinner=False)
-def get_intraday_vnindex():
-    """
-    SỬA: thay vì xin nguyên 1 khoảng 5 ngày với interval='1m' (dễ bị API từ
-    chối/âm thầm trả rỗng), giờ lấy TỪNG NGÀY một (đúng cách vnstock hỗ trợ
-    intraday) rồi ghép lại — đủ cho 2 phiên gần nhất (hôm nay + hôm qua) mà
-    app.py cần để so sánh thanh khoản.
-    """
-    frames = []
-    # thử tối đa 6 ngày gần nhất để chắc chắn vớt được >= 2 phiên có giao dịch
-    # (bỏ qua T7/CN và ngày lễ không có dữ liệu)
-    for offset in range(6):
-        day = (datetime.now() - timedelta(days=offset)).strftime('%Y-%m-%d')
-        df_day = _fetch_intraday_day('VNINDEX', day)
-        if not df_day.empty:
-            frames.append(df_day)
-        # đã đủ 2 phiên có dữ liệu thì dừng sớm, đỡ tốn request
-        if len(frames) >= 2:
-            break
-
-    if not frames:
-        return pd.DataFrame()
-
-    result = pd.concat(frames, ignore_index=True)
-    result = result.dropna(subset=['time']).sort_values('time').reset_index(drop=True)
-    return result
