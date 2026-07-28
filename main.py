@@ -248,7 +248,7 @@ with tab_market:
     # SECTION 3 — PHÂN TÍCH XU HƯỚNG (2 × 2 grid)
     # ══════════════════════════════════════════════════════════════
     st.markdown("---")
-        st.markdown("### 🧠 PHÂN TÍCH XU HƯỚNG")
+    st.markdown("### 🧠 PHÂN TÍCH XU HƯỚNG")
 
     row1_l, row1_r = st.columns(2)
 
