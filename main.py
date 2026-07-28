@@ -162,19 +162,17 @@ with tab_market:
             st.rerun()
     st.divider()
 
-    # --- Khởi tạo snapshot & các biến phụ thuộc ---
+    # --- Khởi tạo snap, pe, breadth, reco ---
     snap = {}
     snap_error = None
     pe_stats_data = None
     pe_hist = None
     breadth = None
     reco = None
-
     try:
         snap = market_snapshot(symbol="VNINDEX", days=250) or {}
     except Exception as e:
         snap_error = str(e)
-
     try:
         _price = snap.get("price") or 0
         pe_now_val = valuation.get_current_pe(_price if _price > 0 else None)
@@ -182,12 +180,10 @@ with tab_market:
         pe_stats_data = valuation.pe_stats(pe_hist, pe_now_val)
     except Exception:
         pass
-
     try:
         breadth = get_market_breadth()
     except Exception:
         pass
-
     try:
         reco = market_recommendation(snap, pe_stats=pe_stats_data)
     except Exception:
@@ -199,7 +195,6 @@ with tab_market:
     current_index = 0
 
     if intraday_df is not None and not intraday_df.empty:
-        # Chuẩn hoá cột
         col_mapping = {}
         for col in intraday_df.columns:
             lc = str(col).lower().strip()
@@ -212,12 +207,11 @@ with tab_market:
         intraday_df.rename(columns=col_mapping, inplace=True)
 
         if 'time' in intraday_df.columns and 'close' in intraday_df.columns:
-            intraday_df['close']    = pd.to_numeric(intraday_df['close'],  errors='coerce').fillna(0)
-            intraday_df['volume']   = pd.to_numeric(intraday_df.get('volume', pd.Series(dtype=float)), errors='coerce').fillna(0)
+            intraday_df['close']    = pd.to_numeric(intraday_df['close'], errors='coerce').fillna(0)
+            intraday_df['volume']   = pd.to_numeric(intraday_df['volume'] if 'volume' in intraday_df.columns else 0, errors='coerce').fillna(0)
             intraday_df['time']     = pd.to_datetime(intraday_df['time'])
             intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
 
-            # Lọc giờ giao dịch
             df_today = intraday_df[
                 (intraday_df['hour_min'] >= '09:00') &
                 (intraday_df['hour_min'] <= '15:00')
@@ -225,18 +219,15 @@ with tab_market:
 
             if not df_today.empty:
                 df_today['Vol_Hôm_Nay'] = df_today['volume'].cumsum()
-                current_index    = df_today['close'].iloc[-1]
-                current_vol      = df_today['Vol_Hôm_Nay'].iloc[-1]
-                max_time_actual  = df_today['hour_min'].max()
+                current_index   = df_today['close'].iloc[-1]
+                current_vol     = df_today['Vol_Hôm_Nay'].iloc[-1]
+                max_time_actual = df_today['hour_min'].max()
 
-                # Metrics
                 m1, m2 = st.columns(2)
-                m1.metric("📊 VN-INDEX",             f"{current_index:,.2f}")
-                m2.metric("💰 Thanh khoản hôm nay",  f"{current_vol/1e6:,.1f}M CP")
-
+                m1.metric("📊 VN-INDEX",            f"{current_index:,.2f}")
+                m2.metric("💰 Thanh khoản hôm nay", f"{current_vol/1e6:,.1f}M CP")
                 st.info(f"🕒 Dữ liệu thực tế đến **{max_time_actual}** (trễ ~1 phút)")
 
-                # Build chart_df theo khung giờ chuẩn
                 times = (
                     pd.date_range("09:00", "11:30", freq="min").strftime('%H:%M').tolist() +
                     pd.date_range("13:00", "15:00", freq="min").strftime('%H:%M').tolist()
@@ -256,8 +247,10 @@ with tab_market:
     else:
         st.warning("⚠️ Đang chờ dữ liệu VN-INDEX. Vui lòng tải lại sau ít phút...")
 
+    # SECTION 2 — NHỊP ĐẬP THỊ TRƯỜNG (gọi 1 lần duy nhất)
+    st.markdown("---")
+    st.markdown("### 💓 NHỊP ĐẬP THỊ TRƯỜNG")
     render_market_tab(chart_df, df_today)
-
     # ══════════════════════════════════════════════════════════════
     # SECTION 2 — NHỊP ĐẬP THỊ TRƯỜNG
     # ══════════════════════════════════════════════════════════════
