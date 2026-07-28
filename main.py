@@ -194,75 +194,67 @@ with tab_market:
         pass
 
     # --- Intraday data ---
-    intraday_df = get_intraday_vnindex()
+   intraday_df = get_intraday_vnindex()
     chart_df, df_today = None, None
     current_index = 0
 
     if intraday_df is not None and not intraday_df.empty:
+        # Chuẩn hoá cột
         col_mapping = {}
         for col in intraday_df.columns:
-            lower_col = str(col).lower().strip()
-            if lower_col in ['close', 'price', 'c', 'điểm', 'index', 'indexvalue']:
+            lc = str(col).lower().strip()
+            if lc in ['close', 'price', 'c', 'điểm', 'index', 'indexvalue']:
                 col_mapping[col] = 'close'
-            elif lower_col in ['volume', 'vol', 'v', 'khối lượng', 'matchvolume']:
+            elif lc in ['volume', 'vol', 'v', 'khối lượng', 'matchvolume']:
                 col_mapping[col] = 'volume'
-            elif lower_col in ['time', 't', 'thời gian']:
+            elif lc in ['time', 't', 'thời gian']:
                 col_mapping[col] = 'time'
-
         intraday_df.rename(columns=col_mapping, inplace=True)
 
-        if 'time' in intraday_df.columns and 'volume' in intraday_df.columns and 'close' in intraday_df.columns:
-            intraday_df['volume'] = pd.to_numeric(intraday_df['volume'], errors='coerce').fillna(0)
-            intraday_df['close']  = pd.to_numeric(intraday_df['close'],  errors='coerce').fillna(0)
-            intraday_df['time']   = pd.to_datetime(intraday_df['time'])
-            intraday_df['date']   = intraday_df['time'].dt.date
+        if 'time' in intraday_df.columns and 'close' in intraday_df.columns:
+            intraday_df['close']    = pd.to_numeric(intraday_df['close'],  errors='coerce').fillna(0)
+            intraday_df['volume']   = pd.to_numeric(intraday_df.get('volume', pd.Series(dtype=float)), errors='coerce').fillna(0)
+            intraday_df['time']     = pd.to_datetime(intraday_df['time'])
             intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
-            intraday_df = intraday_df[(intraday_df['hour_min'] >= '09:00') & (intraday_df['hour_min'] <= '15:00')]
 
-            dates = sorted(intraday_df['date'].unique())
-            if len(dates) >= 2:
-                today_date = dates[-1]
-                yest_date  = dates[-2]
+            # Lọc giờ giao dịch
+            df_today = intraday_df[
+                (intraday_df['hour_min'] >= '09:00') &
+                (intraday_df['hour_min'] <= '15:00')
+            ].copy()
 
-                df_today = intraday_df[intraday_df['date'] == today_date].copy()
-                df_yest  = intraday_df[intraday_df['date'] == yest_date].copy()
-
+            if not df_today.empty:
                 df_today['Vol_Hôm_Nay'] = df_today['volume'].cumsum()
-                df_yest['Vol_Hôm_Qua']  = df_yest['volume'].cumsum()
+                current_index    = df_today['close'].iloc[-1]
+                current_vol      = df_today['Vol_Hôm_Nay'].iloc[-1]
+                max_time_actual  = df_today['hour_min'].max()
 
-                current_index = df_today['close'].iloc[-1] if not df_today.empty else 0
-                prev_index    = df_yest['close'].iloc[-1]  if not df_yest.empty  else current_index
-                index_change  = current_index - prev_index
+                # Metrics
+                m1, m2 = st.columns(2)
+                m1.metric("📊 VN-INDEX",             f"{current_index:,.2f}")
+                m2.metric("💰 Thanh khoản hôm nay",  f"{current_vol/1e6:,.1f}M CP")
 
-                current_vol = df_today['Vol_Hôm_Nay'].iloc[-1] if not df_today.empty else 0
-                prev_vol    = df_yest['Vol_Hôm_Qua'].iloc[-1]  if not df_yest.empty  else 0
-                vol_change  = current_vol - prev_vol
+                st.info(f"🕒 Dữ liệu thực tế đến **{max_time_actual}** (trễ ~1 phút)")
 
-                m1, m2, m3 = st.columns(3)
-                m1.metric("📊 Chỉ số VN-INDEX",        f"{current_index:,.2f} đ", f"{index_change:,.2f} đ")
-                m2.metric("💰 Thanh khoản Hôm Nay",    f"{current_vol:,.0f} CP",  f"{vol_change:,.0f} CP" if vol_change != 0 else None)
-                m3.metric("⏳ Thanh khoản Hôm Qua (EOD)", f"{prev_vol:,.0f} CP")
-
-                times_morning   = pd.date_range("09:00", "11:30", freq="min").strftime('%H:%M').tolist()
-                times_afternoon = pd.date_range("13:00", "15:00", freq="min").strftime('%H:%M').tolist()
-                time_df = pd.DataFrame({'hour_min': times_morning + times_afternoon})
-
-                df_yest_agg  = df_yest.groupby('hour_min')['Vol_Hôm_Qua'].last().reset_index()
-                df_today_agg = df_today.groupby('hour_min')['Vol_Hôm_Nay'].last().reset_index()
-
-                chart_df = pd.merge(time_df, df_yest_agg,  on='hour_min', how='left')
-                chart_df = pd.merge(chart_df, df_today_agg, on='hour_min', how='left')
-                chart_df['Vol_Hôm_Qua'] = chart_df['Vol_Hôm_Qua'].ffill()
-
-                if not df_today.empty:
-                    max_time_actual = df_today['hour_min'].max()
-                    chart_df['Vol_Hôm_Nay'] = chart_df['Vol_Hôm_Nay'].ffill()
-                    chart_df.loc[chart_df['hour_min'] > max_time_actual, 'Vol_Hôm_Nay'] = None
-                    st.info(f"🕒 Tình trạng luồng dữ liệu: API VN-INDEX đang trả số thực tế đến mốc **{max_time_actual}**")
-
+                # Build chart_df theo khung giờ chuẩn
+                times = (
+                    pd.date_range("09:00", "11:30", freq="min").strftime('%H:%M').tolist() +
+                    pd.date_range("13:00", "15:00", freq="min").strftime('%H:%M').tolist()
+                )
+                chart_df = (
+                    pd.DataFrame({'hour_min': times})
+                    .merge(
+                        df_today.groupby('hour_min')['Vol_Hôm_Nay'].last().reset_index(),
+                        on='hour_min', how='left'
+                    )
+                )
+                chart_df['Vol_Hôm_Nay'] = chart_df['Vol_Hôm_Nay'].ffill()
+                chart_df.loc[chart_df['hour_min'] > max_time_actual, 'Vol_Hôm_Nay'] = None
                 chart_df.set_index('hour_min', inplace=True)
+            else:
+                st.warning("⚠️ Chưa có dữ liệu trong giờ giao dịch hôm nay.")
     else:
-        st.warning("⚠️ Đang chờ dữ liệu VN-INDEX từ API. Vui lòng tải lại trang sau ít phút...")
+        st.warning("⚠️ Đang chờ dữ liệu VN-INDEX. Vui lòng tải lại sau ít phút...")
 
     render_market_tab(chart_df, df_today)
 
