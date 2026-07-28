@@ -149,7 +149,9 @@ tab_market, tab_screener, tab_results, tab_signals, tab_simulation, tab_backtest
     "🌟 Thị Trường", "🔍 Bộ Lọc", "📊 Kết Quả Quét", "📡 Tín Hiệu & Cảnh Báo",
     "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo", "🧭 Tích Lũy", "💡 Khuyến Nghị"
 ])
-
+# ==========================================
+# TAB 1: THỊ TRƯỜNG CHUNG
+# ==========================================
 with tab_market:
     col_title, col_btn = st.columns([4, 1])
     with col_title:
@@ -165,7 +167,6 @@ with tab_market:
     current_index = 0
 
     if intraday_df is not None and not intraday_df.empty:
-        # chuẩn hoá cột
         col_mapping = {}
         for col in intraday_df.columns:
             lower_col = str(col).lower().strip()
@@ -175,139 +176,65 @@ with tab_market:
                 col_mapping[col] = 'volume'
             elif lower_col in ['time', 't', 'thời gian']:
                 col_mapping[col] = 'time'
+
         intraday_df.rename(columns=col_mapping, inplace=True)
 
         if 'time' in intraday_df.columns and 'volume' in intraday_df.columns and 'close' in intraday_df.columns:
             intraday_df['volume'] = pd.to_numeric(intraday_df['volume'], errors='coerce').fillna(0)
-            intraday_df['close']  = pd.to_numeric(intraday_df['close'],  errors='coerce').fillna(0)
-            intraday_df['time']   = pd.to_datetime(intraday_df['time'])
-            intraday_df['date']   = intraday_df['time'].dt.date
+            intraday_df['close'] = pd.to_numeric(intraday_df['close'], errors='coerce').fillna(0)
+            intraday_df['time'] = pd.to_datetime(intraday_df['time'])
+            intraday_df['date'] = intraday_df['time'].dt.date
             intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
-            intraday_df = intraday_df[
-                (intraday_df['hour_min'] >= '09:00') &
-                (intraday_df['hour_min'] <= '15:00')
-            ]
+
+            intraday_df = intraday_df[(intraday_df['hour_min'] >= '09:00') & (intraday_df['hour_min'] <= '15:00')]
 
             dates = sorted(intraday_df['date'].unique())
-
-            # ── TRONG GIỜ GD: đủ 2 ngày → so sánh hôm nay vs hôm qua ──
             if len(dates) >= 2:
                 today_date = dates[-1]
-                yest_date  = dates[-2]
+                yest_date = dates[-2]
+
                 df_today = intraday_df[intraday_df['date'] == today_date].copy()
-                df_yest  = intraday_df[intraday_df['date'] == yest_date].copy()
+                df_yest = intraday_df[intraday_df['date'] == yest_date].copy()
 
                 df_today['Vol_Hôm_Nay'] = df_today['volume'].cumsum()
-                df_yest['Vol_Hôm_Qua']  = df_yest['volume'].cumsum()
+                df_yest['Vol_Hôm_Qua'] = df_yest['volume'].cumsum()
 
                 current_index = df_today['close'].iloc[-1] if not df_today.empty else 0
-                prev_index    = df_yest['close'].iloc[-1]  if not df_yest.empty  else current_index
-                index_change  = current_index - prev_index
+                prev_index = df_yest['close'].iloc[-1] if not df_yest.empty else current_index
+                index_change = current_index - prev_index
 
                 current_vol = df_today['Vol_Hôm_Nay'].iloc[-1] if not df_today.empty else 0
-                prev_vol    = df_yest['Vol_Hôm_Qua'].iloc[-1]  if not df_yest.empty  else 0
-                vol_change  = current_vol - prev_vol
+                prev_vol = df_yest['Vol_Hôm_Qua'].iloc[-1] if not df_yest.empty else 0
+                vol_change = current_vol - prev_vol
 
-                # vol trung bình 20 phiên từ daily
-                try:
-                    df_daily_vol = get_vnindex_data(days=30)
-                    if df_daily_vol is not None and not df_daily_vol.empty:
-                        df_daily_vol.columns = [str(c).lower().strip() for c in df_daily_vol.columns]
-                        vcol = next((c for c in df_daily_vol.columns if 'vol' in c), None)
-                        vol_avg_20 = df_daily_vol[vcol].tail(20).mean() if vcol else 0
-                    else:
-                        vol_avg_20 = 0
-                except Exception:
-                    vol_avg_20 = 0
+                m1, m2, m3 = st.columns(3)
+                m1.metric("📊 Chỉ số VN-INDEX", f"{current_index:,.2f} đ", f"{index_change:,.2f} đ")
+                m2.metric("💰 Thanh khoản Hôm Nay", f"{current_vol:,.0f} CP", f"{vol_change:,.0f} CP" if vol_change != 0 else None)
+                m3.metric("⏳ Thanh khoản Hôm Qua (EOD)", f"{prev_vol:,.0f} CP")
 
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("📊 VN-INDEX", f"{current_index:,.2f}", f"{index_change:,.2f}")
-                m2.metric("💰 Vol Hôm Nay", f"{current_vol:,.0f} CP", f"{vol_change:,.0f} CP" if vol_change != 0 else None)
-                m3.metric("📊 TB Vol 20 phiên", f"{vol_avg_20:,.0f} CP" if vol_avg_20 else "—")
-                is_trading = True
-                m4.metric("📡 Trạng thái", "🟢 Đang GD")
-
-                times_morning   = pd.date_range("09:00", "11:30", freq="min").strftime('%H:%M').tolist()
+                times_morning = pd.date_range("09:00", "11:30", freq="min").strftime('%H:%M').tolist()
                 times_afternoon = pd.date_range("13:00", "15:00", freq="min").strftime('%H:%M').tolist()
                 time_df = pd.DataFrame({'hour_min': times_morning + times_afternoon})
 
-                df_yest_agg  = df_yest.groupby('hour_min')['Vol_Hôm_Qua'].last().reset_index()
+                df_yest_agg = df_yest.groupby('hour_min')['Vol_Hôm_Qua'].last().reset_index()
                 df_today_agg = df_today.groupby('hour_min')['Vol_Hôm_Nay'].last().reset_index()
 
-                chart_df = pd.merge(time_df, df_yest_agg,  on='hour_min', how='left')
+                chart_df = pd.merge(time_df, df_yest_agg, on='hour_min', how='left')
                 chart_df = pd.merge(chart_df, df_today_agg, on='hour_min', how='left')
+
                 chart_df['Vol_Hôm_Qua'] = chart_df['Vol_Hôm_Qua'].ffill()
 
                 if not df_today.empty:
                     max_time_actual = df_today['hour_min'].max()
                     chart_df['Vol_Hôm_Nay'] = chart_df['Vol_Hôm_Nay'].ffill()
                     chart_df.loc[chart_df['hour_min'] > max_time_actual, 'Vol_Hôm_Nay'] = None
-                    st.info(f"🕒 API VN-INDEX trả dữ liệu thực đến **{max_time_actual}**")
+                    st.info(f"🕒 Tình trạng luồng dữ liệu: API VN-INDEX đang trả số thực tế đến mốc **{max_time_actual}**")
 
                 chart_df.set_index('hour_min', inplace=True)
-
-            # ── NGOÀI GIỜ GD: chỉ có 1 ngày → lấy phiên gần nhất từ daily ──
-            else:
-                st.caption("⏰ Dữ liệu intraday chỉ có trong giờ giao dịch (9:00–15:00). Đang hiển thị số liệu phiên gần nhất.")
-                try:
-                    df_daily = get_vnindex_data(days=30)
-                    if df_daily is not None and not df_daily.empty:
-                        df_daily.columns = [str(c).lower().strip() for c in df_daily.columns]
-
-                        # tìm cột close và volume
-                        close_col = next((c for c in df_daily.columns if 'close' in c or c == 'c'), None)
-                        vcol      = next((c for c in df_daily.columns if 'vol'   in c), None)
-
-                        if close_col:
-                            last_close  = float(df_daily[close_col].iloc[-1])
-                            prev_close  = float(df_daily[close_col].iloc[-2]) if len(df_daily) >= 2 else last_close
-                            chg         = last_close - prev_close
-                            last_vol    = float(df_daily[vcol].iloc[-1])    if vcol else 0
-                            vol_avg_20  = float(df_daily[vcol].tail(20).mean()) if vcol else 0
-
-                            current_index = last_close
-                            m1, m2, m3, m4 = st.columns(4)
-                            m1.metric("📊 VN-INDEX (phiên gần nhất)", f"{last_close:,.2f}", f"{chg:,.2f}")
-                            m2.metric("💰 Vol phiên gần nhất",        f"{last_vol:,.0f} CP")
-                            m3.metric("📊 TB Vol 20 phiên",           f"{vol_avg_20:,.0f} CP" if vol_avg_20 else "—")
-                            m4.metric("📡 Trạng thái",                "🌙 Ngoài giờ GD")
-                        else:
-                            m1, m2, m3, m4 = st.columns(4)
-                            for m in [m1,m2,m3]: m.metric("—", "—")
-                            m4.metric("📡 Trạng thái", "🌙 Ngoài giờ GD")
-                    else:
-                        st.warning("⚠️ Không lấy được dữ liệu daily VNINDEX.")
-                except Exception as e:
-                    st.warning(f"⚠️ Lỗi lấy dữ liệu phiên gần nhất: {e}")
-
     else:
-        # intraday hoàn toàn trống → fallback daily
-        st.caption("⏰ Dữ liệu intraday chỉ có trong giờ giao dịch (9:00–15:00). Đang hiển thị số liệu phiên gần nhất.")
-        try:
-            df_daily = get_vnindex_data(days=30)
-            if df_daily is not None and not df_daily.empty:
-                df_daily.columns = [str(c).lower().strip() for c in df_daily.columns]
-                close_col = next((c for c in df_daily.columns if 'close' in c or c == 'c'), None)
-                vcol      = next((c for c in df_daily.columns if 'vol'   in c), None)
-                if close_col:
-                    last_close = float(df_daily[close_col].iloc[-1])
-                    prev_close = float(df_daily[close_col].iloc[-2]) if len(df_daily) >= 2 else last_close
-                    chg        = last_close - prev_close
-                    last_vol   = float(df_daily[vcol].iloc[-1])        if vcol else 0
-                    vol_avg_20 = float(df_daily[vcol].tail(20).mean()) if vcol else 0
-                    current_index = last_close
-                    m1, m2, m3, m4 = st.columns(4)
-                    m1.metric("📊 VN-INDEX (phiên gần nhất)", f"{last_close:,.2f}", f"{chg:,.2f}")
-                    m2.metric("💰 Vol phiên gần nhất",        f"{last_vol:,.0f} CP")
-                    m3.metric("📊 TB Vol 20 phiên",           f"{vol_avg_20:,.0f} CP" if vol_avg_20 else "—")
-                    m4.metric("📡 Trạng thái",                "🌙 Ngoài giờ GD")
-        except Exception as e:
-            st.warning(f"⚠️ Không lấy được dữ liệu: {e}")
+        st.warning("⚠️ Đang chờ dữ liệu VN-INDEX từ API. Vui lòng tải lại trang sau ít phút...")
 
-    try:
-        render_market_tab(chart_df, df_today)
-    except Exception as e:
-        st.warning(f"⚠️ Nhịp đập thị trường lỗi: {e}")
+    render_market_tab(chart_df, df_today)
 
     # ══════════════════════════════════════════════════════════════
     # SECTION 1 — TỔNG QUAN VN-INDEX
