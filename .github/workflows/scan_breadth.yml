@@ -1,13 +1,11 @@
-name: Scan Breadth HOSE
+# .github/workflows/scan_breadth.yml
+name: Scan Breadth Daily
 
 on:
   schedule:
-    - cron: "0 3 * * 1-5"    # 10:00 sáng giờ VN (UTC+7), thứ 2-6
-    - cron: "30 8 * * 1-5"   # 15:30 chiều giờ VN, thứ 2-6
-  workflow_dispatch: {}       # cho phép bấm chạy tay trong tab Actions
-
-permissions:
-  contents: write
+    - cron: '30 3 * * 1-5'   # 10:30 SA giờ VN (UTC+7)
+    - cron: '30 8 * * 1-5'   # 15:30 CH giờ VN
+  workflow_dispatch:           # chạy thủ công được
 
 jobs:
   scan:
@@ -15,22 +13,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
-      - name: Cài thư viện
-        run: pip install -r requirements.txt
+      - name: Install dependencies
+        run: pip install vnstock pandas requests
 
-      - name: Chạy quét Breadth 400 mã HOSE
+      - name: Run breadth scan
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         run: python scan_breadth_daily.py
 
-      - name: Commit kết quả về repo
+      - name: Commit output files
         run: |
-          git config user.name "breadth-bot"
-          git config user.email "breadth-bot@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add breadth_latest.json breadth_history.json
-          git diff --quiet --cached || git commit -m "Cập nhật Breadth Score $(date +'%Y-%m-%d %H:%M')"
+          git diff --staged --quiet || git commit -m "chore: update breadth data"
           git push
