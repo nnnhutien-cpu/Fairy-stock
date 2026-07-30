@@ -2,11 +2,15 @@ import streamlit as st
 import pandas as pd
 import concurrent.futures
 import time
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit.components.v1 as components
 from supabase import create_client
 import traceback
 from datetime import datetime
-from tab_khuyen_nghi import render_recommendation_tab
 
 from indicators import market_snapshot
 from trend_engine import market_recommendation
@@ -19,6 +23,8 @@ from ux_components import setup_cache_clear_button, render_search_and_export
 import backtester as bt
 import valuation
 from market_breadth import get_market_breadth, render_breadth_panel
+from tab_khuyen_nghi import render_recommendation_tab
+
 
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
