@@ -198,6 +198,39 @@ def _day_timestamps(day_str: str):
         t_to   = int(datetime(dt.year, dt.month, dt.day, 15, 5).timestamp()) - 25200
     return t_from, t_to
 
+def _vn_now():
+    """Giờ hiện tại theo timezone Việt Nam (UTC+7), dùng để so sánh độ tươi dữ liệu."""
+    try:
+        import pytz
+        tz_vn = pytz.timezone("Asia/Ho_Chi_Minh")
+        return datetime.now(tz_vn).replace(tzinfo=None)
+    except ImportError:
+        return datetime.utcnow() + timedelta(hours=7)
+
+def _is_market_hours(now: datetime) -> bool:
+    """Có đang trong giờ giao dịch (9:00–15:05, T2–T6) hay không."""
+    if now.weekday() >= 5:  # Thứ 7, Chủ nhật
+        return False
+    t = now.time()
+    return (t >= datetime.strptime("09:00", "%H:%M").time()) and \
+           (t <= datetime.strptime("15:05", "%H:%M").time())
+
+def _is_fresh(df: pd.DataFrame, max_staleness_minutes: int = 12) -> bool:
+    """
+    Kiểm tra dữ liệu vừa lấy có đủ mới không (so với giờ VN hiện tại).
+    Chỉ áp dụng khi đang trong giờ giao dịch — ngoài giờ, dữ liệu cuối phiên
+    là hợp lệ và không nên bị coi là "cũ".
+    """
+    if df is None or df.empty or 'time' not in df.columns:
+        return False
+    now = _vn_now()
+    if not _is_market_hours(now):
+        return True
+    last_time = df['time'].max()
+    if pd.isna(last_time):
+        return False
+    return (now - last_time) <= timedelta(minutes=max_staleness_minutes)
+
 def _build_ohlcv_df(t_list, o, h, l, c, v) -> pd.DataFrame:
     """Dựng DataFrame chuẩn từ các list t/o/h/l/c/v (unix timestamp)."""
     times = (
@@ -390,22 +423,52 @@ def _fetch_intraday_vnstock(symbol: str, day_str: str) -> pd.DataFrame:
             continue
     return pd.DataFrame()
 
-def _fetch_intraday_day(symbol: str, day_str: str) -> pd.DataFrame:
+def _fetch_intraday_day(symbol: str, day_str: str, require_fresh: bool = False) -> pd.DataFrame:
     """
     Lấy dữ liệu 1 phút cho 1 ngày.
-    Thứ tự ưu tiên: DNSE → SSI → TCBS → VNDirect → vnstock (VCI/MSN)
+    Thứ tự ưu tiên: DNSE → SSI → Wifeed → TCBS → VNDirect → vnstock (VCI/MSN)
+
+    Nếu require_fresh=True (dùng cho NGÀY HÔM NAY trong giờ giao dịch):
+    không chấp nhận ngay kết quả đầu tiên "không rỗng" — mà còn kiểm tra
+    dữ liệu đó có đủ MỚI hay không (timestamp cuối cùng cách hiện tại
+    không quá ~12 phút). Nếu nguồn đầu trả về bản cache/kẹt cũ, hệ thống
+    sẽ tự động thử các nguồn tiếp theo thay vì dừng lại ở dữ liệu cũ.
+    Nếu không có nguồn nào tươi, vẫn trả về bản mới nhất (gần đây nhất)
+    thu được, thay vì bỏ trắng hoàn toàn.
     """
+    fetchers = [
+        _fetch_intraday_dnse,
+        _fetch_intraday_ssi,
+        _fetch_intraday_wifeed,
+        _fetch_intraday_tcbs,
+        _fetch_intraday_vndirect,
+    ]
+
+    best_df = pd.DataFrame()
+    best_last_time = None
+
     if symbol == "VNINDEX":
-        for fetcher in [
-            _fetch_intraday_dnse,
-            _fetch_intraday_ssi,
-            _fetch_intraday_wifeed,
-            _fetch_intraday_tcbs,
-            _fetch_intraday_vndirect,
-        ]:
+        for fetcher in fetchers:
             df = fetcher(day_str)
-            if not df.empty:
+            if df.empty:
+                continue
+
+            if not require_fresh or _is_fresh(df):
                 return df
+
+            # Dữ liệu không rỗng nhưng bị coi là "cũ" — giữ lại làm phương án
+            # dự phòng, đồng thời thử tiếp nguồn khác để tìm bản mới hơn.
+            last_time = df['time'].max()
+            if best_last_time is None or (pd.notna(last_time) and last_time > best_last_time):
+                best_df = df
+                best_last_time = last_time
+
+        if not best_df.empty:
+            LAST_ERRORS[f"VNINDEX|1m|freshness|{day_str}"] = (
+                f"Không có nguồn nào trả dữ liệu đủ mới — dùng bản gần nhất "
+                f"(cập nhật lúc {best_last_time})."
+            )
+            return best_df
 
     # Fallback cuối: vnstock
     return _fetch_intraday_vnstock(symbol, day_str)
@@ -466,12 +529,16 @@ def get_intraday_vnindex():
     """
     Lấy dữ liệu intraday VNINDEX 1 phút.
     Thử tối đa 6 ngày gần nhất, thu đủ 2 phiên có dữ liệu thì dừng.
-    Thứ tự nguồn: DNSE → SSI → TCBS → VNDirect → vnstock
+    Thứ tự nguồn: DNSE → SSI → Wifeed → TCBS → VNDirect → vnstock
+
+    Ngày HÔM NAY (offset=0) bắt buộc kiểm tra độ tươi (require_fresh=True)
+    để tránh bị "kẹt" ở dữ liệu cache cũ từ một nguồn duy nhất — đây là lý
+    do trước đây phải bấm "Cập nhật" nhiều lần mới ra đúng giờ hiện tại.
     """
     frames = []
     for offset in range(6):
         day = (datetime.now() - timedelta(days=offset)).strftime('%Y-%m-%d')
-        df_day = _fetch_intraday_day('VNINDEX', day)
+        df_day = _fetch_intraday_day('VNINDEX', day, require_fresh=(offset == 0))
         if not df_day.empty:
             frames.append(df_day)
         if len(frames) >= 2:
