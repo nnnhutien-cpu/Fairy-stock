@@ -1,13 +1,13 @@
 {
-  "updated_at": "2026-07-30 10:58:09",
+  "updated_at": "2026-07-30 16:50:29",
   "n_total": 402,
-  "advance": 244,
-  "decline": 96,
-  "unchanged": 62,
-  "ad_pct": 60.7,
-  "pct_above_ma20": 22.89,
-  "pct_above_ma50": 22.39,
-  "breadth_score": -1,
+  "advance": 287,
+  "decline": 72,
+  "unchanged": 43,
+  "ad_pct": 71.39,
+  "pct_above_ma20": 28.86,
+  "pct_above_ma50": 24.63,
+  "breadth_score": 0,
   "momentum_note": "🟡 Thị trường phân hoá / đi ngang, chưa có xu hướng rõ ràng trên diện rộng.",
-  "ad_change": 0.646
+  "ad_change": 1.566
 }
