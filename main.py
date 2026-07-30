@@ -211,12 +211,22 @@ with tab_market:
             intraday_df['volume']   = pd.to_numeric(intraday_df['volume'] if 'volume' in intraday_df.columns else 0, errors='coerce').fillna(0)
             intraday_df['time']     = pd.to_datetime(intraday_df['time'])
             intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
+            intraday_df['date']     = intraday_df['time'].dt.date
+
+            # QUAN TRỌNG: phải lọc CẢ theo ngày lẫn khung giờ.
+            # Trước đây chỉ lọc theo hour_min -> gộp nhầm khối lượng của NHIỀU ngày
+            # (vì get_intraday_vnindex lấy dữ liệu 5 ngày gần nhất) vào chung 1 cumsum,
+            # khiến "Thanh khoản hôm nay" bị thổi phồng bằng tổng vài phiên cộng lại.
+            unique_dates = sorted(intraday_df['date'].unique())
+            latest_date  = unique_dates[-1] if unique_dates else None
+            prev_date    = unique_dates[-2] if len(unique_dates) >= 2 else None
 
             df_today = intraday_df[
+                (intraday_df['date'] == latest_date) &
                 (intraday_df['hour_min'] >= '09:00') &
                 (intraday_df['hour_min'] <= '15:00')
             ].copy()
-
+            
             if not df_today.empty:
                 df_today['Vol_Hôm_Nay'] = df_today['volume'].cumsum()
                 current_index   = df_today['close'].iloc[-1]
