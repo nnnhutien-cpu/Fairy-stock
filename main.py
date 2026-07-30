@@ -159,14 +159,52 @@ tab_market, tab_screener, tab_results, tab_signals, tab_simulation, tab_backtest
 # ==========================================
 # TAB 1: THỊ TRƯỜNG CHUNG
 # ==========================================
+from streamlit_autorefresh import st_autorefresh
+
 with tab_market:
-    col_title, col_btn = st.columns([4, 1])
+    col_title, col_btn, col_interval = st.columns([3, 1, 1])
     with col_title:
         st.subheader("🌟 TỔNG QUAN THỊ TRƯỜNG REAL-TIME")
+    with col_interval:
+        refresh_interval = st.selectbox(
+            "⏱️ Tự làm mới",
+            options=[0, 30, 60, 120, 300],
+            format_func=lambda x: "Tắt" if x == 0 else f"{x}s",
+            index=2,  # mặc định 60s
+            key="refresh_interval_select",
+            label_visibility="collapsed",
+        )
     with col_btn:
         if st.button("🔄 CẬP NHẬT DỮ LIỆU", type="primary", use_container_width=True):
-            get_intraday_vnindex.clear()
+            # Clear TẤT CẢ cache liên quan — 1 lần bấm là đủ
+            try: get_intraday_vnindex.clear()
+            except Exception: pass
+            try: get_vnindex_data.clear()
+            except Exception: pass
+            try: market_snapshot.clear()
+            except Exception: pass
+            try: get_market_breadth.clear()
+            except Exception: pass
             st.rerun()
+
+    # --- Auto-refresh KHÔNG block app ---
+    if refresh_interval > 0:
+        count = st_autorefresh(
+            interval=refresh_interval * 1000,  # đổi sang milliseconds
+            limit=None,                          # refresh vô hạn
+            key="market_autorefresh",
+        )
+        if count > 0:
+            # Mỗi chu kỳ auto-refresh → clear cache để lấy data thật mới
+            try: get_intraday_vnindex.clear()
+            except Exception: pass
+            try: get_vnindex_data.clear()
+            except Exception: pass
+            try: market_snapshot.clear()
+            except Exception: pass
+            try: get_market_breadth.clear()
+            except Exception: pass
+
     st.divider()
 
     # --- Khởi tạo snap, pe, breadth, reco ---
@@ -214,14 +252,15 @@ with tab_market:
         intraday_df.rename(columns=col_mapping, inplace=True)
 
         if 'time' in intraday_df.columns and 'close' in intraday_df.columns:
-            intraday_df['close']    = pd.to_numeric(intraday_df['close'], errors='coerce').fillna(0)
-            intraday_df['volume']   = pd.to_numeric(intraday_df['volume'] if 'volume' in intraday_df.columns else 0, errors='coerce').fillna(0)
+            intraday_df['close']  = pd.to_numeric(intraday_df['close'], errors='coerce').fillna(0)
+            intraday_df['volume'] = pd.to_numeric(
+                intraday_df['volume'] if 'volume' in intraday_df.columns else 0,
+                errors='coerce'
+            ).fillna(0)
             intraday_df['time']     = pd.to_datetime(intraday_df['time'])
             intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
             intraday_df['date']     = intraday_df['time'].dt.date
 
-            # QUAN TRỌNG: lọc theo CẢ ngày lẫn khung giờ, tránh gộp nhầm khối lượng
-            # của nhiều phiên khác nhau vào chung 1 cumsum (bug cũ khiến "hôm nay" bị thổi phồng).
             unique_dates = sorted(intraday_df['date'].unique())
             latest_date  = unique_dates[-1] if unique_dates else None
             prev_date    = unique_dates[-2] if len(unique_dates) >= 2 else None
@@ -264,7 +303,6 @@ with tab_market:
                     pd.date_range("13:00", "15:00", freq="min").strftime('%H:%M').tolist()
                 )
 
-                # Build hôm nay
                 chart_today = (
                     pd.DataFrame({'hour_min': times})
                     .merge(
@@ -274,7 +312,6 @@ with tab_market:
                 )
                 chart_today['Vol_Hôm_Nay'] = chart_today['Vol_Hôm_Nay'].ffill()
                 chart_today.loc[chart_today['hour_min'] > max_time_actual, 'Vol_Hôm_Nay'] = None
-
                 chart_df = chart_today.set_index('hour_min')
 
                 if not df_yesterday.empty:
@@ -288,8 +325,8 @@ with tab_market:
                     yday_agg['Vol_Hôm_Qua'] = yday_agg['Vol_Hôm_Qua'].ffill()
                     yday_agg = yday_agg.set_index('hour_min')
                     chart_df = chart_df.join(yday_agg, how='left')
-    # SECTION 2 — NHỊP ĐẬP THỊ TRƯỜNG (gọi ĐÚNG 1 LẦN — trước đây bị gọi lặp 2 lần liên tiếp
-    # ở đây, đó là lý do ảnh chụp màn hình bạn gửi thấy khối "NHỊP ĐẬP THỊ TRƯỜNG" hiện 2 lần)
+
+    # SECTION 2 — NHỊP ĐẬP THỊ TRƯỜNG
     st.markdown("---")
     st.markdown("### 💓 NHỊP ĐẬP THỊ TRƯỜNG")
     render_market_tab(chart_df, df_today)
