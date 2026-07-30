@@ -1,26 +1,23 @@
 # ==================================================================================
 # TAB KHUYẾN NGHỊ MUA / BÁN — Hệ thống "Cô Tiên"
-# Dán đoạn code này vào main.py, thêm tab vào dòng st.tabs([...])
 #
 # Logic khuyến nghị dựa 100% trên:
 #   - 3 đường: Kijun17 / Knife65 / Knife129
 #   - Volume vs MA20 (tỷ lệ và xu hướng tăng/giảm)
 #   - RSI14 (chỉ dùng khi Sideway — đúng triết lý Cô Tiên)
 #   - Vị trí giá so với Knife129 (định giá)
+#   - "Kiệt cung": volume < 50% MA20 (thanh khoản cạn) — dùng để bắt tín hiệu
+#     mua thăm dò / bắt đáy khi giá đã chiết khấu rẻ, dù đang Sideway hay Giảm.
 # ==================================================================================
-
-# ---- Thêm vào dòng st.tabs ở main.py: ----
-# tab_market, tab_screener, tab_simulation, tab_backtest, tab_reports, tab_recommendation = st.tabs([
-#     "🌟 Thị Trường", "🔍 Bộ Lọc", "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo", "🎯 Khuyến Nghị"
-# ])
-
-# ---- Paste đoạn dưới vào cuối main.py ----
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+
+# Ngưỡng "kiệt cung": volume thấp hơn phân nửa (50%) trung bình 20 phiên
+KIET_CUNG_RATIO = 0.5
 
 
 def _compute_recommendation_data(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=52, p_shift=26):
@@ -105,6 +102,9 @@ def _compute_recommendation_data(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=
     rsi = latest['rsi14']
     vol_ma20_trend = latest['vol_ma20_trend']  # > 0 = vol đang nhích lên
 
+    # "Kiệt cung": volume hiện tại thấp hơn phân nửa trung bình 20 phiên
+    kiet_cung = v_ratio < KIET_CUNG_RATIO
+
     # --- LOGIC KHUYẾN NGHỊ CÔ TIÊN ---
     # Ưu tiên từ mạnh -> yếu
 
@@ -126,18 +126,22 @@ def _compute_recommendation_data(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=
             mo_ta = "Xu hướng tăng, chưa có tín hiệu đặc biệt. Giữ CP, không mua thêm khi chưa có vol."
 
     elif xu_huong == "SIDEWAY":
-        # Kiệt thanh khoản + RSI thấp + vol MA20 đang nhích lên = cơ hội thăm dò
-        kiet_thanh_khoan = v_ratio < 0.6
+        # Kiệt cung + RSI thấp + vol MA20 đang nhích lên = cơ hội thăm dò
         rsi_qua_ban = pd.notna(rsi) and rsi <= 32
         vol_nhich_len = vol_ma20_trend > 0
         gia_duoi_129 = pct_vs_129 <= 0
 
-        if kiet_thanh_khoan and rsi_qua_ban and vol_nhich_len and gia_duoi_129:
+        if kiet_cung and rsi_qua_ban and vol_nhich_len and gia_duoi_129:
             khuyen_nghi = "🔵 MUA THĂM DÒ (10%)"
-            mo_ta = "Sideway vùng đáy: thanh khoản kiệt, RSI thấp, vol MA20 đang nhích lên — dấu hiệu cạn cung."
-            ly_do.append(f"📊 Vol chỉ {v_ratio:.2f}x MA20 → kiệt thanh khoản")
+            mo_ta = "Sideway vùng đáy: thanh khoản kiệt (<50% MA20), RSI thấp, vol MA20 đang nhích lên — dấu hiệu cạn cung."
+            ly_do.append(f"📊 Vol chỉ {v_ratio:.2f}x MA20 (< {KIET_CUNG_RATIO:.0%}) → kiệt cung")
             ly_do.append(f"📉 RSI = {rsi:.1f} → vùng quá bán")
             ly_do.append(f"📈 Vol MA20 đang nhích lên (+{vol_ma20_trend:,.0f} cp) → tích lũy")
+            ly_do.append(f"💰 Giá dưới Knife129 {abs(pct_vs_129):.1f}% → chiết khấu")
+        elif kiet_cung and gia_duoi_129:
+            khuyen_nghi = "🔵 MUA THĂM DÒ (7%)"
+            mo_ta = "Sideway: thanh khoản kiệt (<50% MA20), giá dưới Knife129 — dấu hiệu cạn cung, giá rẻ."
+            ly_do.append(f"📊 Vol chỉ {v_ratio:.2f}x MA20 (< {KIET_CUNG_RATIO:.0%}) → kiệt cung")
             ly_do.append(f"💰 Giá dưới Knife129 {abs(pct_vs_129):.1f}% → chiết khấu")
         elif rsi_qua_ban and gia_duoi_129:
             khuyen_nghi = "🔵 MUA THĂM DÒ (5%)"
@@ -152,9 +156,19 @@ def _compute_recommendation_data(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=
             mo_ta = "Sideway không rõ tín hiệu. Chờ xác nhận xu hướng từ Knife65/Knife129."
 
     else:  # GIAM
-        if close < latest['knife129'] and v_ratio >= 2.5 and pct_vs_129 <= -10:
-            khuyen_nghi = "🟡 BẮT ĐÁY CẨN THẬN (5%)"
-            mo_ta = "Giảm sâu, vol đột biến — có thể là cạn hàng cung, thăm dò rất nhỏ."
+        gia_re = pct_vs_129 <= -10
+
+        if kiet_cung and gia_re:
+            # Kiệt cung: thanh khoản cạn (<50% MA20) trong khi giá đã chiết khấu sâu
+            # → có thể là dấu hiệu bên bán đã cạn lực, xem xét bắt đáy/thăm dò nhỏ.
+            khuyen_nghi = "🟡 MUA THĂM DÒ (Kiệt Cung, 5%)"
+            mo_ta = "Đang giảm nhưng thanh khoản cạn kiệt (<50% MA20) + giá đã chiết khấu sâu so Knife129 — dấu hiệu bên bán cạn lực, thăm dò nhỏ."
+            ly_do.append(f"📊 Vol chỉ {v_ratio:.2f}x MA20 (< {KIET_CUNG_RATIO:.0%}) → kiệt cung, cạn nguồn cung bán ra")
+            ly_do.append(f"💰 Giá dưới Knife129 {abs(pct_vs_129):.1f}% → định giá rẻ")
+            ly_do.append("⚠️ Xu hướng vẫn đang GIẢM — chỉ thăm dò nhỏ, không giải ngân lớn")
+        elif close < latest['knife129'] and v_ratio >= 2.5 and pct_vs_129 <= -10:
+            khuyen_nghi = "🟡 BẮT ĐÁY CẨN THẬN (Vol Đột Biến, 5%)"
+            mo_ta = "Giảm sâu, vol đột biến — có thể là phiên xả hàng cuối/cạn cung đối ứng, thăm dò rất nhỏ."
             ly_do.append(f"⚠️ Xu hướng vẫn GIẢM — chỉ thăm dò nhỏ 5%")
         else:
             khuyen_nghi = "🔴 BÁN / TRÁNH"
@@ -178,6 +192,7 @@ def _compute_recommendation_data(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=
         "v_ratio": v_ratio,
         "rsi": rsi,
         "vol_ma20_trend": vol_ma20_trend,
+        "kiet_cung": kiet_cung,
         "close": latest['close'],
         "ticker": ticker,
     }
@@ -189,7 +204,7 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
     Gọi từ main.py: render_recommendation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift)
     """
     st.subheader("🎯 Khuyến Nghị MUA / BÁN — Hệ Thống Cô Tiên")
-    st.caption("Phân tích dựa trên Kijun17 / Knife65 / Knife129 + Volume MA20 + RSI14 (Sideway)")
+    st.caption("Phân tích dựa trên Kijun17 / Knife65 / Knife129 + Volume MA20 + RSI14 (Sideway) + Kiệt Cung (<50% MA20)")
 
     col_input, col_btn = st.columns([3, 1])
     with col_input:
@@ -237,6 +252,7 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
     v_ratio = result["v_ratio"]
     rsi = result["rsi"]
     vol_ma20_trend = result["vol_ma20_trend"]
+    kiet_cung = result.get("kiet_cung", False)
     xu_huong_label = {"TANG": "🟢 Xu hướng TĂNG", "GIAM": "🔴 Xu hướng GIẢM", "SIDEWAY": "🟡 SIDEWAY"}.get(result["xu_huong"], "—")
 
     # --- PANEL KHUYẾN NGHỊ ---
@@ -245,8 +261,8 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
     # Màu background theo khuyến nghị
     color_map = {
         "MUA MẠNH": "#00C853",
-        "MUA": "#00E676",
         "MUA THĂM DÒ": "#29B6F6",
+        "MUA": "#00E676",
         "BẮT ĐÁY": "#FFA726",
         "GIỮ": "#78909C",
         "CHỜ": "#78909C",
@@ -281,7 +297,12 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
     col4.metric("📏 Cách Knife129", f"{pct_vs_129:+.2f}%")
 
     col5, col6, col7, col8 = st.columns(4)
-    col5.metric("📦 Vol / MA20", f"{v_ratio:.2f}x", help="< 0.6x = kiệt | 1-1.5x = bình thường | > 1.5x = đột biến")
+    col5.metric(
+        "📦 Vol / MA20",
+        f"{v_ratio:.2f}x",
+        "🔻 Kiệt cung (<50%)" if kiet_cung else None,
+        help="< 50% = kiệt cung | 1-1.5x = bình thường | > 1.5x = đột biến"
+    )
     col6.metric("📈 RSI14", f"{rsi:.1f}" if pd.notna(rsi) else "—")
     col7.metric("📈 Vol MA20 (trend)", "⬆️ Nhích lên" if vol_ma20_trend > 0 else "⬇️ Giảm dần")
     col8.metric("🏹 Knife129", f"{latest['knife129']:,.2f}")
@@ -366,6 +387,12 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
         x=plot_df.index, y=plot_df['vol_ma20'],
         line=dict(color='#FF6D00', width=2, shape='spline'), name='Vol MA20'
     ), row=2, col=1)
+    # Đường 50% MA20 để trực quan hoá ngưỡng "kiệt cung"
+    fig.add_trace(go.Scatter(
+        x=plot_df.index, y=plot_df['vol_ma20'] * KIET_CUNG_RATIO,
+        line=dict(color='rgba(255,255,255,0.4)', width=1, dash='dot'),
+        name=f'{KIET_CUNG_RATIO:.0%} MA20 (Kiệt cung)'
+    ), row=2, col=1)
 
     # RSI14 + vùng quá mua/quá bán
     fig.add_trace(go.Scatter(
@@ -392,19 +419,27 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
 
     # --- HƯỚNG DẪN ĐỌC ---
     with st.expander("📖 Hướng dẫn đọc khuyến nghị Cô Tiên"):
-        st.markdown("""
+        st.markdown(f"""
 **Cách hệ thống ra quyết định:**
 
 | Tín hiệu | Ý nghĩa |
 |---|---|
 | 🟢 **MUA MẠNH** | Xu hướng TĂNG + Giá chiết khấu sát Knife129 + Vol đột biến ≥ 2x MA20 |
 | 🟢 **MUA** | Xu hướng TĂNG + Giá hợp lý (≤15% trên Knife129) + Vol ≥ 1.2x MA20 |
-| 🔵 **MUA THĂM DÒ (10%)** | Sideway + Kiệt thanh khoản (Vol < 0.6x) + RSI ≤ 32 + Vol MA20 đang nhích lên + Giá dưới Knife129 |
+| 🔵 **MUA THĂM DÒ (10%)** | Sideway + Kiệt cung (Vol < {KIET_CUNG_RATIO:.0%} MA20) + RSI ≤ 32 + Vol MA20 đang nhích lên + Giá dưới Knife129 |
+| 🔵 **MUA THĂM DÒ (7%)** | Sideway + Kiệt cung (Vol < {KIET_CUNG_RATIO:.0%} MA20) + Giá dưới Knife129 (chưa cần RSI xác nhận) |
 | 🔵 **MUA THĂM DÒ (5%)** | Sideway + RSI ≤ 32 + Giá dưới Knife129 (chưa có xác nhận vol) |
+| 🟡 **MUA THĂM DÒ (Kiệt Cung, 5%)** | Đang GIẢM + Vol < {KIET_CUNG_RATIO:.0%} MA20 (bên bán cạn lực) + Giá chiết khấu sâu (>10% dưới Knife129) |
+| 🟡 **BẮT ĐÁY CẨN THẬN (Vol Đột Biến, 5%)** | Đang GIẢM + Vol đột biến ≥ 2.5x MA20 (có thể là phiên xả cuối) + Giá chiết khấu sâu |
 | ⏸️ **GIỮ** | Xu hướng TĂNG nhưng chưa có tín hiệu vol, hoặc giá đã đi xa |
 | ⏸️ **CHỜ** | Sideway không rõ tín hiệu, chờ Knife65/129 xác nhận |
 | 🔴 **BÁN MỘT PHẦN** | RSI tiệm cận quá mua trong Sideway, hoặc cảnh báo tạo đỉnh |
-| 🔴 **BÁN / TRÁNH** | Xu hướng GIẢM rõ ràng (cả 3 đường quay đầu xuống) |
+| 🔴 **BÁN / TRÁNH** | Xu hướng GIẢM rõ ràng, không có tín hiệu kiệt cung hay bắt đáy |
+
+**Kiệt cung là gì?**
+- Volume phiên hiện tại **thấp hơn 50% (phân nửa) trung bình 20 phiên (MA20)**.
+- Ý nghĩa: cả bên mua lẫn bên bán đều "án binh bất động" — đặc biệt khi giá đã chiết khấu (rẻ so Knife129), khả năng cao bên bán đã cạn lực bán ra, chờ lực cầu quay lại.
+- Đây **không phải tín hiệu chắc chắn** đảo chiều — chỉ là dấu hiệu để **thăm dò tỷ trọng nhỏ**, cần theo dõi thêm vol MA20 có nhích lên (dòng tiền quay lại) hay không.
 
 **Knife129 là đường quan trọng nhất:**
 - Giá dưới Knife129 → vùng chiết khấu, xem xét mua
