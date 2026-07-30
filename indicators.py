@@ -443,3 +443,102 @@ def render_valuation_metrics(ticker: str):
             st.error(f"🚨 P/E = {val['pe']:.1f}x — **Rất đắt** (>25x), rủi ro mua đuổi")
 
     st.caption("⚠️ Chỉ số tính theo kỳ báo cáo gần nhất từ VCI — không phải TTM real-time.")
+    from data_loader import get_vnindex_data, get_stock_data
+
+
+def market_snapshot(symbol="VNINDEX", days=250):
+    """
+    Snapshot kỹ thuật tổng quan cho 1 mã (mặc định VNINDEX):
+    giá, % thay đổi, MA20/50/200, xu hướng, RSI14, MACD, volume vs TB20,
+    hỗ trợ/kháng cự (20 phiên gần nhất).
+    """
+    df = get_vnindex_data(symbol, days_back=days) if symbol == "VNINDEX" else get_stock_data(symbol, days_back=days)
+
+    if df is None or df.empty or len(df) < 30:
+        return {}
+
+    df = df.copy()
+    df.columns = [str(c).lower().strip() for c in df.columns]
+    df = df.sort_values('time').reset_index(drop=True)
+
+    df['ma20']  = df['close'].rolling(20).mean()
+    df['ma50']  = df['close'].rolling(50).mean()
+    df['ma200'] = df['close'].rolling(200).mean()
+
+    delta = df['close'].diff()
+    gain = delta.clip(lower=0).rolling(14).mean()
+    loss = (-delta.clip(upper=0)).rolling(14).mean()
+    df['rsi14'] = 100 - (100 / (1 + (gain / loss)))
+
+    ema12 = df['close'].ewm(span=12, adjust=False).mean()
+    ema26 = df['close'].ewm(span=26, adjust=False).mean()
+    df['macd'] = ema12 - ema26
+    df['macd_signal'] = df['macd'].ewm(span=9, adjust=False).mean()
+
+    df['vol_ma20'] = df['volume'].rolling(20).mean()
+
+    last = df.iloc[-1]
+    prev = df.iloc[-2] if len(df) >= 2 else last
+
+    price = float(last['close'])
+    prev_close = float(prev['close'])
+    change_pct = (price - prev_close) / prev_close * 100 if prev_close else 0.0
+
+    ma20  = float(last['ma20'])  if pd.notna(last['ma20'])  else None
+    ma50  = float(last['ma50'])  if pd.notna(last['ma50'])  else None
+    ma200 = float(last['ma200']) if pd.notna(last['ma200']) else None
+
+    ma20_prev = df['ma20'].iloc[-6] if len(df) >= 26 and pd.notna(df['ma20'].iloc[-6]) else ma20
+    ma20_slope_up = ma20 is not None and ma20_prev is not None and ma20 > ma20_prev
+
+    if ma20 is None:
+        trend_text = "— (chưa đủ dữ liệu MA20)"
+    elif price > ma20 and ma20_slope_up:
+        trend_text = "📈 Xu hướng tăng mạnh (giá trên MA20, MA20 dốc lên)"
+    elif price > ma20 and not ma20_slope_up:
+        trend_text = "↗️ Tăng nhưng đà chậm lại (MA20 đi ngang/xuống)"
+    elif price < ma20 and ma20_slope_up:
+        trend_text = "⚠️ Vừa gãy MA20 (MA20 còn dốc lên)"
+    else:
+        trend_text = "📉 Xu hướng giảm (giá dưới MA20, MA20 đi xuống)"
+
+    ma20_text = ""
+    if ma20 is not None:
+        ma20_text = f"MA20: {ma20:,.1f} · Giá {'trên' if price > ma20 else 'dưới'} MA20 {abs(price-ma20)/ma20*100:.1f}%"
+
+    lookback = df.tail(20)
+    support = float(lookback['low'].min())
+    resistance = float(lookback['high'].max())
+
+    rsi_val = float(last['rsi14']) if pd.notna(last['rsi14']) else 50.0
+    if rsi_val >= 70:
+        rsi_text = "Quá mua — cẩn trọng chốt lời"
+    elif rsi_val <= 30:
+        rsi_text = "Quá bán — có thể sắp hồi phục"
+    else:
+        rsi_text = "Trung tính"
+
+    macd_val = float(last['macd']) if pd.notna(last['macd']) else 0.0
+    macd_sig = float(last['macd_signal']) if pd.notna(last['macd_signal']) else 0.0
+    macd_cross = "Vàng" if macd_val > macd_sig else "Chết"
+
+    vol_today = float(last['volume'])
+    vol_avg = float(last['vol_ma20']) if pd.notna(last['vol_ma20']) else None
+    vol_ratio = round(vol_today / vol_avg, 2) if vol_avg else 1.0
+    if vol_ratio >= 1.5:
+        vol_text = f"🔥 Khối lượng đột biến {vol_ratio}x trung bình 20 phiên"
+    elif vol_ratio < 0.7:
+        vol_text = f"💤 Khối lượng yếu, chỉ {vol_ratio}x trung bình 20 phiên"
+    else:
+        vol_text = f"Khối lượng bình thường ({vol_ratio}x trung bình 20 phiên)"
+
+    return {
+        "price": price, "change_pct": round(change_pct, 2),
+        "ma20": ma20, "ma50": ma50, "ma200": ma200,
+        "trend_text": trend_text, "ma20_text": ma20_text,
+        "support": support, "resistance": resistance,
+        "rsi": round(rsi_val, 1), "rsi_text": rsi_text,
+        "macd": macd_val, "macd_signal": macd_sig, "macd_cross": macd_cross,
+        "vol_today": vol_today, "vol_avg": vol_avg, "vol_ratio": vol_ratio,
+        "vol_text": vol_text,
+    }
