@@ -980,6 +980,8 @@ with tab_reports:
     with st.spinner("Đang tải dữ liệu báo cáo..."):
         payload = _load_reports_json()
 
+    reports_ok = True
+
     if "error" in payload and not payload.get("data"):
         st.error(
             f"⚠️ Không tải được reports.json: `{payload['error']}`\n\n"
@@ -988,88 +990,90 @@ with tab_reports:
             "Vào GitHub → Actions → chạy thủ công workflow **Scrape Analyst Reports**.\n"
             "2. Repo có public không? Nếu private cần thêm token vào secrets.\n"
         )
-        st.stop()
+        reports_ok = False
 
-    updated_at = payload.get("updated_at", "")
-    raw_data   = payload.get("data", [])
+    if reports_ok:
+        updated_at = payload.get("updated_at", "")
+        raw_data   = payload.get("data", [])
 
-    with col_note:
-        st.caption(f"⏱️ Dữ liệu cập nhật lần cuối: **{updated_at}** — {len(raw_data)} báo cáo")
+        with col_note:
+            st.caption(f"⏱️ Dữ liệu cập nhật lần cuối: **{updated_at}** — {len(raw_data)} báo cáo")
 
-    df_all = pd.DataFrame(raw_data)
+        df_all = pd.DataFrame(raw_data)
 
-    if df_all.empty:
-        st.info(
-            "Kho báo cáo hiện đang trống.\n\n"
-            "Vào **GitHub → Actions → Scrape Analyst Reports → Run workflow** "
-            "để bot cào dữ liệu về ngay."
-        )
-        st.stop()
+        if df_all.empty:
+            st.info(
+                "Kho báo cáo hiện đang trống.\n\n"
+                "Vào **GitHub → Actions → Scrape Analyst Reports → Run workflow** "
+                "để bot cào dữ liệu về ngay."
+            )
+            reports_ok = False
 
-    for col in ["buy_price", "target_price"]:
-        if col in df_all.columns:
-            df_all[col] = pd.to_numeric(
-                df_all[col].astype(str).str.replace(",", "").str.replace(".", ""),
-                errors="coerce"
-            ).fillna(0)
+    if reports_ok:
+        for col in ["buy_price", "target_price"]:
+            if col in df_all.columns:
+                df_all[col] = pd.to_numeric(
+                    df_all[col].astype(str).str.replace(",", "").str.replace(".", ""),
+                    errors="coerce"
+                ).fillna(0)
 
-    mask = (df_all["buy_price"] > 0) & (df_all["target_price"] > 0)
-    df_all["upside_pct"] = 0.0
-    df_all.loc[mask, "upside_pct"] = (
-        (df_all.loc[mask, "target_price"] - df_all.loc[mask, "buy_price"])
-        / df_all.loc[mask, "buy_price"] * 100
-    ).round(1)
+        mask = (df_all["buy_price"] > 0) & (df_all["target_price"] > 0)
+        df_all["upside_pct"] = 0.0
+        df_all.loc[mask, "upside_pct"] = (
+            (df_all.loc[mask, "target_price"] - df_all.loc[mask, "buy_price"])
+            / df_all.loc[mask, "buy_price"] * 100
+        ).round(1)
 
-    df_show = df_all.copy()
-    if rep_ticker:
-        df_show = df_show[df_show["ticker"].str.upper() == rep_ticker]
-    if filter_action != "Tất cả":
-        df_show = df_show[
-            df_show["action"].str.upper().str.contains(filter_action, na=False)
-        ]
-    if filter_source != "Tất cả":
-        df_show = df_show[df_show["source"] == filter_source]
+        df_show = df_all.copy()
+        if rep_ticker:
+            df_show = df_show[df_show["ticker"].str.upper() == rep_ticker]
+        if filter_action != "Tất cả":
+            df_show = df_show[
+                df_show["action"].str.upper().str.contains(filter_action, na=False)
+            ]
+        if filter_source != "Tất cả":
+            df_show = df_show[df_show["source"] == filter_source]
 
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("📋 Tổng báo cáo", len(df_show))
-    n_buy  = df_show["action"].str.upper().str.contains("MUA|TÍCH LŨY|KHẢ QUAN|BUY", na=False).sum()
-    n_hold = df_show["action"].str.upper().str.contains("GIỮ|HOLD|NEUTRAL", na=False).sum()
-    n_sell = df_show["action"].str.upper().str.contains("BÁN|SELL", na=False).sum()
-    m2.metric("🟢 Mua / Tích lũy", int(n_buy))
-    m3.metric("🟡 Nắm giữ", int(n_hold))
-    m4.metric("🔴 Bán", int(n_sell))
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("📋 Tổng báo cáo", len(df_show))
+        n_buy  = df_show["action"].str.upper().str.contains("MUA|TÍCH LŨY|KHẢ QUAN|BUY", na=False).sum()
+        n_hold = df_show["action"].str.upper().str.contains("GIỮ|HOLD|NEUTRAL", na=False).sum()
+        n_sell = df_show["action"].str.upper().str.contains("BÁN|SELL", na=False).sum()
+        m2.metric("🟢 Mua / Tích lũy", int(n_buy))
+        m3.metric("🟡 Nắm giữ", int(n_hold))
+        m4.metric("🔴 Bán", int(n_sell))
 
-    st.divider()
+        st.divider()
 
-    if df_show.empty:
-        st.warning("Không có báo cáo nào khớp bộ lọc.")
-    else:
-        st.dataframe(
-            df_show[["date", "ticker", "company", "action",
-                     "buy_price", "target_price", "upside_pct",
-                     "source", "report_url"]],
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "date":         st.column_config.TextColumn("📅 Ngày"),
-                "ticker":       st.column_config.TextColumn("🏷️ Mã"),
-                "company":      st.column_config.TextColumn("🏢 CTCK"),
-                "action":       st.column_config.TextColumn("⚡ Khuyến Nghị"),
-                "buy_price":    st.column_config.NumberColumn("💰 Giá Khuyến Nghị", format="%d ₫"),
-                "target_price": st.column_config.NumberColumn("🎯 Giá Mục Tiêu",    format="%d ₫"),
-                "upside_pct":   st.column_config.NumberColumn("🚀 Upside",          format="%.1f %%"),
-                "source":       st.column_config.TextColumn("🔗 Nguồn"),
-                "report_url":   st.column_config.LinkColumn("📥 Báo Cáo", display_text="Xem"),
-            },
-        )
+        if df_show.empty:
+            st.warning("Không có báo cáo nào khớp bộ lọc.")
+        else:
+            st.dataframe(
+                df_show[["date", "ticker", "company", "action",
+                         "buy_price", "target_price", "upside_pct",
+                         "source", "report_url"]],
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "date":         st.column_config.TextColumn("📅 Ngày"),
+                    "ticker":       st.column_config.TextColumn("🏷️ Mã"),
+                    "company":      st.column_config.TextColumn("🏢 CTCK"),
+                    "action":       st.column_config.TextColumn("⚡ Khuyến Nghị"),
+                    "buy_price":    st.column_config.NumberColumn("💰 Giá Khuyến Nghị", format="%d ₫"),
+                    "target_price": st.column_config.NumberColumn("🎯 Giá Mục Tiêu",    format="%d ₫"),
+                    "upside_pct":   st.column_config.NumberColumn("🚀 Upside",          format="%.1f %%"),
+                    "source":       st.column_config.TextColumn("🔗 Nguồn"),
+                    "report_url":   st.column_config.LinkColumn("📥 Báo Cáo", display_text="Xem"),
+                },
+            )
 
-        csv_bytes = df_show.to_csv(index=False).encode("utf-8-sig")
-        st.download_button(
-            label="⬇️ Tải CSV",
-            data=csv_bytes,
-            file_name=f"bao_cao_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv",
-        )
+            csv_bytes = df_show.to_csv(index=False).encode("utf-8-sig")
+            st.download_button(
+                label="⬇️ Tải CSV",
+                data=csv_bytes,
+                file_name=f"bao_cao_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+            )
 
 # ==========================================
 # TAB 8: CHIẾN LƯỢC TÍCH LŨY
