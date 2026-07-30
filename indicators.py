@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+from data_loader import get_vnindex_data, get_stock_data
 
 # ==================================================================================
 # HỆ THỐNG "CÔ TIÊN" — 3 ĐƯỜNG ĐỊNH GIÁ Kijun17 / Knife1(65) / Knife2(129)
