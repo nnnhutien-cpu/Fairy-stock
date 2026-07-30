@@ -213,10 +213,8 @@ with tab_market:
             intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
             intraday_df['date']     = intraday_df['time'].dt.date
 
-            # QUAN TRỌNG: phải lọc CẢ theo ngày lẫn khung giờ.
-            # Trước đây chỉ lọc theo hour_min -> gộp nhầm khối lượng của NHIỀU ngày
-            # (vì get_intraday_vnindex lấy dữ liệu 5 ngày gần nhất) vào chung 1 cumsum,
-            # khiến "Thanh khoản hôm nay" bị thổi phồng bằng tổng vài phiên cộng lại.
+            # QUAN TRỌNG: lọc theo CẢ ngày lẫn khung giờ, tránh gộp nhầm khối lượng
+            # của nhiều phiên khác nhau vào chung 1 cumsum (bug cũ khiến "hôm nay" bị thổi phồng).
             unique_dates = sorted(intraday_df['date'].unique())
             latest_date  = unique_dates[-1] if unique_dates else None
             prev_date    = unique_dates[-2] if len(unique_dates) >= 2 else None
@@ -226,57 +224,63 @@ with tab_market:
                 (intraday_df['hour_min'] >= '09:00') &
                 (intraday_df['hour_min'] <= '15:00')
             ].copy()
-            
+
+            df_yesterday = intraday_df[
+                (intraday_df['date'] == prev_date) &
+                (intraday_df['hour_min'] >= '09:00') &
+                (intraday_df['hour_min'] <= '15:00')
+            ].copy() if prev_date else pd.DataFrame(columns=intraday_df.columns)
+
+            if not df_yesterday.empty:
+                df_yesterday['Vol_Hôm_Qua'] = df_yesterday['volume'].cumsum()
+                prev_vol = df_yesterday['Vol_Hôm_Qua'].iloc[-1]
+            else:
+                prev_vol = 0
+
             if not df_today.empty:
                 df_today['Vol_Hôm_Nay'] = df_today['volume'].cumsum()
                 current_index   = df_today['close'].iloc[-1]
                 current_vol     = df_today['Vol_Hôm_Nay'].iloc[-1]
                 max_time_actual = df_today['hour_min'].max()
 
-                m1, m2 = st.columns(2)
-                m1.metric("📊 VN-INDEX",            f"{current_index:,.2f}")
-                m2.metric("💰 Thanh khoản hôm nay", f"{current_vol/1e6:,.1f}M CP")
+                vol_change = current_vol - prev_vol
+
+                m1, m2, m3 = st.columns(3)
+                m1.metric("📊 VN-INDEX",                f"{current_index:,.2f}")
+                m2.metric("💰 Thanh khoản hôm nay",      f"{current_vol/1e6:,.1f}M CP",
+                          f"{vol_change/1e6:+,.1f}M CP so với cùng giờ hôm qua" if prev_vol else None)
+                m3.metric("⏳ Thanh khoản hôm qua (EOD)", f"{prev_vol/1e6:,.1f}M CP")
                 st.info(f"🕒 Dữ liệu thực tế đến **{max_time_actual}** (trễ ~1 phút)")
 
                 times = (
                     pd.date_range("09:00", "11:30", freq="min").strftime('%H:%M').tolist() +
                     pd.date_range("13:00", "15:00", freq="min").strftime('%H:%M').tolist()
                 )
+
                 # Build hôm nay
-chart_today = (
-    pd.DataFrame({'hour_min': times})
-    .merge(
-        df_today.groupby('hour_min')['Vol_Hôm_Nay'].last().reset_index(),
-        on='hour_min', how='left'
-    )
-)
-chart_today['Vol_Hôm_Nay'] = chart_today['Vol_Hôm_Nay'].ffill()
-chart_today.loc[chart_today['hour_min'] > max_time_actual, 'Vol_Hôm_Nay'] = None
+                chart_today = (
+                    pd.DataFrame({'hour_min': times})
+                    .merge(
+                        df_today.groupby('hour_min')['Vol_Hôm_Nay'].last().reset_index(),
+                        on='hour_min', how='left'
+                    )
+                )
+                chart_today['Vol_Hôm_Nay'] = chart_today['Vol_Hôm_Nay'].ffill()
+                chart_today.loc[chart_today['hour_min'] > max_time_actual, 'Vol_Hôm_Nay'] = None
 
-# Build hôm qua (nếu có trong intraday_df)
-today_date = df_today['time'].dt.date.iloc[-1]
-df_yesterday = intraday_df[intraday_df['time'].dt.date < today_date].copy()
+                chart_df = chart_today.set_index('hour_min')
 
-chart_df = chart_today.set_index('hour_min')
-
-if not df_yesterday.empty:
-    df_yesterday['hour_min'] = df_yesterday['time'].dt.strftime('%H:%M')
-    df_yesterday = df_yesterday[
-        (df_yesterday['hour_min'] >= '09:00') &
-        (df_yesterday['hour_min'] <= '15:00')
-    ].copy()
-    if not df_yesterday.empty:
-        df_yesterday['Vol_Hôm_Qua'] = df_yesterday['volume'].cumsum()
-        yday_agg = (
-            pd.DataFrame({'hour_min': times})
-            .merge(
-                df_yesterday.groupby('hour_min')['Vol_Hôm_Qua'].last().reset_index(),
-                on='hour_min', how='left'
-            )
-        )
-        yday_agg['Vol_Hôm_Qua'] = yday_agg['Vol_Hôm_Qua'].ffill()
-        yday_agg = yday_agg.set_index('hour_min')
-        chart_df = chart_df.join(yday_agg, how='left')
+                if not df_yesterday.empty:
+                    yday_agg = (
+                        pd.DataFrame({'hour_min': times})
+                        .merge(
+                            df_yesterday.groupby('hour_min')['Vol_Hôm_Qua'].last().reset_index(),
+                            on='hour_min', how='left'
+                        )
+                    )
+                    yday_agg['Vol_Hôm_Qua'] = yday_agg['Vol_Hôm_Qua'].ffill()
+                    yday_agg = yday_agg.set_index('hour_min')
+                    chart_df = chart_df.join(yday_agg, how='left')
     # SECTION 2 — NHỊP ĐẬP THỊ TRƯỜNG (gọi ĐÚNG 1 LẦN — trước đây bị gọi lặp 2 lần liên tiếp
     # ở đây, đó là lý do ảnh chụp màn hình bạn gửi thấy khối "NHỊP ĐẬP THỊ TRƯỜNG" hiện 2 lần)
     st.markdown("---")
