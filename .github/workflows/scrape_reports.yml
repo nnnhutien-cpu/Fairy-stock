@@ -31,7 +31,13 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull origin main --rebase
           git add reports.json
-          # Chỉ commit nếu có thay đổi thực sự
           git diff --staged --quiet || git commit -m "auto: cập nhật reports.json $(date +'%Y-%m-%d %H:%M')"
-          git push
+          for i in 1 2 3; do
+            git push origin main && break || {
+              echo "Retry lần $i..."
+              git pull origin main --rebase
+              sleep 5
+            }
+          done
