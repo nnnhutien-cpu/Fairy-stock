@@ -159,6 +159,7 @@ tab_market, tab_screener, tab_results, tab_signals, tab_simulation, tab_backtest
 # ==========================================
 # TAB 1: THỊ TRƯỜNG CHUNG
 # ==========================================
+
 from streamlit_autorefresh import st_autorefresh
 
 with tab_market:
