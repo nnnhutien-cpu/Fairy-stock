@@ -155,12 +155,9 @@ st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 tab_market, tab_screener, tab_results, tab_signals, tab_simulation, tab_backtest, tab_reports, tab_accum, tab_recommendation = st.tabs([
     "🌟 Thị Trường", "🔍 Bộ Lọc", "📊 Kết Quả Quét", "📡 Tín Hiệu & Cảnh Báo",
     "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo", "🧭 Tích Lũy", "💡 Khuyến Nghị"
-])
-# ==========================================
+])# ==========================================
 # TAB 1: THỊ TRƯỜNG CHUNG
 # ==========================================
-
-from streamlit_autorefresh import st_autorefresh
 
 with tab_market:
     col_title, col_btn, col_interval = st.columns([3, 1, 1])
@@ -177,7 +174,6 @@ with tab_market:
         )
     with col_btn:
         if st.button("🔄 CẬP NHẬT DỮ LIỆU", type="primary", use_container_width=True):
-            # Clear TẤT CẢ cache liên quan — 1 lần bấm là đủ
             try: get_intraday_vnindex.clear()
             except Exception: pass
             try: get_vnindex_data.clear()
@@ -188,25 +184,31 @@ with tab_market:
             except Exception: pass
             st.rerun()
 
-    # --- Auto-refresh KHÔNG block app ---
+    # --- Auto-refresh bằng JS thuần — không cần package nào ---
     if refresh_interval > 0:
-        count = st_autorefresh(
-            interval=refresh_interval * 1000,  # đổi sang milliseconds
-            limit=None,                          # refresh vô hạn
-            key="market_autorefresh",
+        import streamlit.components.v1 as _components
+        _components.html(
+            f"""
+            <script>
+                setTimeout(function() {{
+                    // Tìm nút CẬP NHẬT và click tự động
+                    const buttons = window.parent.document.querySelectorAll('button[kind="primary"]');
+                    for (const btn of buttons) {{
+                        if (btn.innerText.includes('CẬP NHẬT')) {{
+                            btn.click();
+                            break;
+                        }}
+                    }}
+                }}, {refresh_interval * 1000});
+            </script>
+            """,
+            height=0,
         )
-        if count > 0:
-            # Mỗi chu kỳ auto-refresh → clear cache để lấy data thật mới
-            try: get_intraday_vnindex.clear()
-            except Exception: pass
-            try: get_vnindex_data.clear()
-            except Exception: pass
-            try: market_snapshot.clear()
-            except Exception: pass
-            try: get_market_breadth.clear()
-            except Exception: pass
+        st.caption(f"🔁 Tự động làm mới mỗi **{refresh_interval}s**")
 
     st.divider()
+    # ... phần còn lại giữ nguyên từ đây
+
 
     # --- Khởi tạo snap, pe, breadth, reco ---
     snap = {}
