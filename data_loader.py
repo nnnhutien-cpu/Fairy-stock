@@ -524,16 +524,14 @@ def get_vnindex_data(ticker="VNINDEX", days_back=365):
     start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
     return _fetch('VNINDEX', start_date, end_date, '1D')
 
-@st.cache_data(ttl=60, show_spinner=False)
-def get_intraday_vnindex():
-    """
-    Lấy dữ liệu intraday VNINDEX 1 phút.
-    Thử tối đa 6 ngày gần nhất, thu đủ 2 phiên có dữ liệu thì dừng.
-    Thứ tự nguồn: DNSE → SSI → Wifeed → TCBS → VNDirect → vnstock
+# data_loader.py — thay decorator + signature của get_intraday_vnindex
 
-    Ngày HÔM NAY (offset=0) bắt buộc kiểm tra độ tươi (require_fresh=True)
-    để tránh bị "kẹt" ở dữ liệu cache cũ từ một nguồn duy nhất — đây là lý
-    do trước đây phải bấm "Cập nhật" nhiều lần mới ra đúng giờ hiện tại.
+@st.cache_data(ttl=60, show_spinner=False)
+def get_intraday_vnindex(_cache_bust: int = 0):  # thêm tham số này
+    """
+    _cache_bust: truyền int thay đổi mỗi lần gọi để buộc tạo cache key mới.
+    Streamlit bỏ qua tham số bắt đầu bằng _ khi hash key — KHÔNG dùng được.
+    Dùng int thường thay vì underscore prefix.
     """
     frames = []
     for offset in range(6):
