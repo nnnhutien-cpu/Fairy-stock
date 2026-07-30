@@ -231,20 +231,14 @@ def scan_breadth(max_tickers=None):
 
 
 # ==========================================================
-# GHI KẾT QUẢ VÀO SUPABASE
+# GHI KẾT QUẢ RA FILE breadth.json (để workflow commit thẳng vào repo,
+# KHÔNG cần Supabase / secrets gì thêm — app đọc file này qua raw.githubusercontent.com)
 # ==========================================================
-def save_to_supabase(result: dict):
-    from supabase import create_client
-
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_KEY")
-    if not url or not key:
-        _log("❌ Thiếu SUPABASE_URL / SUPABASE_KEY trong biến môi trường. Không ghi được kết quả.")
-        sys.exit(1)
-
-    sb = create_client(url, key)
-    sb.table("market_breadth").insert(result).execute()
-    _log("💾 Đã ghi kết quả vào bảng `market_breadth` trên Supabase.")
+def save_to_json(result: dict, path="breadth.json"):
+    import json
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+    _log(f"💾 Đã ghi kết quả vào file `{path}`.")
 
 
 if __name__ == "__main__":
@@ -264,4 +258,4 @@ if __name__ == "__main__":
     if result is None:
         sys.exit(1)
 
-    save_to_supabase(result)
+    save_to_json(result)
