@@ -1,8 +1,10 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import concurrent.futures
 import time
+import streamlit as st
+import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit.components.v1 as components
@@ -24,43 +26,64 @@ from market_breadth import get_market_breadth, render_breadth_panel
 from tab_khuyen_nghi import render_recommendation_tab
 from screener_suc_bat import render_suc_bat_tab
 
-# ================================================================
-# PHẢI LÀ LỆNH ĐẦU TIÊN — trước mọi st.xxx khác
-# ================================================================
+# --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
-# --- CSS ---
+# --- 1b. GIAO DIỆN: TÍM ĐẬM SANG TRỌNG + FONT + HÒA HEADER ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');
+    
     html, body, [class*="css"], .stMarkdown, .stButton, .stTextInput, .stSelectbox, .stDataFrame {
         font-family: 'Sora', sans-serif !important;
     }
-    .stApp { background: linear-gradient(180deg, #0f0a1f 0%, #16112e 100%); color: #dcd6ec; }
+
+    .stApp {
+        background: linear-gradient(180deg, #0f0a1f 0%, #16112e 100%);
+        color: #dcd6ec;
+    }
+
     header[data-testid="stHeader"] { background: #0f0a1f !important; }
     header[data-testid="stHeader"] a, header[data-testid="stToolbar"] * { color: #b9aee0 !important; }
+
     h1 { font-size: 2rem !important; line-height: 1.25 !important; }
     h2, .stSubheader { font-size: 1.4rem !important; }
     h3 { font-size: 1.15rem !important; }
     h1, h2, h3, .stSubheader { color: #a394d4 !important; font-weight: 700 !important; letter-spacing: .2px; }
+
     section[data-testid="stSidebar"] { background: #120d26; border-right: 1px solid #241a45; }
     section[data-testid="stSidebar"] .block-container { padding-left: 1rem !important; padding-right: 1rem !important; }
+
     .block-container {
-        padding-top: 2.5rem !important; padding-bottom: 2rem !important;
-        padding-left: 2.5rem !important; padding-right: 2.5rem !important; max-width: 100% !important;
+        padding-top: 2.5rem !important;
+        padding-bottom: 2rem !important;
+        padding-left: 2.5rem !important;
+        padding-right: 2.5rem !important;
+        max-width: 100% !important;
     }
+
     div[data-testid="stMetric"] {
-        background: #1a1436; border: 1px solid #2c2151; border-radius: 14px;
-        padding: 16px 18px; box-shadow: 0 4px 14px rgba(40,25,80,.35);
+        background: #1a1436;
+        border: 1px solid #2c2151;
+        border-radius: 14px;
+        padding: 16px 18px;
+        box-shadow: 0 4px 14px rgba(40,25,80,.35);
     }
     div[data-testid="stMetricValue"] { color: #f2eeff; font-weight: 700; font-size: 1.5rem !important; }
     div[data-testid="stMetricLabel"] { color: #a99fcf; font-size: .85rem !important; }
-    .stButton > button { border-radius: 10px; font-weight: 600; border: 1px solid #4a3a7a; transition: all .15s ease; }
-    .stButton > button[kind="primary"] { background: linear-gradient(90deg, #4c1d95, #6d28d9); color: #efe9ff; border: none; }
+
+    .stButton > button {
+        border-radius: 10px; font-weight: 600; border: 1px solid #4a3a7a; transition: all .15s ease;
+    }
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(90deg, #4c1d95, #6d28d9); color: #efe9ff; border: none;
+    }
     .stButton > button:hover { transform: translateY(-1px); filter: brightness(1.12); }
+
     .stTabs [data-baseweb="tab-list"] { gap: 6px; background: #120d26; padding: 6px; border-radius: 12px; }
     .stTabs [data-baseweb="tab"] { border-radius: 8px; padding: 6px 14px; color: #a99fcf; font-weight: 600; font-size: .9rem; }
     .stTabs [aria-selected="true"] { background: linear-gradient(90deg, #4c1d95, #6d28d9) !important; color: #ffffff !important; }
+
     [data-testid="stAppDeployButton"] button, .stDeployButton button, button[title="Manage app"] {
         background: linear-gradient(90deg, #4c1d95, #6d28d9) !important; color: #efe9ff !important;
         border: none !important; border-radius: 8px !important; font-weight: 600 !important;
@@ -72,12 +95,13 @@ st.markdown("""
     }
     [data-testid="StyledFullScreenButton"] { color: #b9aee0 !important; }
     .stSlider [role="slider"] { background: #6d28d9 !important; }
+
     .stTextInput input, .stSelectbox div[data-baseweb="select"] { background: #1a1436; color: #dcd6ec; border-radius: 8px; }
     .stDataFrame { border-radius: 12px; overflow: hidden; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- SUPABASE ---
+# --- 2. KẾT NỐI SUPABASE ---
 @st.cache_resource
 def init_connection():
     try:
@@ -100,7 +124,7 @@ PRIORITY_TICKERS = [
     "REE", "GMD", "HAH", "PNJ", "DGW", "FRT", "VTP", "ANV", "VHC", "DBC",
 ]
 
-# --- KHỞI TẠO ---
+# --- 3. KHỞI TẠO BIẾN ---
 if 'scan_results' not in st.session_state:
     st.session_state['scan_results'] = []
 
@@ -127,20 +151,14 @@ setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 
-# ================================================================
-# TẠO 10 TAB — thêm "🚀 Sức Bật" vào cuối
-# ================================================================
-(tab_market, tab_screener, tab_results, tab_signals,
- tab_simulation, tab_backtest, tab_reports, tab_accum,
- tab_recommendation, tab_suc_bat) = st.tabs([
+# --- 4. TẠO 9 TAB ---
+tab_market, tab_screener, tab_results, tab_signals, tab_simulation, tab_backtest, tab_reports, tab_accum, tab_recommendation = st.tabs([
     "🌟 Thị Trường", "🔍 Bộ Lọc", "📊 Kết Quả Quét", "📡 Tín Hiệu & Cảnh Báo",
-    "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo", "🧭 Tích Lũy",
-    "💡 Khuyến Nghị", "🚀 Sức Bật",
-])
-
-# ==========================================
+    "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo", "🧭 Tích Lũy", "💡 Khuyến Nghị"
+])# ==========================================
 # TAB 1: THỊ TRƯỜNG CHUNG
 # ==========================================
+
 with tab_market:
     col_title, col_btn, col_interval = st.columns([3, 1, 1])
     with col_title:
@@ -150,33 +168,55 @@ with tab_market:
             "⏱️ Tự làm mới",
             options=[0, 30, 60, 120, 300],
             format_func=lambda x: "Tắt" if x == 0 else f"{x}s",
-            index=2, key="refresh_interval_select", label_visibility="collapsed",
+            index=2,  # mặc định 60s
+            key="refresh_interval_select",
+            label_visibility="collapsed",
         )
     with col_btn:
         if st.button("🔄 CẬP NHẬT DỮ LIỆU", type="primary", use_container_width=True):
-            for fn in [get_intraday_vnindex, get_vnindex_data, market_snapshot, get_market_breadth]:
-                try: fn.clear()
-                except Exception: pass
+            try: get_intraday_vnindex.clear()
+            except Exception: pass
+            try: get_vnindex_data.clear()
+            except Exception: pass
+            try: market_snapshot.clear()
+            except Exception: pass
+            try: get_market_breadth.clear()
+            except Exception: pass
             st.rerun()
 
+    # --- Auto-refresh bằng JS thuần — không cần package nào ---
     if refresh_interval > 0:
         import streamlit.components.v1 as _components
         _components.html(
-            f"""<script>
+            f"""
+            <script>
                 setTimeout(function() {{
+                    // Tìm nút CẬP NHẬT và click tự động
                     const buttons = window.parent.document.querySelectorAll('button[kind="primary"]');
                     for (const btn of buttons) {{
-                        if (btn.innerText.includes('CẬP NHẬT')) {{ btn.click(); break; }}
+                        if (btn.innerText.includes('CẬP NHẬT')) {{
+                            btn.click();
+                            break;
+                        }}
                     }}
                 }}, {refresh_interval * 1000});
-            </script>""",
+            </script>
+            """,
             height=0,
         )
         st.caption(f"🔁 Tự động làm mới mỗi **{refresh_interval}s**")
 
     st.divider()
+    # ... phần còn lại giữ nguyên từ đây
 
-    snap = {}; snap_error = None; pe_stats_data = None; pe_hist = None; breadth = None; reco = None
+
+    # --- Khởi tạo snap, pe, breadth, reco ---
+    snap = {}
+    snap_error = None
+    pe_stats_data = None
+    pe_hist = None
+    breadth = None
+    reco = None
     try:
         snap = market_snapshot(symbol="VNINDEX", days=250) or {}
     except Exception as e:
@@ -197,6 +237,7 @@ with tab_market:
     except Exception:
         pass
 
+    # --- Intraday data ---
     intraday_df = get_intraday_vnindex()
     chart_df, df_today = None, None
     current_index = 0
@@ -216,7 +257,9 @@ with tab_market:
         if 'time' in intraday_df.columns and 'close' in intraday_df.columns:
             intraday_df['close']  = pd.to_numeric(intraday_df['close'], errors='coerce').fillna(0)
             intraday_df['volume'] = pd.to_numeric(
-                intraday_df['volume'] if 'volume' in intraday_df.columns else 0, errors='coerce').fillna(0)
+                intraday_df['volume'] if 'volume' in intraday_df.columns else 0,
+                errors='coerce'
+            ).fillna(0)
             intraday_df['time']     = pd.to_datetime(intraday_df['time'])
             intraday_df['hour_min'] = intraday_df['time'].dt.strftime('%H:%M')
             intraday_df['date']     = intraday_df['time'].dt.date
@@ -230,27 +273,30 @@ with tab_market:
                 (intraday_df['hour_min'] >= '09:00') &
                 (intraday_df['hour_min'] <= '15:00')
             ].copy()
+
             df_yesterday = intraday_df[
                 (intraday_df['date'] == prev_date) &
                 (intraday_df['hour_min'] >= '09:00') &
                 (intraday_df['hour_min'] <= '15:00')
             ].copy() if prev_date else pd.DataFrame(columns=intraday_df.columns)
 
-            prev_vol = 0
             if not df_yesterday.empty:
                 df_yesterday['Vol_Hôm_Qua'] = df_yesterday['volume'].cumsum()
                 prev_vol = df_yesterday['Vol_Hôm_Qua'].iloc[-1]
+            else:
+                prev_vol = 0
 
             if not df_today.empty:
                 df_today['Vol_Hôm_Nay'] = df_today['volume'].cumsum()
                 current_index   = df_today['close'].iloc[-1]
                 current_vol     = df_today['Vol_Hôm_Nay'].iloc[-1]
                 max_time_actual = df_today['hour_min'].max()
+
                 vol_change = current_vol - prev_vol
 
                 m1, m2, m3 = st.columns(3)
-                m1.metric("📊 VN-INDEX", f"{current_index:,.2f}")
-                m2.metric("💰 Thanh khoản hôm nay", f"{current_vol/1e6:,.1f}M CP",
+                m1.metric("📊 VN-INDEX",                f"{current_index:,.2f}")
+                m2.metric("💰 Thanh khoản hôm nay",      f"{current_vol/1e6:,.1f}M CP",
                           f"{vol_change/1e6:+,.1f}M CP so với cùng giờ hôm qua" if prev_vol else None)
                 m3.metric("⏳ Thanh khoản hôm qua (EOD)", f"{prev_vol/1e6:,.1f}M CP")
                 st.info(f"🕒 Dữ liệu thực tế đến **{max_time_actual}** (trễ ~1 phút)")
@@ -259,9 +305,13 @@ with tab_market:
                     pd.date_range("09:00", "11:30", freq="min").strftime('%H:%M').tolist() +
                     pd.date_range("13:00", "15:00", freq="min").strftime('%H:%M').tolist()
                 )
+
                 chart_today = (
                     pd.DataFrame({'hour_min': times})
-                    .merge(df_today.groupby('hour_min')['Vol_Hôm_Nay'].last().reset_index(), on='hour_min', how='left')
+                    .merge(
+                        df_today.groupby('hour_min')['Vol_Hôm_Nay'].last().reset_index(),
+                        on='hour_min', how='left'
+                    )
                 )
                 chart_today['Vol_Hôm_Nay'] = chart_today['Vol_Hôm_Nay'].ffill()
                 chart_today.loc[chart_today['hour_min'] > max_time_actual, 'Vol_Hôm_Nay'] = None
@@ -270,39 +320,58 @@ with tab_market:
                 if not df_yesterday.empty:
                     yday_agg = (
                         pd.DataFrame({'hour_min': times})
-                        .merge(df_yesterday.groupby('hour_min')['Vol_Hôm_Qua'].last().reset_index(), on='hour_min', how='left')
+                        .merge(
+                            df_yesterday.groupby('hour_min')['Vol_Hôm_Qua'].last().reset_index(),
+                            on='hour_min', how='left'
+                        )
                     )
                     yday_agg['Vol_Hôm_Qua'] = yday_agg['Vol_Hôm_Qua'].ffill()
-                    chart_df = chart_df.join(yday_agg.set_index('hour_min'), how='left')
+                    yday_agg = yday_agg.set_index('hour_min')
+                    chart_df = chart_df.join(yday_agg, how='left')
 
+    # SECTION 2 — NHỊP ĐẬP THỊ TRƯỜNG
     st.markdown("---")
     st.markdown("### 💓 NHỊP ĐẬP THỊ TRƯỜNG")
     render_market_tab(chart_df, df_today)
 
+    # ══════════════════════════════════════════════════════════════
+    # SECTION 3 — PHÂN TÍCH XU HƯỚNG (2 × 2 grid)
+    # ══════════════════════════════════════════════════════════════
     st.markdown("---")
     st.markdown("### 🧠 PHÂN TÍCH XU HƯỚNG")
+
     row1_l, row1_r = st.columns(2)
 
+    # Panel A — Xu hướng giá
     with row1_l:
         with st.container(border=True):
             st.markdown("#### 📈 Xu hướng giá")
+
             trend_txt = snap.get("trend_text") or "—"
             ma20_txt  = snap.get("ma20_text")  or ""
             support   = snap.get("support")    or 0
             resist    = snap.get("resistance") or 0
+
             if snap_error and not snap.get("ma20"):
                 st.caption(f"⚠️ {snap_error[:60]}")
             else:
                 st.markdown(f"**{trend_txt}**")
                 if ma20_txt and ma20_txt != "—":
                     st.caption(ma20_txt)
+
             ma_c1, ma_c2, ma_c3 = st.columns(3)
             ma_c1.metric("MA20",  f"{snap.get('ma20'):.1f}"  if snap.get('ma20')  else "—")
             ma_c2.metric("MA50",  f"{snap.get('ma50'):.1f}"  if snap.get('ma50')  else "—")
             ma_c3.metric("MA200", f"{snap.get('ma200'):.1f}" if snap.get('ma200') else "—")
-            if support or resist:
-                st.markdown(f"**🟢 Hỗ trợ:** `{support:.1f}` &nbsp;•&nbsp; **🔴 Kháng cự:** `{resist:.1f}`")
 
+            if support or resist:
+                st.markdown(
+                    f"**🟢 Hỗ trợ:** `{support:.1f}` "
+                    f"&nbsp;•&nbsp; "
+                    f"**🔴 Kháng cự:** `{resist:.1f}`"
+                )
+
+    # Panel B — Định giá P/E
     with row1_r:
         with st.container(border=True):
             st.markdown("#### 💰 Định giá P/E (20 năm)")
@@ -310,13 +379,19 @@ with tab_market:
                 st.info("⏳ Chưa tải được dữ liệu P/E")
             else:
                 pe_c1, pe_c2 = st.columns(2)
-                pe_c1.metric("P/E hiện tại",
+                pe_c1.metric(
+                    "P/E hiện tại",
                     f"{pe_stats_data['pe_now']:.1f}x" if pe_stats_data.get('pe_now') else "—",
-                    delta=f"{pe_stats_data.get('pct_vs_avg', 0):+.1f}% vs TB" if pe_stats_data.get('pct_vs_avg') else None,
-                    delta_color="inverse")
-                pe_c2.metric("TB 20 năm",
+                    delta=f"{pe_stats_data.get('pct_vs_avg', 0):+.1f}% vs TB"
+                          if pe_stats_data.get('pct_vs_avg') else None,
+                    delta_color="inverse"
+                )
+                pe_c2.metric(
+                    "TB 20 năm",
                     f"{pe_stats_data['mean']:.1f}x" if pe_stats_data.get('mean') else "—",
-                    delta=f"{pe_stats_data.get('zscore', 0):+.2f}σ" if pe_stats_data.get('zscore') else None)
+                    delta=f"{pe_stats_data.get('zscore', 0):+.2f}σ"
+                          if pe_stats_data.get('zscore') else None,
+                )
                 pct = pe_stats_data.get('percentile')
                 if pct is not None:
                     color_pe = "🟢" if pct < 25 else "🟡" if pct < 75 else "🔴"
@@ -334,19 +409,25 @@ with tab_market:
                 except Exception:
                     pass
 
+    # Hàng 2
     row2_l, row2_r = st.columns(2)
+
+    # Panel C — Chỉ báo kỹ thuật
     with row2_l:
         with st.container(border=True):
             st.markdown("#### 📊 Chỉ báo kỹ thuật")
+
             rsi_val    = snap.get('rsi') or 50
             rsi_txt    = snap.get('rsi_text') or "—"
             macd_val   = snap.get('macd') or 0
             macd_sig   = snap.get('macd_signal') or 0
             macd_cross = snap.get('macd_cross') or "—"
+
             rsi_emoji = "🔴" if rsi_val >= 70 else ("🟢" if rsi_val <= 30 else "🟡")
             st.markdown(f"**RSI(14):** {rsi_emoji} `{rsi_val:.1f}` — {rsi_txt}")
             st.progress(min(rsi_val / 100, 1.0), text=f"RSI = {rsi_val:.1f}")
             st.divider()
+
             macd_emoji = "🟢" if macd_cross == "Vàng" else "🔴"
             macd_label = "Cắt lên (Vàng)" if macd_cross == "Vàng" else (
                          "Cắt xuống (Chết)" if macd_cross not in ["—", None] else "—")
@@ -356,29 +437,44 @@ with tab_market:
             else:
                 st.markdown("**Trạng thái:** —")
 
+    # Panel D — Dòng tiền
     with row2_r:
         with st.container(border=True):
             st.markdown("#### 🔊 Dòng tiền (Volume)")
+
             vol_today = snap.get('vol_today') or 0
             vol_avg   = snap.get('vol_avg')   or 0
             vol_ratio = snap.get('vol_ratio') or 0
             vol_txt   = snap.get('vol_text')  or "—"
+
             if vol_txt and vol_txt != "—":
                 st.markdown(f"**{vol_txt}**")
+
             v1, v2 = st.columns(2)
             v1.metric("Vol phiên GD", f"{vol_today/1e6:,.1f}M" if vol_today else "—")
             v2.metric("TB 20 phiên",  f"{vol_avg/1e6:,.1f}M"   if vol_avg   else "—")
+
             if vol_ratio and vol_avg:
-                st.progress(min(vol_ratio / 2.0, 1.0), text=f"Tỷ lệ: {vol_ratio:.2f}x trung bình")
+                st.progress(
+                    min(vol_ratio / 2.0, 1.0),
+                    text=f"Tỷ lệ: {vol_ratio:.2f}x trung bình"
+                )
             else:
                 st.caption("Chưa có dữ liệu volume phiên")
 
+    # ══════════════════════════════════════════════════════════════
+    # SECTION 4 — SỨC KHỎE THỊ TRƯỜNG
+    # ══════════════════════════════════════════════════════════════
     st.markdown("---")
     st.markdown("### 🏥 SỨC KHỎE THỊ TRƯỜNG (400 mã HOSE)")
     render_breadth_panel(breadth)
 
+    # ══════════════════════════════════════════════════════════════
+    # SECTION 5 — KHUYẾN NGHỊ HÀNH ĐỘNG
+    # ══════════════════════════════════════════════════════════════
     st.markdown("---")
     st.markdown("### 💡 KHUYẾN NGHỊ HÀNH ĐỘNG")
+
     if reco is None:
         st.warning("⚠️ Chưa tính được khuyến nghị — thiếu dữ liệu kỹ thuật.")
     else:
@@ -397,7 +493,12 @@ with tab_market:
             kb.metric("🎯 Score",       f"{cur_score:+d}")
             kc.metric("📈 Tỷ trọng CP", f"{stock_pct}%")
             kd.metric("💵 Tiền mặt",    f"{cash_pct}%")
-            st.progress(stock_pct / 100, text=f"Cổ phiếu {stock_pct}%  ·  Tiền mặt {cash_pct}%")
+
+            st.progress(
+                stock_pct / 100,
+                text=f"Cổ phiếu {stock_pct}%  ·  Tiền mặt {cash_pct}%"
+            )
+
             with st.expander("📋 Lý do khuyến nghị", expanded=True):
                 reasons = reco.get("reasons", [])
                 if reasons:
@@ -409,27 +510,44 @@ with tab_market:
         st.caption("⚠️ Khuyến nghị dựa trên PTKT + định giá, không phải tư vấn đầu tư chính thức.")
 
         with st.expander("📋 Bảng quy đổi Score → Tỷ trọng", expanded=False):
-            st.caption("Tổng Score = Breadth (–8→+8) + PTKT (–5→+5) + P/E (–2→+2) = khung –15 đến +15")
+            st.caption(
+                "Tổng Score = Breadth (–8→+8) + PTKT (–5→+5) + P/E (–2→+2) = khung –15 đến +15"
+            )
             st.divider()
+
             score_table = [
-                (12,  85, "20%", "🔥 MUA CỰC MẠNH"),  (9,   75, "25%", "🚀 MUA MẠNH"),
-                (6,   65, "35%", "🟢 MUA TÍCH CỰC"),   (3,   58, "42%", "🟢 MUA / GIỮ"),
-                (1,   52, "48%", "🟢 GIỮ CAO"),        (-1,  50, "50%", "➖ CÂN BẰNG"),
-                (-3,  42, "58%", "🟠 GIẢM NHẸ"),       (-6,  30, "70%", "⚠️ GIẢM TỶ TRỌNG"),
-                (-9,  20, "80%", "🔴 PHÒNG THỦ"),      (-12, 10, "90%", "🛡️ PHÒNG THỦ MẠNH"),
+                (12,  85, "20%", "🔥 MUA CỰC MẠNH"),
+                (9,   75, "25%", "🚀 MUA MẠNH"),
+                (6,   65, "35%", "🟢 MUA TÍCH CỰC"),
+                (3,   58, "42%", "🟢 MUA / GIỮ"),
+                (1,   52, "48%", "🟢 GIỮ CAO"),
+                (-1,  50, "50%", "➖ CÂN BẰNG"),
+                (-3,  42, "58%", "🟠 GIẢM NHẸ"),
+                (-6,  30, "70%", "⚠️ GIẢM TỶ TRỌNG"),
+                (-9,  20, "80%", "🔴 PHÒNG THỦ"),
+                (-12, 10, "90%", "🛡️ PHÒNG THỦ MẠNH"),
                 (-99,  5, "95%", "💀 THOÁT KHỎI THỊ TRƯỜNG"),
             ]
+
             h = st.columns([1.2, 1, 1, 2.5, 1.2])
             for col, lbl in zip(h, ["Score", "CP%", "Tiền%", "Hành động", ""]):
                 col.markdown(f"**{lbl}**")
-            matched = next((i for i, (thr,*_) in enumerate(score_table) if cur_score >= thr), None)
+
+            matched = None
+            for i, (thr, cp, cash, act) in enumerate(score_table):
+                if cur_score >= thr:
+                    matched = i
+                    break
+
             for i, (thr, cp, cash, act) in enumerate(score_table):
                 score_str = f"≥ {thr}" if thr > -99 else "< -12"
                 cols = st.columns([1.2, 1, 1, 2.5, 1.2])
-                cols[0].markdown(f"**{score_str}**"); cols[1].markdown(f"`{cp}%`")
-                cols[2].markdown(f"`{cash}`");        cols[3].markdown(act)
-                if i == matched: cols[4].markdown("⬅️ **Hiện tại**")
-
+                cols[0].markdown(f"**{score_str}**")
+                cols[1].markdown(f"`{cp}%`")
+                cols[2].markdown(f"`{cash}`")
+                cols[3].markdown(act)
+                if i == matched:
+                    cols[4].markdown("⬅️ **Hiện tại**")
 # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU
 # ==========================================
@@ -440,6 +558,7 @@ def render_screener_fragment():
 
     if scan_button:
         ex_code = 'all' if exchange_choice == "Tất cả 3 sàn" else exchange_choice
+
         tickers = get_all_tickers(ex_code)
 
         if tickers is None or len(tickers) == 0:
@@ -469,6 +588,7 @@ def render_screener_fragment():
                     )
 
             tickers_to_scan = tickers_ordered[:max_scan]
+
             rate_per_min = 60 if active_api_key else 20
             eta_min = len(tickers_to_scan) / rate_per_min
             st.caption(
@@ -478,11 +598,16 @@ def render_screener_fragment():
 
             scan_start_time = time.time()
             hard_timeout = max(240, min(1200, eta_min * 60 * 3))
+
             live_results_box = st.empty()
 
             with st.status(f"Đang quét {len(tickers_to_scan)} mã... (ước tính ~{eta_min:.1f} phút)", expanded=True) as status:
                 progress_bar = st.progress(0)
-                results = []; error_logs = []; total = len(tickers_to_scan); processed = 0; timed_out = False
+                results = []
+                error_logs = []
+                total = len(tickers_to_scan)
+                processed = 0
+                timed_out = False
 
                 def process_ticker(ticker):
                     if ticker in BLACKLIST:
@@ -501,17 +626,22 @@ def render_screener_fragment():
                     except Exception as e:
                         return {"status": "error", "msg": f"{ticker}: Lỗi data_loader.py -> {str(e)}"}
 
-                with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                max_workers = 4
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                     future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
+
                     try:
                         pending = set(future_to_ticker.keys())
                         while pending:
                             remaining_time = hard_timeout - (time.time() - scan_start_time)
                             if remaining_time <= 0:
                                 raise concurrent.futures.TimeoutError()
+
                             done_now, pending = concurrent.futures.wait(
                                 pending, timeout=min(3, remaining_time),
-                                return_when=concurrent.futures.FIRST_COMPLETED)
+                                return_when=concurrent.futures.FIRST_COMPLETED
+                            )
+
                             for future in done_now:
                                 processed += 1
                                 try:
@@ -522,11 +652,14 @@ def render_screener_fragment():
                                         error_logs.append(outcome["msg"])
                                 except Exception as e:
                                     error_logs.append(f"Lỗi luồng ThreadPool: {str(e)}")
+
                             elapsed = time.time() - scan_start_time
                             status.update(label=(
                                 f"Đang quét... {processed}/{total} mã | "
-                                f"✅ {len(results)} hợp lệ | ⏱️ {elapsed:.0f}s trôi qua"))
+                                f"✅ {len(results)} hợp lệ | ⏱️ {elapsed:.0f}s trôi qua"
+                            ))
                             progress_bar.progress(min(processed / total, 1.0))
+
                             if done_now and results:
                                 preview_df = pd.DataFrame(results)
                                 if signal_filter != "Tất cả" and 'Trạng thái' in preview_df.columns:
@@ -539,37 +672,52 @@ def render_screener_fragment():
                                 ] if c in preview_df_show.columns]
                                 preview_df_live = preview_df_show[live_cols] if live_cols else preview_df_show
                                 with live_results_box.container():
-                                    st.caption(f"📊 Kết quả LIVE (đang cập nhật): {len(preview_df_live)} mã")
+                                    st.caption(
+                                        f"📊 Kết quả LIVE (đang cập nhật): {len(preview_df_live)} mã — "
+                                        "bảng đầy đủ sẽ có ở tab 📊 Kết Quả Quét sau khi quét xong."
+                                    )
                                     st.dataframe(preview_df_live, use_container_width=True, hide_index=True)
                     except concurrent.futures.TimeoutError:
                         timed_out = True
                         executor.shutdown(wait=False, cancel_futures=True)
 
                 if timed_out:
-                    status.update(label=f"⏳ Đã dừng do quá thời gian — hiển thị {len(results)} mã ({processed}/{total}).",
-                                  state="complete", expanded=False)
+                    status.update(
+                        label=f"⏳ Đã dừng do quá thời gian ({hard_timeout/60:.0f} phút) — hiển thị {len(results)} mã ({processed}/{total}).",
+                        state="complete", expanded=False
+                    )
                 elif len(results) > 0:
                     status.update(label=f"✅ Quét xong {len(results)} mã hợp lệ!", state="complete", expanded=False)
                 else:
                     status.update(label=f"❌ Quét thất bại toàn bộ!", state="error", expanded=True)
 
             live_results_box.empty()
+
             if timed_out:
-                st.warning(f"⏳ Đã dừng quét sau {hard_timeout/60:.0f} phút (mới xử lý {processed}/{total} mã).")
+                st.warning(
+                    f"⏳ Đã dừng quét sau {hard_timeout/60:.0f} phút (mới xử lý {processed}/{total} mã). "
+                    "Muốn quét hết, hãy giảm 'Số lượng mã quét tối đa' hoặc thêm API key vnstock."
+                )
+
             if len(error_logs) > 0 and len(results) == 0:
                 st.error("🚨 APP BỊ KẸT VÌ CÁC LỖI DƯỚI ĐÂY:")
                 with st.expander("MỞ RỘNG ĐỂ XEM CHI TIẾT LỖI NGẦM", expanded=True):
-                    for err in error_logs[:10]: st.code(err)
-                    if len(error_logs) > 10: st.write(f"... và {len(error_logs) - 10} mã khác bị lỗi y hệt.")
+                    for err in error_logs[:10]:
+                        st.code(err)
+                    if len(error_logs) > 10:
+                        st.write(f"... và {len(error_logs) - 10} mã khác bị lỗi y hệt.")
 
             st.session_state['scan_results'] = results
             st.rerun()
 
     if not st.session_state.get('scan_results', []):
-        st.caption("Hãy cấu hình thông số ở Sidebar trái và bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' để bắt đầu.")
+        st.caption("Hãy cấu hình thông số ở Sidebar trái và bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' để bắt đầu. "
+                   "Kết quả sau khi quét xong sẽ hiển thị ở tab **📊 Kết Quả Quét**.")
     else:
-        st.success(f"✅ Đã có {len(st.session_state['scan_results'])} mã trong kết quả quét gần nhất. "
-                   "👉 Chuyển sang tab **📊 Kết Quả Quét** để xem bảng chi tiết.")
+        n_found = len(st.session_state['scan_results'])
+        st.success(f"✅ Đã có {n_found} mã trong kết quả quét gần nhất. "
+                   "👉 Chuyển sang tab **📊 Kết Quả Quét** ở trên để xem bảng chi tiết.")
+
 
 with tab_screener:
     render_screener_fragment()
@@ -603,9 +751,12 @@ with tab_signals:
 # ==========================================
 with tab_simulation:
     st.subheader("🔮 Mô Phỏng Xu Hướng — Kijun17 / Knife65 / Knife2-129")
-    st.caption("Mục đích: mô phỏng ĐÚNG state machine Tăng → Sideway → Giảm theo tài liệu.")
+    st.caption(
+        "Mục đích tab này: mô phỏng ĐÚNG state machine Tăng → Sideway → Giảm theo tài liệu "
+        "(3 đường cùng hướng, Chikou span, hợp bích, không mua đuổi, xác nhận khối lượng)."
+    )
 
-    sim_ticker = st.text_input("Nhập mã cổ phiếu:", value="HPG", key="sim_ticker_input").upper().strip()
+    sim_ticker = st.text_input("Nhập mã cổ phiếu (Gõ xong nhấn Enter):", value="HPG", key="sim_ticker_input").upper().strip()
 
     if sim_ticker:
         with st.spinner(f"Đang xử lý dữ liệu {sim_ticker}..."):
@@ -616,9 +767,13 @@ with tab_simulation:
                 eng = te.compute_fairy_engine(df_sim)
 
                 if eng is None:
-                    st.warning(f"⚠️ Mã {sim_ticker} chưa đủ lịch sử (cần tối thiểu ~156 phiên giao dịch).")
+                    st.warning(
+                        f"⚠️ Mã {sim_ticker} chưa đủ lịch sử (cần tối thiểu ~156 phiên giao dịch) "
+                        "để tính đường Knife2-129. Hãy thử mã có thời gian niêm yết lâu hơn."
+                    )
                 else:
                     snap_sim = te.get_latest_snapshot(eng)
+
                     xh = snap_sim['xu_huong']
                     xh_display = {"Tăng": "🟢 Tăng", "Giảm": "🔴 Giảm", "Sideway": "🟡 Sideway"}.get(xh, xh)
                     c1, c2, c3, c4 = st.columns(4)
@@ -628,95 +783,154 @@ with tab_simulation:
                     c4.metric("Hợp Bích (65≈129)", "✅ Có" if snap_sim['hop_bich'] else "—")
 
                     badges = []
-                    if snap_sim['khong_mua_duoi']:   badges.append("🟢 Còn trong vùng KHÔNG MUA ĐUỔI")
-                    if snap_sim['canh_bao_mua_duoi']: badges.append("⚠️ CẢNH BÁO MUA ĐUỔI")
-                    if snap_sim['cau_truc_khoe']:     badges.append("💪 Cấu trúc khoẻ")
-                    if snap_sim['canh_bao_tao_dinh']: badges.append("⚠️ CẢNH BÁO TẠO ĐỈNH")
-                    if snap_sim['vung_phan_phoi']:    badges.append("🚨 VÙNG PHÂN PHỐI")
-                    if badges: st.info("  \n".join(badges))
+                    if snap_sim['khong_mua_duoi']:
+                        badges.append("🟢 Còn trong vùng KHÔNG MUA ĐUỔI (giá mới vừa vượt mây)")
+                    if snap_sim['canh_bao_mua_duoi']:
+                        badges.append("⚠️ CẢNH BÁO MUA ĐUỔI — giá đã đi xa mây, rủi ro mua bằng lòng tham")
+                    if snap_sim['cau_truc_khoe']:
+                        badges.append("💪 Cấu trúc khoẻ: đỉnh sau cao hơn đỉnh trước, đáy sau cao hơn đáy trước")
+                    if snap_sim['canh_bao_tao_dinh']:
+                        badges.append("⚠️ CẢNH BÁO TẠO ĐỈNH — giá gần đỉnh nhưng thanh khoản kiệt dần")
+                    if snap_sim['vung_phan_phoi']:
+                        badges.append("🚨 VÙNG PHÂN PHỐI — volume đột biến tại đỉnh + giá vượt xa 129 (~30%+)")
+                    if badges:
+                        st.info("  \n".join(badges))
 
                     plot_df = eng.tail(180).copy()
                     if 'time' in plot_df.columns:
                         plot_df['Ngay'] = pd.to_datetime(plot_df['time']).dt.strftime('%Y-%m-%d')
                         plot_df.set_index('Ngay', inplace=True)
 
+                    import plotly.graph_objects as go
+                    from plotly.subplots import make_subplots
+
                     fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
                                         vertical_spacing=0.03, row_heights=[0.8, 0.2])
+
                     trend_color = {"Tăng": "rgba(0, 200, 83, 0.08)", "Giảm": "rgba(255, 23, 68, 0.08)", "Sideway": None}
-                    seg_start = 0; xh_series = plot_df['Xu_Huong'].tolist(); idx_list = plot_df.index.tolist()
+                    seg_start = 0
+                    xh_series = plot_df['Xu_Huong'].tolist()
+                    idx_list = plot_df.index.tolist()
                     for i in range(1, len(xh_series) + 1):
                         if i == len(xh_series) or xh_series[i] != xh_series[seg_start]:
                             color = trend_color.get(xh_series[seg_start])
-                            if color: fig.add_vrect(x0=idx_list[seg_start], x1=idx_list[i-1], fillcolor=color, line_width=0, row=1, col=1)
+                            if color:
+                                fig.add_vrect(x0=idx_list[seg_start], x1=idx_list[i - 1],
+                                              fillcolor=color, line_width=0, row=1, col=1)
                             seg_start = i
 
-                    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['close'], line=dict(color='#e5e0f7', width=2), name='Giá Đóng Cửa'), row=1, col=1)
-                    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['knife65'], line=dict(color='rgba(0, 200, 83, 0.5)', width=1), name='Knife1 (65)'), row=1, col=1)
-                    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['knife129'], line=dict(color='rgba(255, 23, 68, 0.5)', width=1.5), fill='tonexty', fillcolor='rgba(128, 128, 128, 0.15)', name='Knife2 (129) — Mây'), row=1, col=1)
-                    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['kijun17'], line=dict(color='#2962FF', width=1.5), name='Kijun (17)'), row=1, col=1)
+                    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['close'],
+                                             line=dict(color='#e5e0f7', width=2), name='Giá Đóng Cửa'), row=1, col=1)
+                    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['knife65'],
+                                             line=dict(color='rgba(0, 200, 83, 0.5)', width=1), name='Knife1 (65)'), row=1, col=1)
+                    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['knife129'],
+                                             line=dict(color='rgba(255, 23, 68, 0.5)', width=1.5),
+                                             fill='tonexty', fillcolor='rgba(128, 128, 128, 0.15)', name='Knife2 (129) — Mây'), row=1, col=1)
+                    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['kijun17'],
+                                             line=dict(color='#2962FF', width=1.5), name='Kijun (17)'), row=1, col=1)
 
                     chan_song = plot_df[plot_df['xac_nhan_chan_song']]
-                    fig.add_trace(go.Scatter(x=chan_song.index, y=chan_song['close'] * 0.97, mode='markers', marker=dict(symbol='triangle-up', size=14, color='lime'), name='🎯 Chân Sóng'), row=1, col=1)
+                    fig.add_trace(go.Scatter(x=chan_song.index, y=chan_song['close'] * 0.97,
+                                             mode='markers', marker=dict(symbol='triangle-up', size=14, color='lime'),
+                                             name='🎯 Chân Sóng (Vol xác nhận)'), row=1, col=1)
+
                     hop_bich_pts = plot_df[plot_df['hop_bich']]
-                    fig.add_trace(go.Scatter(x=hop_bich_pts.index, y=hop_bich_pts['knife129'], mode='markers', marker=dict(symbol='diamond', size=6, color='#FFD700'), name='💎 Hợp Bích'), row=1, col=1)
+                    fig.add_trace(go.Scatter(x=hop_bich_pts.index, y=hop_bich_pts['knife129'],
+                                             mode='markers', marker=dict(symbol='diamond', size=6, color='#FFD700'),
+                                             name='💎 Hợp Bích (65≈129)'), row=1, col=1)
+
                     khong_duoi_pts = plot_df[plot_df['khong_mua_duoi']]
-                    fig.add_trace(go.Scatter(x=khong_duoi_pts.index, y=khong_duoi_pts['close'], mode='markers', marker=dict(symbol='circle', size=5, color='#00E5FF'), name='✅ Không Mua Đuổi'), row=1, col=1)
+                    fig.add_trace(go.Scatter(x=khong_duoi_pts.index, y=khong_duoi_pts['close'],
+                                             mode='markers', marker=dict(symbol='circle', size=5, color='#00E5FF'),
+                                             name='✅ Vùng Không Mua Đuổi'), row=1, col=1)
+
                     dinh_pts = plot_df[plot_df['canh_bao_tao_dinh'] | plot_df['vung_phan_phoi']]
-                    fig.add_trace(go.Scatter(x=dinh_pts.index, y=dinh_pts['close'] * 1.02, mode='markers', marker=dict(symbol='x', size=10, color='orange'), name='⚠️ Cảnh Báo Đỉnh'), row=1, col=1)
+                    fig.add_trace(go.Scatter(x=dinh_pts.index, y=dinh_pts['close'] * 1.02,
+                                             mode='markers', marker=dict(symbol='x', size=10, color='orange'),
+                                             name='⚠️ Cảnh Báo Đỉnh/Phân Phối'), row=1, col=1)
+
                     start_up = plot_df[plot_df['trend_start'] & (plot_df['Xu_Huong'] == 'Tăng')]
                     start_dn = plot_df[plot_df['trend_start'] & (plot_df['Xu_Huong'] == 'Giảm')]
-                    fig.add_trace(go.Scatter(x=start_up.index, y=start_up['close'] * 0.95, mode='markers', marker=dict(symbol='star', size=13, color='#00C853'), name='🟢 Bắt Đầu Tăng'), row=1, col=1)
-                    fig.add_trace(go.Scatter(x=start_dn.index, y=start_dn['close'] * 1.05, mode='markers', marker=dict(symbol='star', size=13, color='#FF1744'), name='🔴 Bắt Đầu Giảm'), row=1, col=1)
+                    fig.add_trace(go.Scatter(x=start_up.index, y=start_up['close'] * 0.95,
+                                             mode='markers', marker=dict(symbol='star', size=13, color='#00C853'),
+                                             name='🟢 Bắt Đầu Tăng'), row=1, col=1)
+                    fig.add_trace(go.Scatter(x=start_dn.index, y=start_dn['close'] * 1.05,
+                                             mode='markers', marker=dict(symbol='star', size=13, color='#FF1744'),
+                                             name='🔴 Bắt Đầu Giảm'), row=1, col=1)
 
                     colors = ['#00C853' if row['close'] >= row['open'] else '#FF1744' for _, row in plot_df.iterrows()]
                     fig.add_trace(go.Bar(x=plot_df.index, y=plot_df['volume'], marker_color=colors, name='Volume'), row=2, col=1)
-                    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['vol_ma20'], line=dict(color='#FF6D00', width=2), name='Volume MA20'), row=2, col=1)
+                    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['vol_ma20'],
+                                             line=dict(color='#FF6D00', width=2), name='Volume MA20'), row=2, col=1)
 
                     fig.update_layout(
                         title=f"<b>Mô Phỏng Xu Hướng Cô Tiên: {sim_ticker}</b>",
-                        height=760, margin=dict(l=10, r=160, t=40, b=10), showlegend=True,
-                        legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.01, font=dict(size=11), bgcolor='rgba(0,0,0,0)'),
+                        height=760, margin=dict(l=10, r=160, t=40, b=10),
+                        showlegend=True,
+                        legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.01,
+                                    font=dict(size=11), bgcolor='rgba(0,0,0,0)'),
                         xaxis_rangeslider_visible=False, dragmode='pan',
                         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='#dcd6ec')
                     )
                     fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
+
                     st.plotly_chart(fig, use_container_width=True)
+
+                    with st.expander("📖 Chú giải các ký hiệu trên biểu đồ"):
+                        st.markdown(
+                            "- **Nền xanh/đỏ mờ**: giai đoạn Xu Hướng Tăng/Giảm đang được state machine ghi nhận.\n"
+                            "- **⭐ Bắt Đầu Tăng/Giảm**: phiên đầu tiên hệ thống xác nhận đổi xu hướng.\n"
+                            "- **🎯 Chân Sóng**: phiên bắt đầu Tăng có khối lượng xác nhận (≥1.75x MA20).\n"
+                            "- **💎 Hợp Bích**: Knife1(65) và Knife2(129) hội tụ sát nhau (≤0.14%).\n"
+                            "- **✅ Vùng Không Mua Đuổi**: đang Tăng và giá chỉ vừa vượt mây (≤3%).\n"
+                            "- **⚠️ Cảnh Báo Đỉnh/Phân Phối**: giá gần đỉnh nhưng thanh khoản kiệt, hoặc volume đột biến tại đỉnh."
+                        )
             else:
-                st.warning(f"⚠️ Không có dữ liệu cho mã {sim_ticker}.")
+                st.warning(f"⚠️ Không có dữ liệu cho mã {sim_ticker}. Hãy kiểm tra lại mã cổ phiếu!")
 
 # ==========================================
 # TAB 6: BACKTEST
 # ==========================================
 with tab_backtest:
     st.subheader("🛠️ Hệ Thống Backtest Dài Hạn (Khung 1DAY)")
+    st.caption("Thuật toán Quant: Tự động bắt Râu nến để Stoploss (-7%) hoặc Take Profit (+15%). Chặn bán nếu gãy trend Kumo.")
+
     col_input1, col_input2 = st.columns(2)
     with col_input1:
-        ticker_bt = st.text_input("Nhập mã cổ phiếu để test:", value="FPT", key="bt_ticker").upper()
+        ticker_bt = st.text_input("Nhập mã cổ phiếu để test (Ví dụ: FPT, HPG):", value="FPT", key="bt_ticker").upper()
     with col_input2:
         years_back = st.slider("Số NĂM quá khứ muốn kiểm tra:", min_value=1, max_value=10, value=5)
 
     if st.button("🚀 Bắt đầu chạy Backtest Tự Động"):
-        with st.spinner(f"Đang cào dữ liệu Daily trong {years_back} năm..."):
+        with st.spinner(f"Đang cào dữ liệu Daily trong {years_back} năm và mô phỏng giao dịch mã {ticker_bt}..."):
             df_daily = bt.get_daily_data(ticker_bt, years_back)
+
             if df_daily is not None and not df_daily.empty:
                 df_ichimoku = bt.calculate_ichimoku_daily(df_daily)
+
                 if df_ichimoku is not None:
                     stats, trade_log = bt.run_ichimoku_backtest_daily(df_ichimoku)
-                    st.success(f"Kiểm thử mã {ticker_bt} trong {years_back} năm thành công!")
+
+                    st.success(f"Dữ liệu kiểm thử mã {ticker_bt} trong {years_back} năm thành công!")
+
+                    st.subheader("📊 Kết quả hiệu suất chiến lược")
                     m_col1, m_col2, m_col3 = st.columns(3)
                     m_col1.metric("Vốn cuối kỳ", stats["Vốn cuối kỳ"])
                     m_col2.metric("Lợi nhuận ròng", stats["Lợi nhuận ròng"])
-                    m_col3.metric("Tỷ lệ Thắng", stats["Tỷ lệ Thắng (Win Rate)"])
+                    m_col3.metric("Tỷ lệ Thắng (Win Rate)", stats["Tỷ lệ Thắng (Win Rate)"])
+
+                    st.subheader("📋 Nhật ký lệnh chi tiết của Bot")
                     st.dataframe(trade_log, use_container_width=True)
                 else:
-                    st.error("Dữ liệu quá ngắn, không đủ tính Ichimoku!")
+                    st.error("Dữ liệu quá ngắn, không đủ để tính toán đám mây Ichimoku!")
             else:
-                st.error("Lỗi: Không lấy được dữ liệu.")
+                st.error("Lỗi: Không lấy được dữ liệu. Hãy kiểm tra lại mã cổ phiếu hoặc API đang bảo trì!")
 
 # ==========================================
 # TAB 7: BÁO CÁO CTCK
 # ==========================================
 import requests as _req
+import pandas as _pd
 from datetime import datetime as _dt, timedelta as _td
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -728,29 +942,46 @@ def _load_reports_json() -> dict:
         base = ""
     if not base:
         base = "https://raw.githubusercontent.com/nnnhutien-cpu/Fairy-stock/main"
+
     url = f"{base}/reports.json"
     try:
         resp = _r.get(url, timeout=10)
         resp.encoding = "utf-8"
-        return resp.json() if resp.status_code == 200 else {"error": f"HTTP {resp.status_code}", "data": []}
+        if resp.status_code == 200:
+            return resp.json()
+        return {"error": f"HTTP {resp.status_code}", "data": []}
     except Exception as e:
         return {"error": str(e), "data": []}
 
 with tab_reports:
     st.subheader("📑 Hệ Thống Báo Cáo Định Giá Cổ Phiếu")
-    st.caption("Dữ liệu tổng hợp tự động từ **DNSE · Vietstock · CafeF** — bot cập nhật 2 lần/ngày.")
+    st.caption(
+        "Dữ liệu tổng hợp tự động từ **DNSE · Vietstock · CafeF** — "
+        "bot cập nhật 2 lần/ngày (10:00 SA & 15:30 CH)."
+    )
 
     col_f1, col_f2, col_f3 = st.columns([1, 1, 2])
     with col_f1:
-        filter_action = st.selectbox("Lọc Khuyến Nghị:", ["Tất cả", "MUA", "NẮM GIỮ", "BÁN", "TÍCH LŨY", "KHẢ QUAN"])
+        filter_action = st.selectbox(
+            "Lọc Khuyến Nghị:",
+            ["Tất cả", "MUA", "NẮM GIỮ", "BÁN", "TÍCH LŨY", "KHẢ QUAN"],
+        )
     with col_f2:
-        filter_source = st.selectbox("Nguồn dữ liệu:", ["Tất cả", "DNSE", "DNSE Research", "Vietstock", "CafeF"])
+        filter_source = st.selectbox(
+            "Nguồn dữ liệu:",
+            ["Tất cả", "DNSE", "DNSE Research", "Vietstock", "CafeF"],
+        )
     with col_f3:
-        rep_ticker = st.text_input("Mã cổ phiếu (để trống = toàn TT):", value="", key="rep_ticker_v5", placeholder="VD: FPT, HPG...").upper().strip()
+        rep_ticker = st.text_input(
+            "Mã cổ phiếu (để trống = toàn thị trường):",
+            value="", key="rep_ticker_v5",
+            placeholder="Ví dụ: FPT, HPG, VNM...",
+        ).upper().strip()
 
-    col_btn2, col_note = st.columns([1, 4])
-    with col_btn2:
+    col_btn, col_note = st.columns([1, 4])
+    with col_btn:
         force_refresh = st.button("🔄 Làm mới", key="refresh_reports_v5")
+
     if force_refresh:
         _load_reports_json.clear()
 
@@ -758,60 +989,99 @@ with tab_reports:
         payload = _load_reports_json()
 
     reports_ok = True
+
     if "error" in payload and not payload.get("data"):
-        st.error(f"⚠️ Không tải được reports.json: `{payload['error']}`"); reports_ok = False
+        st.error(
+            f"⚠️ Không tải được reports.json: `{payload['error']}`\n\n"
+            "**Kiểm tra:**\n"
+            "1. File `reports.json` đã có trong repo chưa? "
+            "Vào GitHub → Actions → chạy thủ công workflow **Scrape Analyst Reports**.\n"
+            "2. Repo có public không? Nếu private cần thêm token vào secrets.\n"
+        )
+        reports_ok = False
 
     if reports_ok:
         updated_at = payload.get("updated_at", "")
         raw_data   = payload.get("data", [])
+
         with col_note:
-            st.caption(f"⏱️ Cập nhật lần cuối: **{updated_at}** — {len(raw_data)} báo cáo")
+            st.caption(f"⏱️ Dữ liệu cập nhật lần cuối: **{updated_at}** — {len(raw_data)} báo cáo")
+
         df_all = pd.DataFrame(raw_data)
+
         if df_all.empty:
-            st.info("Kho báo cáo hiện đang trống. Vào GitHub → Actions → Scrape Analyst Reports → Run workflow.")
+            st.info(
+                "Kho báo cáo hiện đang trống.\n\n"
+                "Vào **GitHub → Actions → Scrape Analyst Reports → Run workflow** "
+                "để bot cào dữ liệu về ngay."
+            )
             reports_ok = False
 
     if reports_ok:
         for col in ["buy_price", "target_price"]:
             if col in df_all.columns:
                 df_all[col] = pd.to_numeric(
-                    df_all[col].astype(str).str.replace(",", "").str.replace(".", ""), errors="coerce").fillna(0)
+                    df_all[col].astype(str).str.replace(",", "").str.replace(".", ""),
+                    errors="coerce"
+                ).fillna(0)
+
         mask = (df_all["buy_price"] > 0) & (df_all["target_price"] > 0)
         df_all["upside_pct"] = 0.0
-        df_all.loc[mask, "upside_pct"] = ((df_all.loc[mask, "target_price"] - df_all.loc[mask, "buy_price"])
-                                           / df_all.loc[mask, "buy_price"] * 100).round(1)
+        df_all.loc[mask, "upside_pct"] = (
+            (df_all.loc[mask, "target_price"] - df_all.loc[mask, "buy_price"])
+            / df_all.loc[mask, "buy_price"] * 100
+        ).round(1)
+
         df_show = df_all.copy()
-        if rep_ticker:    df_show = df_show[df_show["ticker"].str.upper() == rep_ticker]
-        if filter_action != "Tất cả": df_show = df_show[df_show["action"].str.upper().str.contains(filter_action, na=False)]
-        if filter_source != "Tất cả": df_show = df_show[df_show["source"] == filter_source]
+        if rep_ticker:
+            df_show = df_show[df_show["ticker"].str.upper() == rep_ticker]
+        if filter_action != "Tất cả":
+            df_show = df_show[
+                df_show["action"].str.upper().str.contains(filter_action, na=False)
+            ]
+        if filter_source != "Tất cả":
+            df_show = df_show[df_show["source"] == filter_source]
 
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("📋 Tổng báo cáo", len(df_show))
-        m2.metric("🟢 Mua / Tích lũy", int(df_show["action"].str.upper().str.contains("MUA|TÍCH LŨY|KHẢ QUAN|BUY", na=False).sum()))
-        m3.metric("🟡 Nắm giữ",        int(df_show["action"].str.upper().str.contains("GIỮ|HOLD|NEUTRAL", na=False).sum()))
-        m4.metric("🔴 Bán",            int(df_show["action"].str.upper().str.contains("BÁN|SELL", na=False).sum()))
+        n_buy  = df_show["action"].str.upper().str.contains("MUA|TÍCH LŨY|KHẢ QUAN|BUY", na=False).sum()
+        n_hold = df_show["action"].str.upper().str.contains("GIỮ|HOLD|NEUTRAL", na=False).sum()
+        n_sell = df_show["action"].str.upper().str.contains("BÁN|SELL", na=False).sum()
+        m2.metric("🟢 Mua / Tích lũy", int(n_buy))
+        m3.metric("🟡 Nắm giữ", int(n_hold))
+        m4.metric("🔴 Bán", int(n_sell))
+
         st.divider()
 
         if df_show.empty:
             st.warning("Không có báo cáo nào khớp bộ lọc.")
         else:
             st.dataframe(
-                df_show[["date","ticker","company","action","buy_price","target_price","upside_pct","source","report_url"]],
-                use_container_width=True, hide_index=True,
+                df_show[["date", "ticker", "company", "action",
+                         "buy_price", "target_price", "upside_pct",
+                         "source", "report_url"]],
+                use_container_width=True,
+                hide_index=True,
                 column_config={
-                    "date": st.column_config.TextColumn("📅 Ngày"),
-                    "ticker": st.column_config.TextColumn("🏷️ Mã"),
-                    "company": st.column_config.TextColumn("🏢 CTCK"),
-                    "action": st.column_config.TextColumn("⚡ Khuyến Nghị"),
-                    "buy_price":    st.column_config.NumberColumn("💰 Giá KN",     format="%d ₫"),
-                    "target_price": st.column_config.NumberColumn("🎯 Giá MT",     format="%d ₫"),
-                    "upside_pct":   st.column_config.NumberColumn("🚀 Upside",     format="%.1f %%"),
+                    "date":         st.column_config.TextColumn("📅 Ngày"),
+                    "ticker":       st.column_config.TextColumn("🏷️ Mã"),
+                    "company":      st.column_config.TextColumn("🏢 CTCK"),
+                    "action":       st.column_config.TextColumn("⚡ Khuyến Nghị"),
+                    "buy_price":    st.column_config.NumberColumn("💰 Giá Khuyến Nghị", format="%d ₫"),
+                    "target_price": st.column_config.NumberColumn("🎯 Giá Mục Tiêu",    format="%d ₫"),
+                    "upside_pct":   st.column_config.NumberColumn("🚀 Upside",          format="%.1f %%"),
                     "source":       st.column_config.TextColumn("🔗 Nguồn"),
                     "report_url":   st.column_config.LinkColumn("📥 Báo Cáo", display_text="Xem"),
                 },
             )
-            st.download_button("⬇️ Tải CSV", data=df_show.to_csv(index=False).encode("utf-8-sig"),
-                               file_name=f"bao_cao_{datetime.now().strftime('%Y%m%d')}.csv", mime="text/csv")
+
+            csv_bytes = df_show.to_csv(index=False).encode("utf-8-sig")
+            st.download_button(
+                label="⬇️ Tải CSV",
+                data=csv_bytes,
+                file_name=f"bao_cao_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+            )
 
 # ==========================================
 # TAB 8: CHIẾN LƯỢC TÍCH LŨY
@@ -822,11 +1092,11 @@ with tab_accum:
 # ==========================================
 # TAB 9: KHUYẾN NGHỊ
 # ==========================================
-with tab_recommendation:
-    render_recommendation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift)
 
-# ==========================================
-# TAB 10: SCREENER SỨC BẬT  ← MỚI
-# ==========================================
-with tab_suc_bat:
+with tab_recommendation:
+    render_recommendation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift) 
+# ========================================== 
+# TAB 10: SCREENER SỨC BẬT  ← MỚI 
+# ========================================== 
+with tab_suc_bat: 
     render_suc_bat_tab()
