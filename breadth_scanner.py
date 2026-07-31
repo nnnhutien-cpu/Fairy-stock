@@ -125,11 +125,30 @@ def get_hose_tickers():
 # ==========================================================
 # LẤY DỮ LIỆU GIÁ 1 MÃ (60 phiên gần nhất là đủ cho MA50)
 # ==========================================================
+def _expected_latest_trading_date(now_vn: datetime = None):
+    """
+    Ngày giao dịch GẦN NHẤT mà dữ liệu đóng cửa lẽ ra phải sẵn sàng — cùng quy
+    tắc với data_loader.py: đóng cửa 15h, dữ liệu sẵn sàng chậm nhất 17h.
+    """
+    if now_vn is None:
+        now_vn = datetime.now(VN_TZ)
+    d = now_vn.date()
+    if now_vn.weekday() < 5 and now_vn.time() < datetime.strptime("17:00", "%H:%M").time():
+        d -= timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= timedelta(days=1)
+    return d
+
+
 def get_price_history(ticker, days_back=120):
     from vnstock.api.quote import Quote
 
     end_date = datetime.now(VN_TZ).strftime('%Y-%m-%d')
     start_date = (datetime.now(VN_TZ) - pd.Timedelta(days=days_back)).strftime('%Y-%m-%d')
+    # Không dừng lại ở nguồn đầu tiên "không rỗng" — nếu VCI bị chậm 1 phiên,
+    # thử tiếp MSN xem có bản mới hơn không (giống lỗi đã sửa ở data_loader.py).
+    expected_date = _expected_latest_trading_date()
+    best_df, best_last_date = None, None
 
     for src in ['VCI', 'MSN']:
         try:
@@ -143,10 +162,16 @@ def get_price_history(ticker, days_back=120):
                     df = df.rename(columns={'date': 'time'})
                 df['close'] = pd.to_numeric(df['close'], errors='coerce')
                 df = df.dropna(subset=['close']).sort_values('time').reset_index(drop=True)
-                return df
+                if df.empty:
+                    continue
+                last_date = pd.to_datetime(df['time'].max()).date()
+                if last_date >= expected_date:
+                    return df  # đủ mới -> dùng luôn, không cần thử nguồn kia
+                if best_last_date is None or last_date > best_last_date:
+                    best_df, best_last_date = df, last_date
         except Exception:
             continue
-    return None
+    return best_df
 
 
 # ==========================================================
@@ -189,6 +214,8 @@ def scan_breadth(max_tickers=None):
     above_ma20 = above_ma50 = 0
     n_valid = 0
     ad_change_sum = 0.0
+    from collections import Counter
+    data_date_counter = Counter()
 
     for i, ticker in enumerate(tickers, start=1):
         df = get_price_history(ticker)
@@ -206,6 +233,7 @@ def scan_breadth(max_tickers=None):
         if prev_close <= 0:
             continue
 
+        data_date_counter[pd.to_datetime(last['time']).strftime('%Y-%m-%d')] += 1
         chg_pct = (close - prev_close) / prev_close * 100
         ad_change_sum += chg_pct
 
@@ -236,9 +264,13 @@ def scan_breadth(max_tickers=None):
     breadth_score = compute_breadth_score(ad_pct, pct_above_ma50)
     momentum_note = compute_momentum_note(ad_pct, pct_above_ma20, pct_above_ma50, breadth_score)
     ad_change_avg = ad_change_sum / n_valid
+    # Ngày phiên mà ĐA SỐ mã đang có dữ liệu (khác với updated_at = lúc script
+    # chạy) — dùng để UI cảnh báo nếu breadth đang tính trên giá bị chậm phiên.
+    data_date = data_date_counter.most_common(1)[0][0] if data_date_counter else None
 
     result = {
         "updated_at":     datetime.now(VN_TZ).strftime('%Y-%m-%d %H:%M:%S'),
+        "data_date":      data_date,
         "n_total":        n_valid,
         "advance":        advance,
         "decline":        decline,
