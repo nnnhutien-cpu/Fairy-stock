@@ -35,6 +35,34 @@ DEFAULT_RATE_LIMIT_PER_MIN = 18
 
 VN_TZ = timezone(timedelta(hours=7))
 
+# Không quét lại nếu lần quét trước cách đây chưa tới ngần này phút — tránh
+# quét trùng lặp lãng phí API khi lịch cron (chạy dày để tăng cơ hội không bị
+# GitHub bỏ lượt) vô tình kích hoạt liên tiếp gần nhau.
+MIN_REFRESH_MINUTES = 25
+
+
+def _is_trading_window(now_vn: datetime) -> bool:
+    """Phiên sáng 9h00-11h30, phiên chiều 13h00-15h50 (giờ VN), Thứ 2 - Thứ 6."""
+    if now_vn.weekday() >= 5:
+        return False
+    t = now_vn.time()
+    morning   = datetime.strptime("09:00", "%H:%M").time() <= t <= datetime.strptime("11:30", "%H:%M").time()
+    afternoon = datetime.strptime("13:00", "%H:%M").time() <= t <= datetime.strptime("15:50", "%H:%M").time()
+    return morning or afternoon
+
+
+def _minutes_since_last_update(path="breadth.json"):
+    """Đọc breadth.json hiện có (nếu có) để biết lần quét trước cách đây bao lâu."""
+    import json
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        last = datetime.strptime(data["updated_at"], "%Y-%m-%d %H:%M:%S")
+        now = datetime.now(VN_TZ).replace(tzinfo=None)
+        return (now - last).total_seconds() / 60
+    except Exception:
+        return None  # chưa có file / lỗi đọc -> coi như chưa từng quét
+
 
 def _log(msg):
     print(f"[{datetime.now(VN_TZ).strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -242,6 +270,19 @@ def save_to_json(result: dict, path="breadth.json"):
 
 
 if __name__ == "__main__":
+    force = os.environ.get("FORCE_SCAN", "").strip().lower() in ("1", "true", "yes")
+    now_vn = datetime.now(VN_TZ)
+
+    if not force and not _is_trading_window(now_vn):
+        _log(f"⏭️  Ngoài giờ giao dịch ({now_vn:%H:%M} giờ VN) — bỏ qua lượt quét này.")
+        sys.exit(0)
+
+    if not force:
+        mins = _minutes_since_last_update()
+        if mins is not None and mins < MIN_REFRESH_MINUTES:
+            _log(f"⏭️  Đã quét cách đây {mins:.0f} phút (< {MIN_REFRESH_MINUTES} phút) — bỏ qua, tránh quét trùng lặp.")
+            sys.exit(0)
+
     active_key = os.environ.get("VNSTOCK_API_KEY", "").strip()
     if active_key:
         try:
