@@ -35,7 +35,55 @@ def _get_supabase():
         _supabase_client = None
     return _supabase_client
 
-def _read_from_cache(ticker, days_back, max_staleness_days=4):
+def get_expected_latest_trading_date(now: datetime = None):
+    """
+    Trả về ngày giao dịch GẦN NHẤT mà dữ liệu đóng cửa lẽ ra phải sẵn sàng,
+    dựa trên quy tắc thực tế: phiên đóng cửa lúc 15h00, dữ liệu (từ nguồn
+    ngoài / bot cào) được cập nhật xong chậm nhất lúc 17h00 (giờ VN, UTC+7).
+
+    - Trước 17h00 của một ngày làm việc -> dữ liệu ngày đó CHƯA chắc có,
+      nên ngày giao dịch "chuẩn" để so sánh vẫn là ngày làm việc liền trước.
+    - Từ 17h00 trở đi của ngày làm việc -> ngày hôm đó đã có đủ dữ liệu.
+    - Thứ 7 / Chủ nhật -> luôn lùi về ngày làm việc gần nhất (thứ 6).
+    """
+    if now is None:
+        now = _vn_now()
+    d = now.date()
+    if now.weekday() < 5 and now.time() < datetime.strptime("17:00", "%H:%M").time():
+        d -= timedelta(days=1)
+    while d.weekday() >= 5:  # Lùi qua Thứ 7 / Chủ nhật về Thứ 6
+        d -= timedelta(days=1)
+    return d
+
+
+def get_data_freshness(df, now: datetime = None):
+    """
+    So sánh ngày dữ liệu MỚI NHẤT trong df với ngày giao dịch kỳ vọng
+    (xem get_expected_latest_trading_date). Trả về dict để tab UI hiển thị
+    cảnh báo nếu dữ liệu cào bị chậm (vd: chậm 2 ngày).
+    """
+    expected_date = get_expected_latest_trading_date(now)
+    if df is None or df.empty or "time" not in df.columns:
+        return {"latest_date": None, "expected_date": expected_date, "lag_days": None, "is_stale": True}
+    latest_date = pd.to_datetime(df["time"].max()).date()
+    lag_days = (expected_date - latest_date).days
+    return {
+        "latest_date": latest_date,
+        "expected_date": expected_date,
+        "lag_days": lag_days,
+        "is_stale": lag_days > 0,
+    }
+
+
+def _read_from_cache(ticker, days_back):
+    """
+    Đọc cache dài hạn từ Supabase (nếu có). Cache CHỈ được dùng khi ngày mới
+    nhất trong cache >= ngày giao dịch kỳ vọng (xem get_expected_latest_trading_date).
+    Nếu cache cũ hơn (vd: bot bơm dữ liệu bị trễ, chưa chạy kịp) -> trả về None
+    để get_stock_data() bắt buộc cào dữ liệu SỐNG mới nhất thay vì âm thầm
+    trả về dữ liệu cũ (đây chính là nguyên nhân gây hiển thị dữ liệu chậm
+    1-2 ngày ở tab Khuyến Nghị).
+    """
     sb = _get_supabase()
     if sb is None:
         return None
@@ -51,8 +99,10 @@ def _read_from_cache(ticker, days_back, max_staleness_days=4):
         rows = resp.data or []
         if not rows:
             return None
-        newest_date = pd.to_datetime(rows[0]["date"])
-        if (datetime.now() - newest_date).days > max_staleness_days:
+        newest_date = pd.to_datetime(rows[0]["date"]).date()
+        expected_date = get_expected_latest_trading_date()
+        if newest_date < expected_date:
+            # Cache chưa được bơm kịp tới phiên gần nhất -> bỏ qua, ép lấy dữ liệu sống
             return None
         df = pd.DataFrame(rows)
         df = df.rename(columns={"date": "time"})
@@ -514,8 +564,11 @@ def get_stock_data(ticker, days_back=200):
     if cached is not None and len(cached) >= min(60, days_back // 2):
         return cached
 
-    end_date   = datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+    # Dùng giờ VN (không phải giờ máy chủ UTC) để tính ngày kết thúc, tránh bị
+    # lùi mất 1 ngày khi máy chủ chạy UTC (Streamlit Cloud / GitHub Actions).
+    now_vn     = _vn_now()
+    end_date   = now_vn.strftime('%Y-%m-%d')
+    start_date = (now_vn - timedelta(days=days_back)).strftime('%Y-%m-%d')
     return _fetch(ticker, start_date, end_date, '1D')
 
 @st.cache_data(ttl=3600, show_spinner=False)
