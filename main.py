@@ -154,8 +154,9 @@ st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 # --- 4. TẠO 9 TAB ---
 tab_market, tab_screener, tab_results, tab_signals, tab_simulation, tab_backtest, tab_reports, tab_accum, tab_recommendation = st.tabs([
     "🌟 Thị Trường", "🔍 Bộ Lọc", "📊 Kết Quả Quét", "📡 Tín Hiệu & Cảnh Báo",
-    "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo", "🧭 Tích Lũy", "💡 Khuyến Nghị"
-])# ==========================================
+    "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo", "🧭 Tích Lũy", "💡 Khuyến Nghị", "🚀 Sức Bật"
+])
+# ==========================================
 # TAB 1: THỊ TRƯỜNG CHUNG
 # ==========================================
 
