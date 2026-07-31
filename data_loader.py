@@ -200,6 +200,20 @@ def _fetch(symbol, start, end, interval):
             return _fetch_yahoo(symbol, start, end)
         return pd.DataFrame()
 
+    # Với dữ liệu daily: không dừng lại ở nguồn đầu tiên "không rỗng" — phải
+    # kiểm tra nguồn đó có ĐỦ MỚI (tới đúng phiên gần nhất) hay không. Nếu
+    # VCI trả về dữ liệu bị chậm 1 nguồn khác (MSN, rồi Yahoo) có thể đã có
+    # phiên mới hơn -> thử lần lượt, giữ lại bản MỚI NHẤT tìm được.
+    expected_date = get_expected_latest_trading_date() if interval == '1D' else None
+    best_df = pd.DataFrame()
+    best_last_date = None
+
+    def _last_date(d):
+        if d is None or d.empty or 'time' not in d.columns:
+            return None
+        v = pd.to_datetime(d['time'].max())
+        return v.date() if pd.notna(v) else None
+
     sources = ['VCI', 'MSN']
     for src in sources:
         key = f"{symbol}|{interval}|{src}"
@@ -210,16 +224,31 @@ def _fetch(symbol, start, end, interval):
             )
             if df is not None and not df.empty:
                 LAST_ERRORS.pop(key, None)
-                return _normalize(df)
-            LAST_ERRORS[key] = "API trả về DataFrame rỗng."
+                df = _normalize(df)
+                ld = _last_date(df)
+                if interval != '1D' or expected_date is None or (ld is not None and ld >= expected_date):
+                    return df  # đủ mới (hoặc không phải daily) -> dùng luôn
+                if best_last_date is None or (ld is not None and ld > best_last_date):
+                    best_df, best_last_date = df, ld
+                LAST_ERRORS[key] = f"{src} chỉ có dữ liệu tới {ld} (kỳ vọng {expected_date}) — đang thử nguồn khác."
+            else:
+                LAST_ERRORS[key] = "API trả về DataFrame rỗng."
         except Exception as e:
             LAST_ERRORS[key] = f"{type(e).__name__}: {e}"
             continue
 
     if interval == '1D':
-        return _fetch_yahoo(symbol, start, end)
+        df_yahoo = _fetch_yahoo(symbol, start, end)
+        if not df_yahoo.empty:
+            ld = _last_date(df_yahoo)
+            if expected_date is None or (ld is not None and ld >= expected_date):
+                return df_yahoo
+            if best_last_date is None or (ld is not None and ld > best_last_date):
+                best_df, best_last_date = df_yahoo, ld
 
-    return pd.DataFrame()
+    # Không nguồn nào đủ mới -> vẫn trả về bản MỚI NHẤT thu được (thay vì rỗng),
+    # tab Khuyến Nghị sẽ tự cảnh báo độ chậm dựa trên get_data_freshness().
+    return best_df
 
 # ==========================================================
 # INTRADAY — CÁC NGUỒN THAY THẾ (không qua vnstock)
