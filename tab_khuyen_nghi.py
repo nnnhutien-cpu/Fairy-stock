@@ -16,6 +16,8 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from data_loader import get_data_freshness, get_expected_latest_trading_date
+
 # Ngưỡng "kiệt cung": volume thấp hơn phân nửa (50%) trung bình 20 phiên
 KIET_CUNG_RATIO = 0.5
 
@@ -206,7 +208,7 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
     st.subheader("🎯 Khuyến Nghị MUA / BÁN — Hệ Thống Cô Tiên")
     st.caption("Phân tích dựa trên Kijun17 / Knife65 / Knife129 + Volume MA20 + RSI14 (Sideway) + Kiệt Cung (<50% MA20)")
 
-    col_input, col_btn = st.columns([3, 1])
+    col_input, col_btn, col_refresh = st.columns([3, 1, 1])
     with col_input:
         rec_ticker = st.text_input(
             "Nhập mã cổ phiếu:",
@@ -218,17 +220,34 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
         st.write("")
         st.write("")
         run_btn = st.button("🔍 PHÂN TÍCH", type="primary", use_container_width=True)
+    with col_refresh:
+        st.write("")
+        st.write("")
+        refresh_btn = st.button(
+            "🔄 Làm mới",
+            use_container_width=True,
+            help="Xoá cache và cào lại dữ liệu mới nhất, dùng khi dữ liệu đang bị chậm."
+        )
 
     if not rec_ticker:
         st.info("Nhập mã cổ phiếu và bấm PHÂN TÍCH.")
         return
 
-    if not run_btn and f"rec_data_{rec_ticker}" not in st.session_state:
+    if refresh_btn:
+        # Xoá cache của get_stock_data (ttl 1h + cache Supabase) để ép cào lại
+        # dữ liệu SỐNG mới nhất, dùng khi dữ liệu đang bị chậm so với phiên gần nhất.
+        try:
+            get_stock_data_fn.clear()
+        except Exception:
+            pass
+        st.session_state.pop(f"rec_data_{rec_ticker}", None)
+
+    if not (run_btn or refresh_btn) and f"rec_data_{rec_ticker}" not in st.session_state:
         st.info(f"Bấm **PHÂN TÍCH** để xem khuyến nghị cho **{rec_ticker}**.")
         return
 
     # Load dữ liệu (cache session)
-    if run_btn or f"rec_data_{rec_ticker}" not in st.session_state:
+    if run_btn or refresh_btn or f"rec_data_{rec_ticker}" not in st.session_state:
         with st.spinner(f"Đang tải dữ liệu {rec_ticker}..."):
             df_raw = get_stock_data_fn(rec_ticker, days_back=300)
 
@@ -254,6 +273,19 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
     vol_ma20_trend = result["vol_ma20_trend"]
     kiet_cung = result.get("kiet_cung", False)
     xu_huong_label = {"TANG": "🟢 Xu hướng TĂNG", "GIAM": "🔴 Xu hướng GIẢM", "SIDEWAY": "🟡 SIDEWAY"}.get(result["xu_huong"], "—")
+
+    # --- CẢNH BÁO DỮ LIỆU BỊ CHẬM ---
+    # Ngày giao dịch kỳ vọng: phiên đóng cửa 15h, dữ liệu cập nhật xong chậm nhất 17h.
+    freshness = get_data_freshness(df)
+    if freshness["is_stale"] and freshness["latest_date"] is not None:
+        lag = freshness["lag_days"]
+        st.warning(
+            f"⏳ Dữ liệu **{ticker}** đang chậm **{lag} ngày** so với phiên gần nhất "
+            f"(mới nhất: **{freshness['latest_date']:%d/%m/%Y}**, kỳ vọng: "
+            f"**{freshness['expected_date']:%d/%m/%Y}** — phiên đóng cửa 15h, cập nhật xong lúc 17h). "
+            "Bấm **🔄 Làm mới** ở trên để cào lại dữ liệu sống mới nhất; khuyến nghị bên dưới "
+            "có thể chưa phản ánh đúng phiên gần nhất."
+        )
 
     # --- PANEL KHUYẾN NGHỊ ---
     st.divider()
@@ -291,7 +323,12 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
 
     # --- SỐ LIỆU NHANH ---
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("📅 Ngày dữ liệu", str(df.iloc[-1].get('time', df.index[-1]))[:10] if 'time' in df.columns else str(df.index[-1])[:10])
+    col1.metric(
+        "📅 Ngày dữ liệu",
+        str(df.iloc[-1].get('time', df.index[-1]))[:10] if 'time' in df.columns else str(df.index[-1])[:10],
+        "✅ Mới nhất" if not freshness["is_stale"] else f"⏳ Chậm {freshness['lag_days']} ngày",
+        delta_color="off",
+    )
     col2.metric("💰 Giá đóng cửa", f"{close:,.2f}")
     col3.metric("📊 Xu hướng", xu_huong_label)
     col4.metric("📏 Cách Knife129", f"{pct_vs_129:+.2f}%")
