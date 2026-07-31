@@ -1,10 +1,22 @@
 name: Scan Breadth HOSE
 
 on:
-  workflow_dispatch: {}       # cho phép bấm "Run workflow" thủ công trên GitHub
+  workflow_dispatch: {}       # vẫn cho phép bấm "Run workflow" thủ công khi cần
   schedule:
-    # 08:40 UTC = 15:40 giờ VN (~40 phút sau khi HOSE đóng cửa phiên chiều)
-    - cron: "40 8 * * 1-5"    # Thứ 2 - Thứ 6
+    # Tự động quét mỗi 30 phút trong giờ giao dịch (giờ VN, UTC+7), bỏ qua
+    # giờ nghỉ trưa (11h30-13h00, HOSE đóng cửa nên không cần quét):
+    - cron: "0,30 2-4 * * 1-5"   # 09:00 - 11:30 (phiên sáng)
+    - cron: "0,30 6-8 * * 1-5"   # 13:00 - 15:30 (phiên chiều)
+    # Quét chốt phiên lúc 15:40 (giữ nguyên như cũ) để lấy số liệu đã settle
+    - cron: "40 8 * * 1-5"
+
+# Đảm bảo không có 2 lượt quét chạy chồng nhau (mỗi lượt ~5-10 phút, cách nhau
+# 30 phút nên bình thường không đụng nhau, nhưng nếu 1 lượt bị treo/chạy chậm
+# thì huỷ lượt cũ, ưu tiên số liệu MỚI NHẤT — tránh xung đột khi commit
+# breadth.json ngược lại repo).
+concurrency:
+  group: scan-breadth-hose
+  cancel-in-progress: true
 
 permissions:
   contents: write   # cần quyền ghi để commit breadth.json ngược lại repo
