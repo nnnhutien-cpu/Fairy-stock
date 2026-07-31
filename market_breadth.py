@@ -17,25 +17,53 @@ def _is_market_hours(now: datetime) -> bool:
     return morning or afternoon
 
 
+def _expected_latest_trading_date(now: datetime = None):
+    """Cùng quy tắc với data_loader.py: đóng cửa 15h, dữ liệu sẵn sàng chậm nhất 17h."""
+    if now is None:
+        now = _vn_now()
+    d = now.date()
+    if now.weekday() < 5 and now.time() < datetime.strptime("17:00", "%H:%M").time():
+        d -= timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= timedelta(days=1)
+    return d
+
+
 def breadth_freshness(breadth: dict, max_staleness_minutes: int = 45):
     """
-    Bot nền quét lại mỗi 30 phút trong giờ giao dịch (xem
-    .github/workflows/scan_breadth.yml). Nếu bản ghi mới nhất cũ hơn
-    max_staleness_minutes trong khi ĐANG là giờ giao dịch -> có thể bot đã
-    dừng chạy (lỗi workflow, hết quota API...) -> cảnh báo cho người dùng.
-    Ngoài giờ giao dịch thì không cảnh báo (dữ liệu cuối phiên là hợp lệ).
+    Kiểm tra 2 loại "chậm" khác nhau, độc lập với nhau:
+    1) job_stale: bot nền (script chạy) đã lâu chưa chạy lại (>max_staleness_minutes
+       trong giờ giao dịch) -> workflow có thể đang lỗi.
+    2) data_stale: bot CÓ chạy đúng giờ, nhưng giá lấy về bên trong (data_date)
+       vẫn là phiên cũ (nguồn VCI/MSN chưa cập nhật) -> đây là lỗi đã gặp hôm nay,
+       khác hẳn (1), nên tách riêng để cảnh báo đúng nguyên nhân.
+    Ngoài giờ giao dịch thì không cảnh báo job_stale (dữ liệu cuối phiên là hợp lệ).
     """
+    out = {"is_stale": False, "minutes_ago": None, "data_stale": False, "data_date": None, "expected_date": None}
     if not breadth or not breadth.get("updated_at"):
-        return {"is_stale": False, "minutes_ago": None}
-    try:
-        updated_at = datetime.strptime(breadth["updated_at"], "%Y-%m-%d %H:%M:%S")
-    except Exception:
-        return {"is_stale": False, "minutes_ago": None}
+        return out
 
     now = _vn_now()
-    minutes_ago = (now - updated_at).total_seconds() / 60
-    is_stale = _is_market_hours(now) and minutes_ago > max_staleness_minutes
-    return {"is_stale": is_stale, "minutes_ago": round(minutes_ago)}
+    try:
+        updated_at = datetime.strptime(breadth["updated_at"], "%Y-%m-%d %H:%M:%S")
+        minutes_ago = (now - updated_at).total_seconds() / 60
+        out["minutes_ago"] = round(minutes_ago)
+        out["is_stale"] = _is_market_hours(now) and minutes_ago > max_staleness_minutes
+    except Exception:
+        pass
+
+    expected_date = _expected_latest_trading_date(now)
+    out["expected_date"] = expected_date
+    data_date_str = breadth.get("data_date")
+    if data_date_str:
+        try:
+            data_date = datetime.strptime(data_date_str, "%Y-%m-%d").date()
+            out["data_date"] = data_date
+            out["data_stale"] = data_date < expected_date
+        except Exception:
+            pass
+
+    return out
 
 
 @st.cache_data(ttl=1800, show_spinner=False)  # cache 30 phút
@@ -72,6 +100,7 @@ def get_market_breadth():
 
     return {
         "updated_at":       row.get("updated_at", "—"),
+        "data_date":        row.get("data_date"),
         "n_total":          int(row.get("n_total", 0) or 0),
         "advance":          int(row.get("advance", 0) or 0),
         "decline":          int(row.get("decline", 0) or 0),
@@ -110,11 +139,21 @@ def render_breadth_panel(breadth: dict):
     b_note    = breadth.get("momentum_note")
 
     fresh = breadth_freshness(breadth)
-    st.caption(f"🕒 Cập nhật: **{b_updated}** — {b_total} mã hợp lệ · 🔁 Tự động quét mỗi 30 phút trong giờ giao dịch")
+    d_date_str = fresh["data_date"].strftime("%d/%m/%Y") if fresh["data_date"] else "—"
+    st.caption(
+        f"🕒 Bot chạy lúc: **{b_updated}** · 📅 Dữ liệu giá phản ánh phiên: **{d_date_str}** "
+        f"— {b_total} mã hợp lệ · 🔁 Tự động quét mỗi ~10-30 phút trong giờ giao dịch"
+    )
+    if fresh["data_stale"]:
+        st.warning(
+            f"⚠️ Bot chạy đúng giờ nhưng **giá lấy về vẫn thuộc phiên {d_date_str}** "
+            f"(kỳ vọng: {fresh['expected_date']:%d/%m/%Y}) — nguồn dữ liệu giá (VCI/MSN) "
+            "có thể chưa cập nhật kịp. Bot sẽ tự lấy lại ở lượt quét kế tiếp."
+        )
     if fresh["is_stale"]:
         st.warning(
-            f"⚠️ Dữ liệu chưa được cập nhật trong **{fresh['minutes_ago']} phút** dù đang trong giờ giao dịch — "
-            "bot quét nền có thể đang gặp lỗi. Kiểm tra **GitHub → Actions → Scan Breadth HOSE**."
+            f"⚠️ Bot quét nền chưa chạy lại trong **{fresh['minutes_ago']} phút** dù đang trong giờ giao dịch — "
+            "có thể workflow đang gặp lỗi. Kiểm tra **GitHub → Actions → Scan Breadth HOSE**."
         )
 
     bb1, bb2, bb3, bb4 = st.columns(4)
