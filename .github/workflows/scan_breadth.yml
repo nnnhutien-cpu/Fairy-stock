@@ -1,22 +1,23 @@
 name: Scan Breadth HOSE
 
 on:
-  workflow_dispatch: {}       # vẫn cho phép bấm "Run workflow" thủ công khi cần
+  workflow_dispatch: {}       # chạy tay khi cần — luôn quét ngay, bỏ qua kiểm tra giờ/debounce
   schedule:
-    # Tự động quét mỗi 30 phút trong giờ giao dịch (giờ VN, UTC+7), bỏ qua
-    # giờ nghỉ trưa (11h30-13h00, HOSE đóng cửa nên không cần quét):
-    - cron: "0,30 2-4 * * 1-5"   # 09:00 - 11:30 (phiên sáng)
-    - cron: "0,30 6-8 * * 1-5"   # 13:00 - 15:30 (phiên chiều)
-    # Quét chốt phiên lúc 15:40 (giữ nguyên như cũ) để lấy số liệu đã settle
-    - cron: "40 8 * * 1-5"
+    # GitHub Actions chỉ đảm bảo cron chạy theo kiểu "best-effort": lịch có
+    # thể bị TRỄ hoặc BỎ QUA hoàn toàn, đặc biệt vào đúng phút tròn giờ/nửa
+    # giờ (:00, :30 — giờ cao điểm toàn cầu). Để bù lại, ta lên lịch DÀY hơn
+    # (mỗi 10 phút, lệch phút khỏi mốc tròn) nhằm tăng cơ hội ít nhất 1 lượt
+    # "lọt" mỗi ~30 phút. Bản thân breadth_scanner.py sẽ tự bỏ qua nếu đang
+    # ngoài giờ giao dịch HOẶC vừa quét cách đây chưa tới 25 phút — nên lịch
+    # dày này KHÔNG làm quét trùng lặp hay tốn thêm API.
+    - cron: "3,13,23,33,43,53 2-8 * * 1-5"
 
-# Đảm bảo không có 2 lượt quét chạy chồng nhau (mỗi lượt ~5-10 phút, cách nhau
-# 30 phút nên bình thường không đụng nhau, nhưng nếu 1 lượt bị treo/chạy chậm
-# thì huỷ lượt cũ, ưu tiên số liệu MỚI NHẤT — tránh xung đột khi commit
-# breadth.json ngược lại repo).
+# Không huỷ job đang chạy dở khi có lượt kích hoạt mới — chỉ xếp hàng, vì thời
+# gian quét có thể kéo dài hơn dự kiến (rate limit vnstock) và ta không muốn
+# mất dữ liệu giữa chừng.
 concurrency:
   group: scan-breadth-hose
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: write   # cần quyền ghi để commit breadth.json ngược lại repo
@@ -24,6 +25,7 @@ permissions:
 jobs:
   scan-breadth:
     runs-on: ubuntu-latest
+    timeout-minutes: 20   # chặn trường hợp job treo vô thời hạn, chiếm hàng đợi
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -41,6 +43,8 @@ jobs:
       - name: Chạy quét breadth
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
+          # workflow_dispatch (bấm tay) -> luôn quét ngay bất kể giờ giấc/debounce
+          FORCE_SCAN: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
         run: python breadth_scanner.py
 
       - name: Commit breadth.json vào repo
