@@ -1,4 +1,41 @@
 import streamlit as st
+from datetime import datetime, timedelta, timezone
+
+VN_TZ = timezone(timedelta(hours=7))
+
+
+def _vn_now():
+    return datetime.now(VN_TZ).replace(tzinfo=None)
+
+
+def _is_market_hours(now: datetime) -> bool:
+    if now.weekday() >= 5:
+        return False
+    t = now.time()
+    morning = (t >= datetime.strptime("09:00", "%H:%M").time()) and (t <= datetime.strptime("11:30", "%H:%M").time())
+    afternoon = (t >= datetime.strptime("13:00", "%H:%M").time()) and (t <= datetime.strptime("15:40", "%H:%M").time())
+    return morning or afternoon
+
+
+def breadth_freshness(breadth: dict, max_staleness_minutes: int = 45):
+    """
+    Bot nền quét lại mỗi 30 phút trong giờ giao dịch (xem
+    .github/workflows/scan_breadth.yml). Nếu bản ghi mới nhất cũ hơn
+    max_staleness_minutes trong khi ĐANG là giờ giao dịch -> có thể bot đã
+    dừng chạy (lỗi workflow, hết quota API...) -> cảnh báo cho người dùng.
+    Ngoài giờ giao dịch thì không cảnh báo (dữ liệu cuối phiên là hợp lệ).
+    """
+    if not breadth or not breadth.get("updated_at"):
+        return {"is_stale": False, "minutes_ago": None}
+    try:
+        updated_at = datetime.strptime(breadth["updated_at"], "%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return {"is_stale": False, "minutes_ago": None}
+
+    now = _vn_now()
+    minutes_ago = (now - updated_at).total_seconds() / 60
+    is_stale = _is_market_hours(now) and minutes_ago > max_staleness_minutes
+    return {"is_stale": is_stale, "minutes_ago": round(minutes_ago)}
 
 
 @st.cache_data(ttl=1800, show_spinner=False)  # cache 30 phút
@@ -58,8 +95,9 @@ def render_breadth_panel(breadth: dict):
     """
     if breadth is None:
         st.info(
-            "⏳ Chưa có dữ liệu breadth. "
-            "Vào **GitHub → Actions → Scan Breadth HOSE → Run workflow** để quét lần đầu."
+            "⏳ Chưa có dữ liệu breadth. Hệ thống sẽ tự động quét mỗi 30 phút trong giờ "
+            "giao dịch (9h-11h30, 13h-15h40, T2-T6). Nếu đây là lần đầu chạy, vào "
+            "**GitHub → Actions → Scan Breadth HOSE → Run workflow** để quét ngay."
         )
         return
 
@@ -71,7 +109,13 @@ def render_breadth_panel(breadth: dict):
     b_score   = breadth.get("breadth_score", 0)
     b_note    = breadth.get("momentum_note")
 
-    st.caption(f"🕒 Cập nhật: **{b_updated}** — {b_total} mã hợp lệ")
+    fresh = breadth_freshness(breadth)
+    st.caption(f"🕒 Cập nhật: **{b_updated}** — {b_total} mã hợp lệ · 🔁 Tự động quét mỗi 30 phút trong giờ giao dịch")
+    if fresh["is_stale"]:
+        st.warning(
+            f"⚠️ Dữ liệu chưa được cập nhật trong **{fresh['minutes_ago']} phút** dù đang trong giờ giao dịch — "
+            "bot quét nền có thể đang gặp lỗi. Kiểm tra **GitHub → Actions → Scan Breadth HOSE**."
+        )
 
     bb1, bb2, bb3, bb4 = st.columns(4)
     bb1.metric("📈 A/D%", f"{b_ad:.1f}%",
