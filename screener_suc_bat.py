@@ -25,6 +25,7 @@ import numpy as np
 import datetime
 import time
 import requests
+import concurrent.futures as _cf
 
 # ─────────────────────────────────────────────────────────────
 #  CSS  (giữ nguyên palette tím của app)
@@ -94,7 +95,7 @@ _CSS = """
              font-size:10px; font-weight:600; margin-left:6px; }
 .src-vci     { background:#1a2a3a; color:#5b9bd5; }
 .src-fireant { background:#1a2e1a; color:#4caf50; }
-.src-yahoo   { background:#2e1a1a; color:#e65100; }
+.src-yahoo   { background:#1a1a3a; color:#8b7fb5; }
 </style>
 """
 
@@ -133,7 +134,7 @@ def _fetch_fireant(symbol: str, n: int = 120):
             f"&endDate={end.strftime('%Y-%m-%d')}"
             f"&offset=0&limit={n + 20}"
         )
-        r = requests.get(url, timeout=8,
+        r = requests.get(url, timeout=4,
                          headers={"User-Agent": "Mozilla/5.0"})
         if r.status_code != 200:
             return None, None
@@ -188,6 +189,7 @@ def _fetch_yfinance(symbol: str, n: int = 120):
     return None, None
 
 
+@st.cache_data(ttl=900, show_spinner=False)  # 15 phút — đủ mới cho tra cứu nhanh, tránh gọi lại API mỗi lần gõ
 def fetch_ohlcv(symbol: str, n: int = 120):
     """
     Fallback chain: VCI → FireAnt → yfinance
@@ -203,11 +205,12 @@ def fetch_ohlcv(symbol: str, n: int = 120):
     return df, src
 
 
+@st.cache_data(ttl=86400, show_spinner=False)  # tên công ty gần như không đổi -> cache 1 ngày
 def fetch_company_name(symbol: str) -> str:
     """Lấy tên công ty từ FireAnt (nhanh, không cần auth)."""
     try:
         url = f"https://api.fireant.vn/symbols/{symbol}"
-        r = requests.get(url, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+        r = requests.get(url, timeout=3, headers={"User-Agent": "Mozilla/5.0"})
         if r.status_code == 200:
             d = r.json()
             return d.get("companyName", "") or d.get("name", "")
@@ -299,7 +302,15 @@ def compute_metrics(df: pd.DataFrame) -> dict:
 _SRC_BADGE = {
     "VCI":     '<span class="src-badge src-vci">vnstock VCI</span>',
     "FireAnt": '<span class="src-badge src-fireant">FireAnt</span>',
-    "Yahoo":   '<span class="src-badge src-yahoo">Yahoo .VN</span>',
+    "Yahoo":   '<span class="src-badge src-yahoo">Nguồn dự phòng</span>',
+}
+
+# Nhãn hiển thị "sạch" cho cột Nguồn trong bảng scan — không lộ tên nhà cung
+# cấp dự phòng (Yahoo) ra ngoài, dù bên trong vẫn đang dùng nguồn đó.
+_SRC_DISPLAY_MAP = {
+    "VCI":     "VCI",
+    "FireAnt": "FireAnt",
+    "Yahoo":   "Dự phòng",
 }
 
 
@@ -403,14 +414,6 @@ def _render_lookup_card(symbol: str, company: str, m: dict, source: str):
         <thead><tr><th>🔴 Kháng cự</th><th>🟢 Hỗ trợ</th></tr></thead>
         <tbody>{sw_rows}</tbody>
       </table>
-
-      <div class="formula-note">
-        <b>Công thức Sức bật</b> = (Độ giãn % ÷ Số phiên giảm) × 10<br>
-        Giảm <b>30% trong 15 phiên</b> → Sức bật = <b>20</b> ·
-        Giảm <b>30% trong 60 phiên</b> → Sức bật = <b>5</b><br>
-        VIX, GEX, VRE (giảm sâu + nhanh) bật mạnh hơn CTG, TCB trong cùng pha hồi.<br>
-        ⚠️ Chỉ áp dụng <b>giai đoạn đầu sóng hồi</b> (T7/2026). Sau → Volume + Ichimoku.
-      </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -442,13 +445,18 @@ def render_lookup_section():
     if trigger and symbol_input:
         st.session_state["sb_lookup_last"] = symbol_input
         with st.spinner(f"Đang lấy dữ liệu {symbol_input}…"):
-            df, src = fetch_ohlcv(symbol_input, n=120)
+            # Lấy giá + tên công ty SONG SONG (trước đây chạy tuần tự, cộng dồn thời
+            # gian chờ) — cắt giảm đáng kể độ trễ tra cứu 1 mã.
+            with _cf.ThreadPoolExecutor(max_workers=2) as ex:
+                fut_ohlcv = ex.submit(fetch_ohlcv, symbol_input, 120)
+                fut_name  = ex.submit(fetch_company_name, symbol_input)
+                df, src   = fut_ohlcv.result()
+                company   = fut_name.result()
         if df is None or len(df) < 20:
             st.error(f"❌ Không lấy được dữ liệu cho **{symbol_input}**. "
                      "Kiểm tra lại mã hoặc thử lại sau.")
             st.session_state.pop("sb_lookup_result", None)
             return
-        company = fetch_company_name(symbol_input)
         metrics = compute_metrics(df)
         st.session_state["sb_lookup_result"] = {
             "symbol":  symbol_input,
@@ -701,6 +709,7 @@ def render_scan_section():
         "tong_score":   "⭐ Score",
     }
     df_table = df_show[list(display_cols.keys())].rename(columns=display_cols).copy()
+    df_table["Nguồn"] = df_table["Nguồn"].map(_SRC_DISPLAY_MAP).fillna(df_table["Nguồn"])
 
     def _style(df_s):
         styles = pd.DataFrame("", index=df_s.index, columns=df_s.columns)
@@ -772,8 +781,8 @@ def render_scan_section():
         mime="text/csv",
     )
     st.caption(
-        f"Dữ liệu: fallback chain VCI → FireAnt → Yahoo · {n_periods} phiên · "
-        f"Cập nhật: {datetime.date.today().strftime('%d/%m/%Y')} · "
+        f"Dữ liệu: tổng hợp đa nguồn, tự động chọn nguồn nhanh nhất còn hoạt động · "
+        f"{n_periods} phiên · Cập nhật: {datetime.date.today().strftime('%d/%m/%Y')} · "
         "Không phải khuyến nghị đầu tư"
     )
 
