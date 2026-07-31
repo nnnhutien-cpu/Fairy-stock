@@ -467,39 +467,7 @@ with tab_market:
     # ══════════════════════════════════════════════════════════════
     st.markdown("---")
     st.markdown("### 🏥 SỨC KHỎE THỊ TRƯỜNG (400 mã HOSE)")
-
-    if breadth is None:
-        st.info(
-            "⏳ Chưa có dữ liệu breadth. "
-            "Vào **GitHub → Actions → Scan Breadth HOSE → Run workflow** để quét lần đầu."
-        )
-    else:
-        b_updated = breadth.get("updated_at", "—")
-        b_total   = breadth.get("n_total", 0)
-        b_ad      = breadth.get("ad_pct", 0)
-        b_ma20    = breadth.get("pct_above_ma20", 0)
-        b_ma50    = breadth.get("pct_above_ma50", 0)
-        b_score   = breadth.get("breadth_score", 0)
-        b_note    = breadth.get("momentum_note")
-
-        st.caption(f"🕒 Cập nhật: **{b_updated}** — {b_total} mã hợp lệ")
-
-        bb1, bb2, bb3, bb4 = st.columns(4)
-        bb1.metric("📈 A/D%", f"{b_ad:.1f}%",
-                   delta="Tăng giá" if b_ad >= 50 else "Giảm giá",
-                   delta_color="normal" if b_ad >= 50 else "inverse")
-        bb2.metric("📊 % trên MA20", f"{b_ma20:.1f}%")
-        bb3.metric("📊 % trên MA50", f"{b_ma50:.1f}%")
-        bs_color = "🟢" if b_score >= 3 else ("🔴" if b_score <= -3 else "🟡")
-        bb4.metric("🎯 Breadth Score", f"{b_score:+d}", delta=f"{bs_color}")
-
-        ad_color = "🟢" if b_ad   >= 50 else "🔴"
-        ma_color = "🟢" if b_ma50 >= 50 else ("🟡" if b_ma50 >= 30 else "🔴")
-        st.progress(b_ad  / 100, text=f"{ad_color} A/D: {b_ad:.1f}% mã tăng giá")
-        st.progress(b_ma50 / 100, text=f"{ma_color} Cấu trúc: {b_ma50:.1f}% mã trên MA50")
-
-        if b_note:
-            st.info(b_note)
+    render_breadth_panel(breadth)
 
     # ══════════════════════════════════════════════════════════════
     # SECTION 5 — KHUYẾN NGHỊ HÀNH ĐỘNG
