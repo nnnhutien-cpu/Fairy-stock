@@ -1,9 +1,14 @@
 """
 breadth_scanner.py — Quét sức khỏe thị trường HOSE, ghi breadth.json
 Chạy qua GitHub Actions "Scan Breadth HOSE" mỗi 15 phút trong giờ giao dịch.
+
+BẢN SỬA: thêm logging chi tiết lý do lỗi ở TẤT CẢ các except (bản cũ hầu hết
+`except Exception: continue`/`pass` không in ra gì -> log GitHub Actions chỉ
+hiện "không lấy được dữ liệu" chung chung, không biết vì sao, nên 3 ngày qua
+không cách nào biết bot chết vì lý do gì). Không đổi logic nghiệp vụ.
 """
 
-import os, sys, time, json, threading
+import os, sys, time, json, threading, traceback
 from datetime import datetime, timezone, timedelta
 from collections import Counter
 
@@ -16,10 +21,9 @@ MIN_LEN_FOR_MA          = 55
 MAX_WORKERS             = 4
 DEFAULT_RATE_LIMIT      = 18
 VN_TZ                   = timezone(timedelta(hours=7))
-
-# ✅ FIX 2: Giảm xuống 8 phút (cron chạy mỗi 15 phút)
-# Không dùng file local để check — luôn quét nếu trong giờ giao dịch
 MIN_REFRESH_MINUTES     = 8
+
+_rate_lim = DEFAULT_RATE_LIMIT  # biến rate-limit toàn cục, chỉnh qua set_rate_limit()
 
 
 def _vn_now():
@@ -28,6 +32,19 @@ def _vn_now():
 
 def _log(msg):
     print(f"[{datetime.now(VN_TZ).strftime('%H:%M:%S')}] {msg}", flush=True)
+
+
+def _log_err(context, e):
+    """In lỗi kèm traceback rút gọn — để log GitHub Actions luôn có nguyên nhân thật,
+    không còn im lặng nuốt exception nữa."""
+    _log(f"⚠️ [{context}] {type(e).__name__}: {e}")
+
+
+def set_rate_limit(requests_per_minute: int):
+    """Đặt rate limit — dùng hàm riêng thay vì `global` rải rác giữa script,
+    để rõ ràng và dễ trace hơn khi debug."""
+    global _rate_lim
+    _rate_lim = max(1, int(requests_per_minute))
 
 
 def _is_trading_window(now_vn: datetime) -> bool:
@@ -40,17 +57,16 @@ def _is_trading_window(now_vn: datetime) -> bool:
 
 
 def _minutes_since_last_update(path="breadth.json"):
-    """
-    ✅ FIX 2: Chỉ đọc file local để throttle — nhưng nếu file không tồn tại
-    hoặc lỗi đọc thì coi như chưa từng quét (trả về None → quét ngay).
-    Không còn bị kẹt vòng lặp khi push git thất bại.
-    """
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         last = datetime.strptime(data["updated_at"], "%Y-%m-%d %H:%M:%S")
         return (_vn_now() - last).total_seconds() / 60
-    except Exception:
+    except FileNotFoundError:
+        _log("ℹ️ Chưa có breadth.json local (lần chạy đầu, hoặc checkout không lấy file này) — quét ngay.")
+        return None
+    except Exception as e:
+        _log_err("_minutes_since_last_update", e)
         return None
 
 
@@ -59,11 +75,9 @@ def _minutes_since_last_update(path="breadth.json"):
 # ──────────────────────────────────────────────
 _rate_lock = threading.Lock()
 _call_ts   = []
-_rate_lim  = DEFAULT_RATE_LIMIT
 
 
 def _throttle():
-    global _rate_lim
     with _rate_lock:
         now = time.time()
         while _call_ts and now - _call_ts[0] > 60:
@@ -79,63 +93,64 @@ def _throttle():
 
 
 # ──────────────────────────────────────────────
-# ✅ FIX 1: IMPORT VNSTOCK ĐÚNG THEO PHIÊN BẢN
-# Tự động detect vnstock 3.x vs 4.x
+# IMPORT VNSTOCK ĐÚNG THEO PHIÊN BẢN (tự động detect 3.x vs 4.x)
 # ──────────────────────────────────────────────
 def _get_listing_df(src):
-    """Lấy danh sách mã — tương thích vnstock 3.x và 4.x"""
-    # Thử vnstock 4.x trước
+    """Lấy danh sách mã — tương thích vnstock 3.x và 4.x. Ghi lại lỗi của TỪNG
+    cách thử, để nếu cả 3 đều fail thì biết chính xác vì sao (thay vì im lặng)."""
+    errors = []
+
     try:
         from vnstock import Vnstock
         obj = Vnstock(source=src).stock(symbol='VNM', exchange='HOSE')
-        df = obj.listing.symbols_by_exchange()
-        return df
-    except Exception:
-        pass
-    # Fallback vnstock 3.x
+        return obj.listing.symbols_by_exchange()
+    except Exception as e:
+        errors.append(f"Vnstock(4.x): {type(e).__name__}: {e}")
+
     try:
         from vnstock import listing_companies
-        df = listing_companies()
-        return df
-    except Exception:
-        pass
-    # Fallback vnstock.api (cũ)
+        return listing_companies()
+    except Exception as e:
+        errors.append(f"listing_companies(3.x): {type(e).__name__}: {e}")
+
     try:
         from vnstock.api.listing import Listing
-        df = Listing(source=src).symbols_by_exchange()
-        return df
-    except Exception:
-        pass
+        return Listing(source=src).symbols_by_exchange()
+    except Exception as e:
+        errors.append(f"Listing(api): {type(e).__name__}: {e}")
+
+    _log(f"❌ [_get_listing_df|{src}] Cả 3 cách đều lỗi: {' | '.join(errors)}")
     return None
 
 
 def _get_price_history_df(ticker, start_date, end_date, src):
-    """Lấy giá lịch sử — tương thích vnstock 3.x và 4.x"""
-    # Thử vnstock 4.x
+    """Lấy giá lịch sử — tương thích vnstock 3.x và 4.x, log lỗi từng cách thử."""
+    errors = []
+
     try:
         from vnstock import Vnstock
         obj = Vnstock(source=src).stock(symbol=ticker, exchange='HOSE')
-        df = obj.quote.history(start=start_date, end=end_date, interval='1D')
-        return df
-    except Exception:
-        pass
-    # Fallback vnstock 3.x
+        return obj.quote.history(start=start_date, end=end_date, interval='1D')
+    except Exception as e:
+        errors.append(f"Vnstock(4.x): {type(e).__name__}: {e}")
+
     try:
         from vnstock import stock_historical_data
-        df = stock_historical_data(ticker, start_date, end_date, '1D', 'stock', src)
-        return df
-    except Exception:
-        pass
-    # Fallback vnstock.api
+        return stock_historical_data(ticker, start_date, end_date, '1D', 'stock', src)
+    except Exception as e:
+        errors.append(f"stock_historical_data(3.x): {type(e).__name__}: {e}")
+
     try:
         from vnstock.api.quote import Quote
-        df = Quote(symbol=ticker, source=src).history(
+        return Quote(symbol=ticker, source=src).history(
             start=start_date, end=end_date, interval='1D'
         )
-        return df
-    except Exception:
-        pass
-    return None
+    except Exception as e:
+        errors.append(f"Quote(api): {type(e).__name__}: {e}")
+
+    # Không log full mỗi mã (sẽ tràn log 400 mã) — chỉ trả None, get_price_history
+    # bên ngoài sẽ tổng hợp bao nhiêu mã lỗi.
+    return None, errors
 
 
 # ──────────────────────────────────────────────
@@ -151,14 +166,12 @@ def get_hose_tickers():
 
             df.columns = [str(c).lower().strip() for c in df.columns]
 
-            # Lọc loại chứng khoán
             type_col = next((c for c in df.columns if 'type' in c), None)
             if type_col:
                 df = df[df[type_col].astype(str).str.upper().isin(
                     ['STOCK', 'CP', 'CỔ PHIẾU', 'EQ', 'EQUITY']
                 )]
 
-            # Lọc sàn HOSE
             if 'exchange' in df.columns:
                 df = df[df['exchange'].astype(str).str.upper().isin(['HOSE', 'HSX'])]
 
@@ -168,8 +181,11 @@ def get_hose_tickers():
                 if tickers:
                     _log(f"✅ Lấy được {len(tickers)} mã HOSE từ nguồn {src}")
                     return tickers
+                else:
+                    _log(f"⚠️ [get_hose_tickers|{src}] Sau khi lọc type/exchange, danh sách RỖNG "
+                         f"(có thể cấu trúc cột API đã đổi — cột hiện có: {list(df.columns)}).")
         except Exception as e:
-            _log(f"⚠️ Nguồn {src} lỗi: {e}")
+            _log_err(f"get_hose_tickers|{src}", e)
             continue
 
     _log("❌ Không lấy được danh sách mã HOSE từ bất kỳ nguồn nào!")
@@ -189,7 +205,7 @@ def _expected_latest_trading_date():
     return d
 
 
-def get_price_history(ticker, days_back=120):
+def get_price_history(ticker, days_back=120, collect_errors: list = None):
     end_date   = datetime.now(VN_TZ).strftime('%Y-%m-%d')
     start_date = (datetime.now(VN_TZ) - pd.Timedelta(days=days_back)).strftime('%Y-%m-%d')
     expected   = _expected_latest_trading_date()
@@ -198,23 +214,29 @@ def get_price_history(ticker, days_back=120):
     for src in ['VCI', 'MSN', 'TCBS']:
         try:
             _throttle()
-            df = _get_price_history_df(ticker, start_date, end_date, src)
+            df, src_errors = _get_price_history_df(ticker, start_date, end_date, src)
             if df is None or df.empty:
+                if collect_errors is not None and src_errors:
+                    collect_errors.append(f"{ticker}|{src}: {' | '.join(src_errors)}")
                 continue
 
             df.columns = [str(c).lower().strip() for c in df.columns]
-            # Chuẩn hóa cột date/time
             for col in ['time', 'date', 'tradingdate', 'trading_date']:
                 if col in df.columns:
                     df = df.rename(columns={col: 'time'})
                     break
 
             if 'time' not in df.columns:
+                if collect_errors is not None:
+                    collect_errors.append(f"{ticker}|{src}: thiếu cột time/date sau chuẩn hoá "
+                                           f"(cột hiện có: {list(df.columns)})")
                 continue
 
             df['close'] = pd.to_numeric(df.get('close', df.get('closeprice', None)), errors='coerce')
             df = df.dropna(subset=['close']).sort_values('time').reset_index(drop=True)
             if df.empty:
+                if collect_errors is not None:
+                    collect_errors.append(f"{ticker}|{src}: rỗng sau khi bỏ NaN cột close")
                 continue
 
             last_date = pd.to_datetime(df['time'].max()).date()
@@ -222,7 +244,9 @@ def get_price_history(ticker, days_back=120):
                 return df   # đủ mới → dùng luôn
             if best_date is None or last_date > best_date:
                 best_df, best_date = df, last_date
-        except Exception:
+        except Exception as e:
+            if collect_errors is not None:
+                collect_errors.append(f"{ticker}|{src}: {type(e).__name__}: {e}")
             continue
 
     return best_df
@@ -259,9 +283,10 @@ def scan_breadth(max_tickers=None):
     advance = decline = unchanged = above_ma20 = above_ma50 = n_valid = 0
     ad_change_sum = 0.0
     date_counter  = Counter()
+    ticker_errors = []  # gom lỗi từng mã, chỉ in tóm tắt cuối cùng thay vì spam log
 
     for i, ticker in enumerate(tickers, 1):
-        df = get_price_history(ticker)
+        df = get_price_history(ticker, collect_errors=ticker_errors)
         if df is None or len(df) < MIN_LEN_FOR_MA:
             continue
 
@@ -288,10 +313,15 @@ def scan_breadth(max_tickers=None):
         n_valid += 1
 
         if i % 50 == 0:
-            _log(f"... {i}/{len(tickers)} mã ({n_valid} hợp lệ)")
+            _log(f"... {i}/{len(tickers)} mã ({n_valid} hợp lệ, {len(ticker_errors)} lỗi tích luỹ)")
+
+    if ticker_errors:
+        _log(f"⚠️ {len(ticker_errors)} lỗi khi lấy giá — 10 lỗi đầu tiên:")
+        for err in ticker_errors[:10]:
+            _log(f"    · {err}")
 
     if n_valid == 0:
-        _log("❌ Không có mã nào quét thành công.")
+        _log("❌ Không có mã nào quét thành công — TOÀN BỘ nguồn giá đang lỗi (xem log lỗi ở trên).")
         return None
 
     ad_pct         = advance / n_valid * 100
@@ -331,37 +361,44 @@ def save_to_json(result: dict, path="breadth.json"):
 # ENTRY POINT
 # ──────────────────────────────────────────────
 if __name__ == "__main__":
-    force  = os.environ.get("FORCE_SCAN","").strip().lower() in ("1","true","yes")
-    now_vn = datetime.now(VN_TZ).replace(tzinfo=None)
+    try:
+        force  = os.environ.get("FORCE_SCAN","").strip().lower() in ("1","true","yes")
+        now_vn = datetime.now(VN_TZ).replace(tzinfo=None)
 
-    if not force and not _is_trading_window(now_vn):
-        _log(f"⏭️  Ngoài giờ giao dịch ({now_vn:%H:%M}) — bỏ qua.")
-        sys.exit(0)
-
-    # ✅ FIX 2: chỉ throttle nếu file local tồn tại VÀ còn mới — không bị kẹt
-    if not force:
-        mins = _minutes_since_last_update()
-        if mins is not None and mins < MIN_REFRESH_MINUTES:
-            _log(f"⏭️  Đã quét {mins:.0f} phút trước (< {MIN_REFRESH_MINUTES} phút) — bỏ qua.")
+        if not force and not _is_trading_window(now_vn):
+            _log(f"⏭️  Ngoài giờ giao dịch ({now_vn:%H:%M}) — bỏ qua.")
             sys.exit(0)
 
-    # Setup API key nếu có
-    api_key = os.environ.get("VNSTOCK_API_KEY","").strip()
-    if api_key:
-        try:
-            import vnai
-            vnai.setup_api_key(api_key)
-            global _rate_lim
-            _rate_lim = 55
-            _log("🔑 Dùng API key — rate limit tăng lên 55/phút")
-        except Exception:
-            pass
+        if not force:
+            mins = _minutes_since_last_update()
+            if mins is not None and mins < MIN_REFRESH_MINUTES:
+                _log(f"⏭️  Đã quét {mins:.0f} phút trước (< {MIN_REFRESH_MINUTES} phút) — bỏ qua.")
+                sys.exit(0)
 
-    max_t = os.environ.get("MAX_TICKERS")
-    result = scan_breadth(max_tickers=int(max_t) if max_t else None)
+        api_key = os.environ.get("VNSTOCK_API_KEY","").strip()
+        if api_key:
+            try:
+                import vnai
+                vnai.setup_api_key(api_key)
+                set_rate_limit(55)
+                _log("🔑 Dùng API key — rate limit tăng lên 55/phút")
+            except Exception as e:
+                _log_err("setup vnai api key (bỏ qua, dùng rate limit mặc định)", e)
 
-    if result is None:
-        _log("❌ Quét thất bại — không ghi file.")
+        max_t = os.environ.get("MAX_TICKERS")
+        result = scan_breadth(max_tickers=int(max_t) if max_t else None)
+
+        if result is None:
+            _log("❌ Quét thất bại — không ghi file.")
+            sys.exit(1)
+
+        save_to_json(result)
+
+    except Exception as e:
+        # ✅ Bắt TẤT CẢ lỗi không lường trước ở tầng ngoài cùng — trước đây nếu
+        # có exception nào lọt ra ngoài mọi try/except bên trong, workflow sẽ
+        # crash với traceback khó đọc và không rõ bước nào gây ra. Giờ luôn in
+        # traceback đầy đủ + thoát mã lỗi rõ ràng để Actions hiện đúng nguyên nhân.
+        _log(f"💥 LỖI KHÔNG LƯỜNG TRƯỚC: {type(e).__name__}: {e}")
+        traceback.print_exc()
         sys.exit(1)
-
-    save_to_json(result)
