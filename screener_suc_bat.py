@@ -10,8 +10,6 @@ Lý thuyết Sức bật:
               → Giảm 30% trong 15 phiên >>> giảm 30% trong 60 phiên
               → VIX, GEX, VRE bật nhanh hơn CTG, TCB cùng pha vì nén nhanh hơn
   • Độ giãn  = % drawdown từ đỉnh pha → đáy pha (120 phiên)
-  • Chỉ dùng cho giai đoạn ĐẦU SÓNG HỒI (T7/2026)
-  • Sau này → Volume + Ichimoku
 
 Tích hợp vào main.py:
     from screener_suc_bat import render_suc_bat_tab
