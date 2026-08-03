@@ -1,56 +1,127 @@
 name: Scan Breadth HOSE
 
 on:
-  workflow_dispatch: {}       # chạy tay khi cần — luôn quét ngay, bỏ qua kiểm tra giờ/debounce
+  # ✅ Chạy mỗi 15 phút trong giờ giao dịch HOSE (9:00–15:30 ICT = 2:00–8:30 UTC)
   schedule:
-    # GitHub Actions chỉ đảm bảo cron chạy theo kiểu "best-effort": lịch có
-    # thể bị TRỄ hoặc BỎ QUA hoàn toàn, đặc biệt vào đúng phút tròn giờ/nửa
-    # giờ (:00, :30 — giờ cao điểm toàn cầu). Để bù lại, ta lên lịch DÀY hơn
-    # (mỗi 10 phút, lệch phút khỏi mốc tròn) nhằm tăng cơ hội ít nhất 1 lượt
-    # "lọt" mỗi ~30 phút. Bản thân breadth_scanner.py sẽ tự bỏ qua nếu đang
-    # ngoài giờ giao dịch HOẶC vừa quét cách đây chưa tới 25 phút — nên lịch
-    # dày này KHÔNG làm quét trùng lặp hay tốn thêm API.
-    - cron: "3,13,23,33,43,53 2-8 * * 1-5"
+    - cron: '0,15,30,45 2,3,4,5,6,7,8 * * 1-5'   # Thứ 2–6, 2h–8h UTC (giờ đầy đủ)
+    - cron: '0,15,30 8 * * 1-5'                    # 8:00, 8:15, 8:30 UTC (9h–9h30 ICT cuối)
 
-# Không huỷ job đang chạy dở khi có lượt kích hoạt mới — chỉ xếp hàng, vì thời
-# gian quét có thể kéo dài hơn dự kiến (rate limit vnstock) và ta không muốn
-# mất dữ liệu giữa chừng.
+  # ✅ Cho phép chạy thủ công từ GitHub UI khi cần debug
+  workflow_dispatch:
+    inputs:
+      force_run:
+        description: 'Chạy dù ngoài giờ giao dịch?'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+# ✅ Chỉ cho phép 1 job chạy cùng lúc, cancel job cũ nếu có job mới
 concurrency:
   group: scan-breadth-hose
-  cancel-in-progress: false
-
-permissions:
-  contents: write   # cần quyền ghi để commit breadth.json ngược lại repo
+  cancel-in-progress: true
 
 jobs:
-  scan-breadth:
+  scan:
+    name: Quét Sức Khỏe Thị Trường HOSE
     runs-on: ubuntu-latest
-    timeout-minutes: 20   # chặn trường hợp job treo vô thời hạn, chiếm hàng đợi
+    timeout-minutes: 25   # Kill job nếu treo quá 25 phút
+
     steps:
+      # ─── 1. Checkout code ───────────────────────────────────────────────
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          # Cần token để có thể push kết quả về repo
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Python
+      # ─── 2. Setup Python ────────────────────────────────────────────────
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
+          cache: 'pip'
 
-      - name: Cài đặt thư viện
+      # ─── 3. Cài dependencies ────────────────────────────────────────────
+      - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install vnstock pandas
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: Chạy quét breadth
+      # ─── 4. Kiểm tra giờ giao dịch (ICT = UTC+7) ────────────────────────
+      - name: Kiểm tra giờ giao dịch
+        id: check_time
+        run: |
+          # Lấy giờ hiện tại theo ICT (UTC+7)
+          HOUR_ICT=$(TZ='Asia/Ho_Chi_Minh' date +%H)
+          MIN_ICT=$(TZ='Asia/Ho_Chi_Minh' date +%M)
+          DAY_OF_WEEK=$(TZ='Asia/Ho_Chi_Minh' date +%u)  # 1=Mon, 7=Sun
+
+          echo "🕒 Giờ ICT hiện tại: ${HOUR_ICT}:${MIN_ICT}, Thứ: ${DAY_OF_WEEK}"
+
+          # Chỉ chạy Thứ 2–6, 9:00–15:35 ICT
+          SHOULD_RUN="false"
+          FORCE="${{ github.event.inputs.force_run }}"
+
+          if [ "${FORCE}" = "true" ]; then
+            SHOULD_RUN="true"
+            echo "⚡ Force run được kích hoạt"
+          elif [ "${DAY_OF_WEEK}" -ge 1 ] && [ "${DAY_OF_WEEK}" -le 5 ]; then
+            if [ "${HOUR_ICT}" -ge 9 ] && [ "${HOUR_ICT}" -lt 15 ]; then
+              SHOULD_RUN="true"
+            elif [ "${HOUR_ICT}" -eq 15 ] && [ "${MIN_ICT}" -le 35 ]; then
+              SHOULD_RUN="true"
+            fi
+          fi
+
+          echo "should_run=${SHOULD_RUN}" >> $GITHUB_OUTPUT
+          echo "✅ Có nên chạy: ${SHOULD_RUN}"
+
+      # ─── 5. Chạy market_breadth.py ──────────────────────────────────────
+      - name: Quét Market Breadth
+        if: steps.check_time.outputs.should_run == 'true'
         env:
-          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
-          # workflow_dispatch (bấm tay) -> luôn quét ngay bất kể giờ giấc/debounce
-          FORCE_SCAN: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
-        run: python breadth_scanner.py
-
-      - name: Commit breadth.json vào repo
+          # Thêm các secret cần thiết ở đây
+          # VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
+          PYTHONUNBUFFERED: "1"
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add breadth.json
-          git commit -m "🤖 Auto: cập nhật breadth.json" || echo "Không có gì thay đổi, bỏ qua commit"
-          git push
+          echo "🚀 Bắt đầu quét lúc $(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S ICT')"
+          python market_breadth.py
+          echo "✅ Quét hoàn tất lúc $(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S ICT')"
+
+      # ─── 6. Skip nếu ngoài giờ ─────────────────────────────────────────
+      - name: Bỏ qua (ngoài giờ giao dịch)
+        if: steps.check_time.outputs.should_run == 'false'
+        run: |
+          echo "⏭️ Bỏ qua - ngoài giờ giao dịch HOSE"
+          echo "Giờ ICT: $(TZ='Asia/Ho_Chi_Minh' date '+%H:%M %Z')"
+
+      # ─── 7. Commit & push kết quả (nếu có thay đổi) ─────────────────────
+      - name: Commit kết quả quét
+        if: steps.check_time.outputs.should_run == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Actions Bot"
+
+          # Chỉ commit nếu có file thay đổi
+          if git diff --quiet && git diff --staged --quiet; then
+            echo "📝 Không có thay đổi, bỏ qua commit"
+          else
+            git add -A
+            git commit -m "🤖 Auto: Cập nhật market breadth $(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M ICT')"
+            git push
+            echo "✅ Đã push kết quả lên repo"
+          fi
+
+      # ─── 8. Upload log nếu lỗi ──────────────────────────────────────────
+      - name: Upload log khi lỗi
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-log-${{ github.run_id }}
+          path: |
+            *.log
+            logs/
+          retention-days: 7
