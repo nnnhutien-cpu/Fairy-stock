@@ -5,8 +5,6 @@ import time
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import streamlit.components.v1 as components
 from supabase import create_client
 import traceback
@@ -14,7 +12,6 @@ from datetime import datetime
 
 from indicators import market_snapshot
 from trend_engine import market_recommendation
-from tab_accumulation import render_accumulation_tab
 from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex, set_rate_limit
 from indicators import calculate_technical_signals
 import trend_engine as te
@@ -151,11 +148,11 @@ setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 
-# --- 4. TẠO 9 TAB ---
-tab_market, tab_screener, tab_results, tab_signals, tab_simulation, tab_backtest, tab_reports, tab_accum, tab_recommendation, tab_suc_bat = st.tabs([
+# --- 4. TẠO 8 TAB ---
+tab_market, tab_screener, tab_results, tab_signals, tab_backtest, tab_reports, tab_recommendation, tab_suc_bat = st.tabs([
 
     "🌟 Thị Trường", "🔍 Bộ Lọc", "📊 Kết Quả Quét", "📡 Tín Hiệu & Cảnh Báo",
-    "🔮 Mô Phỏng", "🛠️ Backtest", "📑 Báo Cáo", "🧭 Tích Lũy", "💡 Khuyến Nghị", "🚀 Sức Bật"
+    "🛠️ Backtest", "📑 Báo Cáo", "💡 Khuyến Nghị", "🚀 Sức Bật"
 ])
 # ==========================================
 # TAB 1: THỊ TRƯỜNG CHUNG
@@ -749,149 +746,7 @@ with tab_signals:
         st.info("Chưa có dữ liệu quét. Sang tab **🔍 Bộ Lọc** để quét, rồi ghé tab **📊 Kết Quả Quét** trước.")
 
 # ==========================================
-# TAB 5: MÔ PHỎNG XU HƯỚNG
-# ==========================================
-with tab_simulation:
-    st.subheader("🔮 Mô Phỏng Xu Hướng — Kijun17 / Knife65 / Knife2-129")
-    st.caption(
-        "Mục đích tab này: mô phỏng ĐÚNG state machine Tăng → Sideway → Giảm theo tài liệu "
-        "(3 đường cùng hướng, Chikou span, hợp bích, không mua đuổi, xác nhận khối lượng)."
-    )
-
-    sim_ticker = st.text_input("Nhập mã cổ phiếu (Gõ xong nhấn Enter):", value="HPG", key="sim_ticker_input").upper().strip()
-
-    if sim_ticker:
-        with st.spinner(f"Đang xử lý dữ liệu {sim_ticker}..."):
-            df_sim = get_stock_data(sim_ticker, days_back=500)
-
-            if df_sim is not None and not df_sim.empty:
-                df_sim.columns = [str(c).lower().strip() for c in df_sim.columns]
-                eng = te.compute_fairy_engine(df_sim)
-
-                if eng is None:
-                    st.warning(
-                        f"⚠️ Mã {sim_ticker} chưa đủ lịch sử (cần tối thiểu ~156 phiên giao dịch) "
-                        "để tính đường Knife2-129. Hãy thử mã có thời gian niêm yết lâu hơn."
-                    )
-                else:
-                    snap_sim = te.get_latest_snapshot(eng)
-
-                    xh = snap_sim['xu_huong']
-                    xh_display = {"Tăng": "🟢 Tăng", "Giảm": "🔴 Giảm", "Sideway": "🟡 Sideway"}.get(xh, xh)
-                    c1, c2, c3, c4 = st.columns(4)
-                    c1.metric("Xu Hướng Hiện Tại", xh_display)
-                    c2.metric("Cách Knife2-129", f"{snap_sim['pct_vs_129']}%" if snap_sim['pct_vs_129'] is not None else "—")
-                    c3.metric("Vol / TB20", f"{snap_sim['v_ratio']}x" if snap_sim['v_ratio'] is not None else "—")
-                    c4.metric("Hợp Bích (65≈129)", "✅ Có" if snap_sim['hop_bich'] else "—")
-
-                    badges = []
-                    if snap_sim['khong_mua_duoi']:
-                        badges.append("🟢 Còn trong vùng KHÔNG MUA ĐUỔI (giá mới vừa vượt mây)")
-                    if snap_sim['canh_bao_mua_duoi']:
-                        badges.append("⚠️ CẢNH BÁO MUA ĐUỔI — giá đã đi xa mây, rủi ro mua bằng lòng tham")
-                    if snap_sim['cau_truc_khoe']:
-                        badges.append("💪 Cấu trúc khoẻ: đỉnh sau cao hơn đỉnh trước, đáy sau cao hơn đáy trước")
-                    if snap_sim['canh_bao_tao_dinh']:
-                        badges.append("⚠️ CẢNH BÁO TẠO ĐỈNH — giá gần đỉnh nhưng thanh khoản kiệt dần")
-                    if snap_sim['vung_phan_phoi']:
-                        badges.append("🚨 VÙNG PHÂN PHỐI — volume đột biến tại đỉnh + giá vượt xa 129 (~30%+)")
-                    if badges:
-                        st.info("  \n".join(badges))
-
-                    plot_df = eng.tail(180).copy()
-                    if 'time' in plot_df.columns:
-                        plot_df['Ngay'] = pd.to_datetime(plot_df['time']).dt.strftime('%Y-%m-%d')
-                        plot_df.set_index('Ngay', inplace=True)
-
-                    import plotly.graph_objects as go
-                    from plotly.subplots import make_subplots
-
-                    fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                                        vertical_spacing=0.03, row_heights=[0.8, 0.2])
-
-                    trend_color = {"Tăng": "rgba(0, 200, 83, 0.08)", "Giảm": "rgba(255, 23, 68, 0.08)", "Sideway": None}
-                    seg_start = 0
-                    xh_series = plot_df['Xu_Huong'].tolist()
-                    idx_list = plot_df.index.tolist()
-                    for i in range(1, len(xh_series) + 1):
-                        if i == len(xh_series) or xh_series[i] != xh_series[seg_start]:
-                            color = trend_color.get(xh_series[seg_start])
-                            if color:
-                                fig.add_vrect(x0=idx_list[seg_start], x1=idx_list[i - 1],
-                                              fillcolor=color, line_width=0, row=1, col=1)
-                            seg_start = i
-
-                    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['close'],
-                                             line=dict(color='#e5e0f7', width=2), name='Giá Đóng Cửa'), row=1, col=1)
-                    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['knife65'],
-                                             line=dict(color='rgba(0, 200, 83, 0.5)', width=1), name='Knife1 (65)'), row=1, col=1)
-                    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['knife129'],
-                                             line=dict(color='rgba(255, 23, 68, 0.5)', width=1.5),
-                                             fill='tonexty', fillcolor='rgba(128, 128, 128, 0.15)', name='Knife2 (129) — Mây'), row=1, col=1)
-                    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['kijun17'],
-                                             line=dict(color='#2962FF', width=1.5), name='Kijun (17)'), row=1, col=1)
-
-                    chan_song = plot_df[plot_df['xac_nhan_chan_song']]
-                    fig.add_trace(go.Scatter(x=chan_song.index, y=chan_song['close'] * 0.97,
-                                             mode='markers', marker=dict(symbol='triangle-up', size=14, color='lime'),
-                                             name='🎯 Chân Sóng (Vol xác nhận)'), row=1, col=1)
-
-                    hop_bich_pts = plot_df[plot_df['hop_bich']]
-                    fig.add_trace(go.Scatter(x=hop_bich_pts.index, y=hop_bich_pts['knife129'],
-                                             mode='markers', marker=dict(symbol='diamond', size=6, color='#FFD700'),
-                                             name='💎 Hợp Bích (65≈129)'), row=1, col=1)
-
-                    khong_duoi_pts = plot_df[plot_df['khong_mua_duoi']]
-                    fig.add_trace(go.Scatter(x=khong_duoi_pts.index, y=khong_duoi_pts['close'],
-                                             mode='markers', marker=dict(symbol='circle', size=5, color='#00E5FF'),
-                                             name='✅ Vùng Không Mua Đuổi'), row=1, col=1)
-
-                    dinh_pts = plot_df[plot_df['canh_bao_tao_dinh'] | plot_df['vung_phan_phoi']]
-                    fig.add_trace(go.Scatter(x=dinh_pts.index, y=dinh_pts['close'] * 1.02,
-                                             mode='markers', marker=dict(symbol='x', size=10, color='orange'),
-                                             name='⚠️ Cảnh Báo Đỉnh/Phân Phối'), row=1, col=1)
-
-                    start_up = plot_df[plot_df['trend_start'] & (plot_df['Xu_Huong'] == 'Tăng')]
-                    start_dn = plot_df[plot_df['trend_start'] & (plot_df['Xu_Huong'] == 'Giảm')]
-                    fig.add_trace(go.Scatter(x=start_up.index, y=start_up['close'] * 0.95,
-                                             mode='markers', marker=dict(symbol='star', size=13, color='#00C853'),
-                                             name='🟢 Bắt Đầu Tăng'), row=1, col=1)
-                    fig.add_trace(go.Scatter(x=start_dn.index, y=start_dn['close'] * 1.05,
-                                             mode='markers', marker=dict(symbol='star', size=13, color='#FF1744'),
-                                             name='🔴 Bắt Đầu Giảm'), row=1, col=1)
-
-                    colors = ['#00C853' if row['close'] >= row['open'] else '#FF1744' for _, row in plot_df.iterrows()]
-                    fig.add_trace(go.Bar(x=plot_df.index, y=plot_df['volume'], marker_color=colors, name='Volume'), row=2, col=1)
-                    fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df['vol_ma20'],
-                                             line=dict(color='#FF6D00', width=2), name='Volume MA20'), row=2, col=1)
-
-                    fig.update_layout(
-                        title=f"<b>Mô Phỏng Xu Hướng Cô Tiên: {sim_ticker}</b>",
-                        height=760, margin=dict(l=10, r=160, t=40, b=10),
-                        showlegend=True,
-                        legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.01,
-                                    font=dict(size=11), bgcolor='rgba(0,0,0,0)'),
-                        xaxis_rangeslider_visible=False, dragmode='pan',
-                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='#dcd6ec')
-                    )
-                    fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
-
-                    st.plotly_chart(fig, use_container_width=True)
-
-                    with st.expander("📖 Chú giải các ký hiệu trên biểu đồ"):
-                        st.markdown(
-                            "- **Nền xanh/đỏ mờ**: giai đoạn Xu Hướng Tăng/Giảm đang được state machine ghi nhận.\n"
-                            "- **⭐ Bắt Đầu Tăng/Giảm**: phiên đầu tiên hệ thống xác nhận đổi xu hướng.\n"
-                            "- **🎯 Chân Sóng**: phiên bắt đầu Tăng có khối lượng xác nhận (≥1.75x MA20).\n"
-                            "- **💎 Hợp Bích**: Knife1(65) và Knife2(129) hội tụ sát nhau (≤0.14%).\n"
-                            "- **✅ Vùng Không Mua Đuổi**: đang Tăng và giá chỉ vừa vượt mây (≤3%).\n"
-                            "- **⚠️ Cảnh Báo Đỉnh/Phân Phối**: giá gần đỉnh nhưng thanh khoản kiệt, hoặc volume đột biến tại đỉnh."
-                        )
-            else:
-                st.warning(f"⚠️ Không có dữ liệu cho mã {sim_ticker}. Hãy kiểm tra lại mã cổ phiếu!")
-
-# ==========================================
-# TAB 6: BACKTEST
+# TAB 5: BACKTEST
 # ==========================================
 with tab_backtest:
     st.subheader("🛠️ Hệ Thống Backtest Dài Hạn (Khung 1DAY)")
@@ -929,7 +784,7 @@ with tab_backtest:
                 st.error("Lỗi: Không lấy được dữ liệu. Hãy kiểm tra lại mã cổ phiếu hoặc API đang bảo trì!")
 
 # ==========================================
-# TAB 7: BÁO CÁO CTCK
+# TAB 6: BÁO CÁO CTCK
 # ==========================================
 import requests as _req
 import pandas as _pd
@@ -1086,19 +941,13 @@ with tab_reports:
             )
 
 # ==========================================
-# TAB 8: CHIẾN LƯỢC TÍCH LŨY
-# ==========================================
-with tab_accum:
-    render_accumulation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift)
-
-# ==========================================
-# TAB 9: KHUYẾN NGHỊ
+# TAB 7: KHUYẾN NGHỊ
 # ==========================================
 
 with tab_recommendation:
     render_recommendation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift) 
 # ========================================== 
-# TAB 10: SCREENER SỨC BẬT  ← MỚI 
+# TAB 8: SCREENER SỨC BẬT 
 # ========================================== 
 with tab_suc_bat: 
     render_suc_bat_tab()
