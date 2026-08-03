@@ -323,13 +323,20 @@ def _render_fib_table(m: dict):
         is_near = abs(kc - price_now) / price_now < 0.02 or abs(ht - price_now) / price_now < 0.02
         row_style = "background:#1a1a3a;" if is_near else ""
 
-        # Màu KC: đỏ nếu KC > giá hiện tại (đang là kháng cự thật), xám nếu đã vượt
-        kc_color = "#ff5252" if kc > price_now else "#555"
-        # Màu HT: xanh nếu HT < giá hiện tại (đang là hỗ trợ thật), xám nếu đã mất
-        ht_color = "#00e676" if ht < price_now else "#555"
+        # Cùng tông màu với tiêu đề cột (đỏ = Kháng cự, xanh = Hỗ trợ).
+        # Mức CHƯA bị giá vượt qua: giữ nguyên màu đậm, không gạch ngang.
+        # Mức ĐÃ bị giá vượt qua (không còn ý nghĩa KC/HT nữa): gạch ngang + nhạt màu.
+        kc_active = kc > price_now      # còn là kháng cự thật (giá chưa vượt qua)
+        ht_active = ht < price_now      # còn là hỗ trợ thật (giá chưa thủng qua)
 
-        kc_badge = "<span style='color:#ff5252;font-size:9px;margin-left:4px;'>▲ KC</span>" if kc > price_now else ""
-        ht_badge = "<span style='color:#00e676;font-size:9px;margin-left:4px;'>▼ HT</span>" if ht < price_now else ""
+        kc_color = "#ff5252" if kc_active else "#7a4444"
+        ht_color = "#00e676" if ht_active else "#3f7a5c"
+
+        kc_strike = "" if kc_active else "text-decoration:line-through;"
+        ht_strike = "" if ht_active else "text-decoration:line-through;"
+
+        kc_badge = "<span style='color:#ff5252;font-size:9px;margin-left:4px;'>▲ KC</span>" if kc_active else ""
+        ht_badge = "<span style='color:#00e676;font-size:9px;margin-left:4px;'>▼ HT</span>" if ht_active else ""
 
         # QUAN TRỌNG: không được thụt lề các dòng HTML này. Markdown coi dòng
         # thụt lề ≥4 space là code block, làm "bể mạch" render HTML giữa chừng
@@ -338,10 +345,10 @@ def _render_fib_table(m: dict):
             f'<tr style="{row_style}">'
             f'<td style="color:#8b7fb5;font-size:11px;padding:5px 8px;">{f["label"]}</td>'
             f'<td style="padding:5px 8px;">'
-            f'<span style="color:{kc_color};font-weight:700;">{kc:,.2f}</span>{kc_badge}'
+            f'<span style="color:{kc_color};font-weight:700;{kc_strike}">{kc:,.2f}</span>{kc_badge}'
             f'</td>'
             f'<td style="padding:5px 8px;">'
-            f'<span style="color:{ht_color};font-weight:700;">{ht:,.2f}</span>{ht_badge}'
+            f'<span style="color:{ht_color};font-weight:700;{ht_strike}">{ht:,.2f}</span>{ht_badge}'
             f'</td>'
             f'</tr>'
         )
@@ -352,8 +359,8 @@ def _render_fib_table(m: dict):
         '<table class="sr-table" style="width:100%;border-collapse:collapse;">'
         '<thead><tr>'
         '<th style="color:#555;font-size:11px;padding:4px 8px;text-align:left;">Mức Fibo</th>'
-        '<th style="color:#ff5252;font-size:11px;padding:4px 8px;text-align:left;">🔴 Kháng cự</th>'
-        '<th style="color:#00e676;font-size:11px;padding:4px 8px;text-align:left;">🟢 Hỗ trợ</th>'
+        '<th style="color:#ff5252;font-size:11px;padding:4px 8px;text-align:left;font-weight:700;">🔴 KHÁNG CỰ</th>'
+        '<th style="color:#00e676;font-size:11px;padding:4px 8px;text-align:left;font-weight:700;">🟢 HỖ TRỢ</th>'
         '</tr></thead>'
         f'<tbody>{rows_html}</tbody>'
         '</table>'
