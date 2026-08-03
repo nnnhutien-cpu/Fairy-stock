@@ -221,34 +221,31 @@ def fetch_company_name(symbol: str) -> str:
 #  TÍNH CHỈ SỐ
 # ─────────────────────────────────────────────────────────────
 
-# ── ĐOẠN 1: Thay toàn bộ hàm compute_metrics() ─────────────────
 def compute_metrics(df) -> dict:
-    import numpy as np, pandas as pd
- 
     close  = df["close"].values.astype(float)
     high   = df["high"].values.astype(float)  if "high"   in df.columns else close.copy()
     low    = df["low"].values.astype(float)   if "low"    in df.columns else close.copy()
     volume = df["volume"].values.astype(float) if "volume" in df.columns else np.ones(len(close))
- 
+
     n          = len(close)
     price_now  = float(close[-1])
     pct_change = float((close[-1] - close[-2]) / close[-2] * 100) if n >= 2 else 0.0
- 
+
     # Xác định pha giảm: đỉnh → đáy trong cửa sổ
     peak_idx   = int(np.argmax(high))
     sub_low    = low[peak_idx:]
     trough_idx = peak_idx + int(np.argmin(sub_low))
     phase_high = float(high[peak_idx])
     phase_low  = float(low[trough_idx])
- 
+
     drop_sessions = max(trough_idx - peak_idx, 1)
     do_gian_pct   = (phase_low - phase_high) / phase_high * 100   # âm
     do_gian_abs   = abs(do_gian_pct)
     suc_bat       = round(do_gian_abs / drop_sessions * 10, 2)
     recovery_pct  = (price_now - phase_low) / phase_low * 100 if phase_low > 0 else 0.0
- 
+
     diff = phase_high - phase_low
- 
+
     # ── Fibonacci: 6 mức chuẩn + 2 đầu mút ──────────────────────
     # KC = phase_low  + diff × ratio  (hồi từ đáy lên)
     # HT = phase_high - diff × ratio  (kéo từ đỉnh xuống)
@@ -271,7 +268,7 @@ def compute_metrics(df) -> dict:
             "kc_price": kc_price,   # kháng cự
             "ht_price": ht_price,   # hỗ trợ
         })
- 
+
     return {
         "price":         round(price_now, 2),
         "pct_change":    round(pct_change, 2),
@@ -310,6 +307,58 @@ def _val_class(val: float, good: float, warn: float, invert: bool = False) -> st
     if invert:
         return "val-down" if val >= good else ("val-warn" if val >= warn else "val-up")
     return "val-up" if val >= good else ("val-warn" if val >= warn else "val-down")
+
+
+def _render_fib_table(m: dict):
+    """Vẽ bảng Fibonacci 2 cột KC / HT — gọi từ bên trong _render_lookup_card()."""
+    fib = m["fib_levels"]
+    price_now = m["price"]
+
+    rows_html = ""
+    for f in fib:
+        kc = f["kc_price"]
+        ht = f["ht_price"]
+
+        # Highlight dòng gần giá hiện tại nhất (trong vòng 2%)
+        is_near = abs(kc - price_now) / price_now < 0.02 or abs(ht - price_now) / price_now < 0.02
+        row_style = "background:#1a1a3a;" if is_near else ""
+
+        # Màu KC: đỏ nếu KC > giá hiện tại (đang là kháng cự thật), xám nếu đã vượt
+        kc_color = "#ff5252" if kc > price_now else "#555"
+        # Màu HT: xanh nếu HT < giá hiện tại (đang là hỗ trợ thật), xám nếu đã mất
+        ht_color = "#00e676" if ht < price_now else "#555"
+
+        rows_html += f"""
+        <tr style="{row_style}">
+          <td style="color:#8b7fb5;font-size:11px;padding:5px 8px;">{f['label']}</td>
+          <td style="padding:5px 8px;">
+            <span style="color:{kc_color};font-weight:700;">{kc:,.2f}</span>
+            {"<span style='color:#ff5252;font-size:9px;margin-left:4px;'>▲ KC</span>" if kc > price_now else ""}
+          </td>
+          <td style="padding:5px 8px;">
+            <span style="color:{ht_color};font-weight:700;">{ht:,.2f}</span>
+            {"<span style='color:#00e676;font-size:9px;margin-left:4px;'>▼ HT</span>" if ht < price_now else ""}
+          </td>
+        </tr>"""
+
+    st.markdown(f"""
+      <div class="lk-section">📐 Fibonacci Retracement (đỉnh pha → đáy pha)</div>
+      <table class="sr-table" style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="color:#555;font-size:11px;padding:4px 8px;text-align:left;">Mức Fibo</th>
+            <th style="color:#ff5252;font-size:11px;padding:4px 8px;text-align:left;">🔴 Kháng cự</th>
+            <th style="color:#00e676;font-size:11px;padding:4px 8px;text-align:left;">🟢 Hỗ trợ</th>
+          </tr>
+        </thead>
+        <tbody>{rows_html}</tbody>
+      </table>
+      <div style="font-size:10px;color:#555;margin-top:6px;padding:0 8px;">
+        Giá hiện tại: <b style="color:#e0e0ff;">{price_now:,.2f}</b> &nbsp;|&nbsp;
+        Đỉnh pha: <b style="color:#ff5252;">{m['phase_high']:,.2f}</b> &nbsp;|&nbsp;
+        Đáy pha: <b style="color:#00e676;">{m['phase_low']:,.2f}</b>
+      </div>
+    """, unsafe_allow_html=True)
 
 
 def _render_lookup_card(symbol: str, company: str, m: dict, source: str):
@@ -370,57 +419,9 @@ def _render_lookup_card(symbol: str, company: str, m: dict, source: str):
       </div>
     """, unsafe_allow_html=True)
 
-    def _render_fib_table(m: dict):
-    """Vẽ bảng Fibonacci 2 cột KC / HT — dán vào _render_lookup_card()."""
-    fib = m["fib_levels"]
-    price_now = m["price"]
- 
-    rows_html = ""
-    for f in fib:
-        kc = f["kc_price"]
-        ht = f["ht_price"]
- 
-        # Highlight dòng gần giá hiện tại nhất (trong vòng 2%)
-        is_near = abs(kc - price_now) / price_now < 0.02 or abs(ht - price_now) / price_now < 0.02
-        row_style = "background:#1a1a3a;" if is_near else ""
- 
-        # Màu KC: đỏ nếu KC > giá hiện tại (đang là kháng cự thật), xám nếu đã vượt
-        kc_color = "#ff5252" if kc > price_now else "#555"
-        # Màu HT: xanh nếu HT < giá hiện tại (đang là hỗ trợ thật), xám nếu đã mất
-        ht_color = "#00e676" if ht < price_now else "#555"
- 
-        rows_html += f"""
-        <tr style="{row_style}">
-          <td style="color:#8b7fb5;font-size:11px;padding:5px 8px;">{f['label']}</td>
-          <td style="padding:5px 8px;">
-            <span style="color:{kc_color};font-weight:700;">{kc:,.2f}</span>
-            {"<span style='color:#ff5252;font-size:9px;margin-left:4px;'>▲ KC</span>" if kc > price_now else ""}
-          </td>
-          <td style="padding:5px 8px;">
-            <span style="color:{ht_color};font-weight:700;">{ht:,.2f}</span>
-            {"<span style='color:#00e676;font-size:9px;margin-left:4px;'>▼ HT</span>" if ht < price_now else ""}
-          </td>
-        </tr>"""
- 
-    import streamlit as st
-    st.markdown(f"""
-      <div class="lk-section">📐 Fibonacci Retracement (đỉnh pha → đáy pha)</div>
-      <table class="sr-table" style="width:100%;border-collapse:collapse;">
-        <thead>
-          <tr>
-            <th style="color:#555;font-size:11px;padding:4px 8px;text-align:left;">Mức Fibo</th>
-            <th style="color:#ff5252;font-size:11px;padding:4px 8px;text-align:left;">🔴 Kháng cự</th>
-            <th style="color:#00e676;font-size:11px;padding:4px 8px;text-align:left;">🟢 Hỗ trợ</th>
-          </tr>
-        </thead>
-        <tbody>{rows_html}</tbody>
-      </table>
-      <div style="font-size:10px;color:#555;margin-top:6px;padding:0 8px;">
-        Giá hiện tại: <b style="color:#e0e0ff;">{price_now:,.2f}</b> &nbsp;|&nbsp;
-        Đỉnh pha: <b style="color:#ff5252;">{m['phase_high']:,.2f}</b> &nbsp;|&nbsp;
-        Đáy pha: <b style="color:#00e676;">{m['phase_low']:,.2f}</b>
-      </div>
-    """, unsafe_allow_html=True)
+    _render_fib_table(m)
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_lookup_section():
@@ -515,7 +516,9 @@ def _compute_symbol_scan(symbol: str, n_periods: int = 120) -> dict | None:
         close  = df["close"].values.astype(float)
         volume = df["volume"].values.astype(float) if "volume" in df.columns else np.ones(len(close))
 
-        _compute_symbol_scan
+        # NOTE: sr_levels (vùng KC/HT theo volume profile) chưa được tính ở đây
+        # trong bản gốc — để trống nhằm tránh NameError, không phải phần Fibonacci.
+        sr_levels = []
 
         return {
             "symbol":        symbol,
