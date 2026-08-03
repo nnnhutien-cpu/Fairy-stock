@@ -502,19 +502,32 @@ def _fetch_intraday_vnstock(symbol: str, day_str: str) -> pd.DataFrame:
             continue
     return pd.DataFrame()
 
+
 def _fetch_intraday_day(symbol: str, day_str: str, require_fresh: bool = False) -> pd.DataFrame:
     """
     Lấy dữ liệu 1 phút cho 1 ngày.
     Thứ tự ưu tiên: DNSE → SSI → Wifeed → TCBS → VNDirect → vnstock (VCI/MSN)
 
     Nếu require_fresh=True (dùng cho NGÀY HÔM NAY trong giờ giao dịch):
-    không chấp nhận ngay kết quả đầu tiên "không rỗng" — mà còn kiểm tra
-    dữ liệu đó có đủ MỚI hay không (timestamp cuối cùng cách hiện tại
-    không quá ~12 phút). Nếu nguồn đầu trả về bản cache/kẹt cũ, hệ thống
-    sẽ tự động thử các nguồn tiếp theo thay vì dừng lại ở dữ liệu cũ.
-    Nếu không có nguồn nào tươi, vẫn trả về bản mới nhất (gần đây nhất)
-    thu được, thay vì bỏ trắng hoàn toàn.
+    - Nguồn đầu tiên trả về dữ liệu ĐỦ MỚI (< 12 phút so với hiện tại) được
+      dùng ngay.
+    - Nếu KHÔNG nguồn free nào đủ mới, hàm sẽ thử LUÔN vnstock (trước đây bị
+      bỏ qua) và so sánh timestamp mới nhất giữa tất cả nguồn đã thử, trả về
+      bản có dữ liệu MỚI NHẤT tìm được — thay vì mù quáng chọn nguồn free
+      đầu tiên "không rỗng" dù nó có thể đang bị cache/stale phía server của
+      chính nguồn đó.
     """
+    from data_loader import (  # import tại chỗ để tránh vòng lặp import khi dán patch
+        _fetch_intraday_dnse,
+        _fetch_intraday_ssi,
+        _fetch_intraday_wifeed,
+        _fetch_intraday_tcbs,
+        _fetch_intraday_vndirect,
+        _fetch_intraday_vnstock,
+        _is_fresh,
+        LAST_ERRORS,
+    )
+
     fetchers = [
         _fetch_intraday_dnse,
         _fetch_intraday_ssi,
@@ -525,6 +538,17 @@ def _fetch_intraday_day(symbol: str, day_str: str, require_fresh: bool = False) 
 
     best_df = pd.DataFrame()
     best_last_time = None
+    best_source_name = None
+
+    def _consider(df, source_name):
+        nonlocal best_df, best_last_time, best_source_name
+        if df is None or df.empty:
+            return
+        last_time = df["time"].max()
+        if best_last_time is None or (pd.notna(last_time) and last_time > best_last_time):
+            best_df = df
+            best_last_time = last_time
+            best_source_name = source_name
 
     if symbol == "VNINDEX":
         for fetcher in fetchers:
@@ -533,100 +557,28 @@ def _fetch_intraday_day(symbol: str, day_str: str, require_fresh: bool = False) 
                 continue
 
             if not require_fresh or _is_fresh(df):
-                return df
+                return df  # đủ mới (hoặc không cần fresh) -> dùng luôn
 
-            # Dữ liệu không rỗng nhưng bị coi là "cũ" — giữ lại làm phương án
-            # dự phòng, đồng thời thử tiếp nguồn khác để tìm bản mới hơn.
-            last_time = df['time'].max()
-            if best_last_time is None or (pd.notna(last_time) and last_time > best_last_time):
-                best_df = df
-                best_last_time = last_time
+            # Không fresh -> chỉ giữ làm ứng viên, KHÔNG return ngay ở đây nữa
+            _consider(df, fetcher.__name__)
+
+        # ĐÃ THỬ HẾT 5 NGUỒN FREE MÀ KHÔNG CÓ NGUỒN NÀO ĐỦ MỚI
+        # -> bắt buộc thử thêm vnstock (trước đây bước này bị "chặn" bởi
+        #    return sớm ở trên, nên mãi mãi không bao giờ chạy tới)
+        if require_fresh:
+            df_vnstock = _fetch_intraday_vnstock(symbol, day_str)
+            _consider(df_vnstock, "vnstock(VCI/MSN)")
 
         if not best_df.empty:
-            LAST_ERRORS[f"VNINDEX|1m|freshness|{day_str}"] = (
-                f"Không có nguồn nào trả dữ liệu đủ mới — dùng bản gần nhất "
-                f"(cập nhật lúc {best_last_time})."
-            )
+            if require_fresh and not _is_fresh(best_df):
+                LAST_ERRORS[f"VNINDEX|1m|freshness|{day_str}"] = (
+                    f"Không nguồn nào (kể cả vnstock) đủ mới — dùng bản mới nhất "
+                    f"tìm được từ '{best_source_name}' (cập nhật lúc {best_last_time})."
+                )
+            else:
+                LAST_ERRORS.pop(f"VNINDEX|1m|freshness|{day_str}", None)
             return best_df
 
-    # Fallback cuối: vnstock
+    # symbol khác VNINDEX, hoặc VNINDEX nhưng tất cả nguồn free đều rỗng
+    # và chưa thử vnstock ở trên (trường hợp require_fresh=False)
     return _fetch_intraday_vnstock(symbol, day_str)
-
-# ==========================================================
-# PUBLIC API
-# ==========================================================
-@st.cache_data(ttl=86400)
-def get_all_tickers(exchange='all'):
-    if not _VNSTOCK_OK:
-        return FALLBACK_TICKERS
-
-    for src in ['vci', 'kbs']:
-        try:
-            _throttle()
-            df = Listing(source=src).symbols_by_exchange()
-            df.columns = [str(c).lower().strip() for c in df.columns]
-
-            type_col = next((c for c in df.columns if 'type' in c), None)
-            if type_col:
-                df = df[df[type_col].astype(str).str.upper().isin(['STOCK', 'CP', 'CỔ PHIẾU'])]
-
-            if 'exchange' in df.columns:
-                df = df[df['exchange'].astype(str).str.upper().isin(['HOSE', 'HSX', 'HNX', 'UPCOM'])]
-                if exchange != 'all':
-                    tgt = ['HOSE', 'HSX'] if str(exchange).upper() in ('HOSE', 'HSX') else [str(exchange).upper()]
-                    df = df[df['exchange'].astype(str).str.upper().isin(tgt)]
-
-            col = 'symbol' if 'symbol' in df.columns else ('ticker' if 'ticker' in df.columns else None)
-            if col:
-                lst = [str(t).strip().upper() for t in df[col].dropna().tolist() if str(t).strip()]
-                if lst:
-                    return lst
-        except Exception as e:
-            LAST_ERRORS[f"get_all_tickers|{src}"] = f"{type(e).__name__}: {e}"
-            continue
-
-    return FALLBACK_TICKERS
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_stock_data(ticker, days_back=200):
-    cached = _read_from_cache(ticker, days_back)
-    if cached is not None and len(cached) >= min(60, days_back // 2):
-        return cached
-
-    # Dùng giờ VN (không phải giờ máy chủ UTC) để tính ngày kết thúc, tránh bị
-    # lùi mất 1 ngày khi máy chủ chạy UTC (Streamlit Cloud / GitHub Actions).
-    now_vn     = _vn_now()
-    end_date   = now_vn.strftime('%Y-%m-%d')
-    start_date = (now_vn - timedelta(days=days_back)).strftime('%Y-%m-%d')
-    return _fetch(ticker, start_date, end_date, '1D')
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def get_vnindex_data(ticker="VNINDEX", days_back=365):
-    end_date   = datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
-    return _fetch('VNINDEX', start_date, end_date, '1D')
-
-# data_loader.py — thay decorator + signature của get_intraday_vnindex
-
-@st.cache_data(ttl=60, show_spinner=False)
-def get_intraday_vnindex(_cache_bust: int = 0):  # thêm tham số này
-    """
-    _cache_bust: truyền int thay đổi mỗi lần gọi để buộc tạo cache key mới.
-    Streamlit bỏ qua tham số bắt đầu bằng _ khi hash key — KHÔNG dùng được.
-    Dùng int thường thay vì underscore prefix.
-    """
-    frames = []
-    for offset in range(6):
-        day = (datetime.now() - timedelta(days=offset)).strftime('%Y-%m-%d')
-        df_day = _fetch_intraday_day('VNINDEX', day, require_fresh=(offset == 0))
-        if not df_day.empty:
-            frames.append(df_day)
-        if len(frames) >= 2:
-            break
-
-    if not frames:
-        return pd.DataFrame()
-
-    result = pd.concat(frames, ignore_index=True)
-    result = result.dropna(subset=['time']).sort_values('time').reset_index(drop=True)
-    return result
