@@ -328,37 +328,42 @@ def _render_fib_table(m: dict):
         # Màu HT: xanh nếu HT < giá hiện tại (đang là hỗ trợ thật), xám nếu đã mất
         ht_color = "#00e676" if ht < price_now else "#555"
 
-        rows_html += f"""
-        <tr style="{row_style}">
-          <td style="color:#8b7fb5;font-size:11px;padding:5px 8px;">{f['label']}</td>
-          <td style="padding:5px 8px;">
-            <span style="color:{kc_color};font-weight:700;">{kc:,.2f}</span>
-            {"<span style='color:#ff5252;font-size:9px;margin-left:4px;'>▲ KC</span>" if kc > price_now else ""}
-          </td>
-          <td style="padding:5px 8px;">
-            <span style="color:{ht_color};font-weight:700;">{ht:,.2f}</span>
-            {"<span style='color:#00e676;font-size:9px;margin-left:4px;'>▼ HT</span>" if ht < price_now else ""}
-          </td>
-        </tr>"""
+        kc_badge = "<span style='color:#ff5252;font-size:9px;margin-left:4px;'>▲ KC</span>" if kc > price_now else ""
+        ht_badge = "<span style='color:#00e676;font-size:9px;margin-left:4px;'>▼ HT</span>" if ht < price_now else ""
 
-    st.markdown(f"""
-      <div class="lk-section">📐 Fibonacci Retracement (đỉnh pha → đáy pha)</div>
-      <table class="sr-table" style="width:100%;border-collapse:collapse;">
-        <thead>
-          <tr>
-            <th style="color:#555;font-size:11px;padding:4px 8px;text-align:left;">Mức Fibo</th>
-            <th style="color:#ff5252;font-size:11px;padding:4px 8px;text-align:left;">🔴 Kháng cự</th>
-            <th style="color:#00e676;font-size:11px;padding:4px 8px;text-align:left;">🟢 Hỗ trợ</th>
-          </tr>
-        </thead>
-        <tbody>{rows_html}</tbody>
-      </table>
-      <div style="font-size:10px;color:#555;margin-top:6px;padding:0 8px;">
-        Giá hiện tại: <b style="color:#e0e0ff;">{price_now:,.2f}</b> &nbsp;|&nbsp;
-        Đỉnh pha: <b style="color:#ff5252;">{m['phase_high']:,.2f}</b> &nbsp;|&nbsp;
-        Đáy pha: <b style="color:#00e676;">{m['phase_low']:,.2f}</b>
-      </div>
-    """, unsafe_allow_html=True)
+        # QUAN TRỌNG: không được thụt lề các dòng HTML này. Markdown coi dòng
+        # thụt lề ≥4 space là code block, làm "bể mạch" render HTML giữa chừng
+        # (đây chính là nguyên nhân các thẻ </td> bị in ra thành chữ thô trước đó).
+        row = (
+            f'<tr style="{row_style}">'
+            f'<td style="color:#8b7fb5;font-size:11px;padding:5px 8px;">{f["label"]}</td>'
+            f'<td style="padding:5px 8px;">'
+            f'<span style="color:{kc_color};font-weight:700;">{kc:,.2f}</span>{kc_badge}'
+            f'</td>'
+            f'<td style="padding:5px 8px;">'
+            f'<span style="color:{ht_color};font-weight:700;">{ht:,.2f}</span>{ht_badge}'
+            f'</td>'
+            f'</tr>'
+        )
+        rows_html += row
+
+    table_html = (
+        '<div class="lk-section">📐 Fibonacci Retracement (đỉnh pha → đáy pha)</div>'
+        '<table class="sr-table" style="width:100%;border-collapse:collapse;">'
+        '<thead><tr>'
+        '<th style="color:#555;font-size:11px;padding:4px 8px;text-align:left;">Mức Fibo</th>'
+        '<th style="color:#ff5252;font-size:11px;padding:4px 8px;text-align:left;">🔴 Kháng cự</th>'
+        '<th style="color:#00e676;font-size:11px;padding:4px 8px;text-align:left;">🟢 Hỗ trợ</th>'
+        '</tr></thead>'
+        f'<tbody>{rows_html}</tbody>'
+        '</table>'
+        '<div style="font-size:10px;color:#555;margin-top:6px;padding:0 8px;">'
+        f'Giá hiện tại: <b style="color:#e0e0ff;">{price_now:,.2f}</b> &nbsp;|&nbsp; '
+        f'Đỉnh pha: <b style="color:#ff5252;">{m["phase_high"]:,.2f}</b> &nbsp;|&nbsp; '
+        f'Đáy pha: <b style="color:#00e676;">{m["phase_low"]:,.2f}</b>'
+        '</div>'
+    )
+    st.markdown(table_html, unsafe_allow_html=True)
 
 
 def _render_lookup_card(symbol: str, company: str, m: dict, source: str):
