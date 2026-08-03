@@ -2,17 +2,15 @@ name: Scan Breadth HOSE
 
 on:
   schedule:
-    # Chạy mỗi 15 phút, Thứ 2–6, 2h–8h UTC (= 9h–15h ICT)
     - cron: '0,15,30,45 2,3,4,5,6,7,8 * * 1-5'
-  workflow_dispatch:   # Cho phép chạy thủ công từ GitHub UI
+  workflow_dispatch:
 
-# ✅ KEY FIX: Chỉ cho 1 job chạy cùng lúc — tránh 2 job tranh nhau push
 concurrency:
   group: scan-breadth-hose
-  cancel-in-progress: true   # Job cũ bị cancel ngay khi job mới trigger
+  cancel-in-progress: true
 
 permissions:
-  contents: write   # Cần để push breadth.json về repo
+  contents: write
 
 jobs:
   scan:
@@ -25,7 +23,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          # Fetch full history để git pull --rebase không bị lỗi
           fetch-depth: 0
 
       - name: Set up Python 3.11
@@ -42,7 +39,7 @@ jobs:
         run: |
           HOUR=$(TZ='Asia/Ho_Chi_Minh' date +%H)
           MIN=$(TZ='Asia/Ho_Chi_Minh' date +%M)
-          DOW=$(TZ='Asia/Ho_Chi_Minh' date +%u)   # 1=T2 ... 7=CN
+          DOW=$(TZ='Asia/Ho_Chi_Minh' date +%u)
           echo "🕒 ICT: ${HOUR}:${MIN}, Thứ: ${DOW}"
 
           RUN=false
@@ -54,43 +51,45 @@ jobs:
               RUN=true
             fi
           fi
-
-          # workflow_dispatch luôn cho chạy
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             RUN=true
-            echo "⚡ Manual trigger — bỏ qua kiểm tra giờ"
           fi
 
           echo "run=${RUN}" >> $GITHUB_OUTPUT
-          echo "Kết quả: run=${RUN}"
 
       - name: Quét Market Breadth
         if: steps.check_time.outputs.run == 'true'
-        run: |
-          echo "🚀 Bắt đầu: $(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S ICT')"
-          python market_breadth.py
-          echo "✅ Xong: $(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S ICT')"
+        run: python market_breadth.py
 
+      # ✅ Pull TRƯỚC khi add/commit/push — đây là fix chính
       - name: Commit breadth.json vào repo
         if: steps.check_time.outputs.run == 'true'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # Bước 1: Pull rebase TRƯỚC để sync với remote
+          git pull --rebase origin main
+
+          # Bước 2: Stage file sau khi đã rebase
           git add breadth.json
 
-          # Không có gì thay đổi thì thôi
+          # Bước 3: Bỏ qua nếu không có gì thay đổi
           if git diff --staged --quiet; then
             echo "📝 breadth.json không đổi, bỏ qua commit"
             exit 0
           fi
 
+          # Bước 4: Commit
           git commit -m "🤖 Auto: cập nhật breadth.json $(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M ICT')"
 
-          # ✅ KEY FIX: pull --rebase trước khi push để tránh rejected
-          # Retry tối đa 3 lần phòng race condition hiếm gặp
+          # Bước 5: Push với retry phòng race condition hiếm gặp
           for i in 1 2 3; do
-            git pull --rebase origin main && git push && echo "✅ Push thành công (lần $i)" && break
-            echo "⚠️ Push lần $i thất bại, thử lại sau 5 giây..."
-            sleep 5
+            if git push origin main; then
+              echo "✅ Push thành công (lần $i)"
+              break
+            fi
+            echo "⚠️ Push thất bại lần $i, pull rebase lại rồi retry..."
+            git pull --rebase origin main
+            sleep 3
           done
