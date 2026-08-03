@@ -40,27 +40,20 @@ def get_expected_latest_trading_date(now: datetime = None):
     Trả về ngày giao dịch GẦN NHẤT mà dữ liệu đóng cửa lẽ ra phải sẵn sàng,
     dựa trên quy tắc thực tế: phiên đóng cửa lúc 15h00, dữ liệu (từ nguồn
     ngoài / bot cào) được cập nhật xong chậm nhất lúc 17h00 (giờ VN, UTC+7).
-
-    - Trước 17h00 của một ngày làm việc -> dữ liệu ngày đó CHƯA chắc có,
-      nên ngày giao dịch "chuẩn" để so sánh vẫn là ngày làm việc liền trước.
-    - Từ 17h00 trở đi của ngày làm việc -> ngày hôm đó đã có đủ dữ liệu.
-    - Thứ 7 / Chủ nhật -> luôn lùi về ngày làm việc gần nhất (thứ 6).
     """
     if now is None:
         now = _vn_now()
     d = now.date()
     if now.weekday() < 5 and now.time() < datetime.strptime("17:00", "%H:%M").time():
         d -= timedelta(days=1)
-    while d.weekday() >= 5:  # Lùi qua Thứ 7 / Chủ nhật về Thứ 6
+    while d.weekday() >= 5:
         d -= timedelta(days=1)
     return d
 
 
 def get_data_freshness(df, now: datetime = None):
     """
-    So sánh ngày dữ liệu MỚI NHẤT trong df với ngày giao dịch kỳ vọng
-    (xem get_expected_latest_trading_date). Trả về dict để tab UI hiển thị
-    cảnh báo nếu dữ liệu cào bị chậm (vd: chậm 2 ngày).
+    So sánh ngày dữ liệu MỚI NHẤT trong df với ngày giao dịch kỳ vọng.
     """
     expected_date = get_expected_latest_trading_date(now)
     if df is None or df.empty or "time" not in df.columns:
@@ -76,14 +69,6 @@ def get_data_freshness(df, now: datetime = None):
 
 
 def _read_from_cache(ticker, days_back):
-    """
-    Đọc cache dài hạn từ Supabase (nếu có). Cache CHỈ được dùng khi ngày mới
-    nhất trong cache >= ngày giao dịch kỳ vọng (xem get_expected_latest_trading_date).
-    Nếu cache cũ hơn (vd: bot bơm dữ liệu bị trễ, chưa chạy kịp) -> trả về None
-    để get_stock_data() bắt buộc cào dữ liệu SỐNG mới nhất thay vì âm thầm
-    trả về dữ liệu cũ (đây chính là nguyên nhân gây hiển thị dữ liệu chậm
-    1-2 ngày ở tab Khuyến Nghị).
-    """
     sb = _get_supabase()
     if sb is None:
         return None
@@ -102,7 +87,6 @@ def _read_from_cache(ticker, days_back):
         newest_date = pd.to_datetime(rows[0]["date"]).date()
         expected_date = get_expected_latest_trading_date()
         if newest_date < expected_date:
-            # Cache chưa được bơm kịp tới phiên gần nhất -> bỏ qua, ép lấy dữ liệu sống
             return None
         df = pd.DataFrame(rows)
         df = df.rename(columns={"date": "time"})
@@ -200,10 +184,6 @@ def _fetch(symbol, start, end, interval):
             return _fetch_yahoo(symbol, start, end)
         return pd.DataFrame()
 
-    # Với dữ liệu daily: không dừng lại ở nguồn đầu tiên "không rỗng" — phải
-    # kiểm tra nguồn đó có ĐỦ MỚI (tới đúng phiên gần nhất) hay không. Nếu
-    # VCI trả về dữ liệu bị chậm 1 nguồn khác (MSN, rồi Yahoo) có thể đã có
-    # phiên mới hơn -> thử lần lượt, giữ lại bản MỚI NHẤT tìm được.
     expected_date = get_expected_latest_trading_date() if interval == '1D' else None
     best_df = pd.DataFrame()
     best_last_date = None
@@ -227,7 +207,7 @@ def _fetch(symbol, start, end, interval):
                 df = _normalize(df)
                 ld = _last_date(df)
                 if interval != '1D' or expected_date is None or (ld is not None and ld >= expected_date):
-                    return df  # đủ mới (hoặc không phải daily) -> dùng luôn
+                    return df
                 if best_last_date is None or (ld is not None and ld > best_last_date):
                     best_df, best_last_date = df, ld
                 LAST_ERRORS[key] = f"{src} chỉ có dữ liệu tới {ld} (kỳ vọng {expected_date}) — đang thử nguồn khác."
@@ -246,8 +226,6 @@ def _fetch(symbol, start, end, interval):
             if best_last_date is None or (ld is not None and ld > best_last_date):
                 best_df, best_last_date = df_yahoo, ld
 
-    # Không nguồn nào đủ mới -> vẫn trả về bản MỚI NHẤT thu được (thay vì rỗng),
-    # tab Khuyến Nghị sẽ tự cảnh báo độ chậm dựa trên get_data_freshness().
     return best_df
 
 # ==========================================================
@@ -259,11 +237,6 @@ _INTRADAY_HEADERS = {
 }
 
 def _day_timestamps(day_str: str):
-    """
-    Trả về (t_from, t_to) dạng unix timestamp cho 1 ngày giao dịch.
-    Server Streamlit Cloud chạy UTC — phải gắn timezone UTC+7 (Asia/Ho_Chi_Minh)
-    rõ ràng, không dùng naive datetime.timestamp() vì sẽ bị lệch 7 tiếng.
-    """
     try:
         import pytz
         tz_vn = pytz.timezone("Asia/Ho_Chi_Minh")
@@ -271,14 +244,12 @@ def _day_timestamps(day_str: str):
         t_from = int(tz_vn.localize(datetime(dt.year, dt.month, dt.day,  9, 0)).timestamp())
         t_to   = int(tz_vn.localize(datetime(dt.year, dt.month, dt.day, 15, 5)).timestamp())
     except ImportError:
-        # Fallback: cộng thủ công 7h = 25200s
         dt = datetime.strptime(day_str, "%Y-%m-%d")
         t_from = int(datetime(dt.year, dt.month, dt.day, 9, 0).timestamp()) - 25200
         t_to   = int(datetime(dt.year, dt.month, dt.day, 15, 5).timestamp()) - 25200
     return t_from, t_to
 
 def _vn_now():
-    """Giờ hiện tại theo timezone Việt Nam (UTC+7), dùng để so sánh độ tươi dữ liệu."""
     try:
         import pytz
         tz_vn = pytz.timezone("Asia/Ho_Chi_Minh")
@@ -287,19 +258,13 @@ def _vn_now():
         return datetime.utcnow() + timedelta(hours=7)
 
 def _is_market_hours(now: datetime) -> bool:
-    """Có đang trong giờ giao dịch (9:00–15:05, T2–T6) hay không."""
-    if now.weekday() >= 5:  # Thứ 7, Chủ nhật
+    if now.weekday() >= 5:
         return False
     t = now.time()
     return (t >= datetime.strptime("09:00", "%H:%M").time()) and \
            (t <= datetime.strptime("15:05", "%H:%M").time())
 
 def _is_fresh(df: pd.DataFrame, max_staleness_minutes: int = 12) -> bool:
-    """
-    Kiểm tra dữ liệu vừa lấy có đủ mới không (so với giờ VN hiện tại).
-    Chỉ áp dụng khi đang trong giờ giao dịch — ngoài giờ, dữ liệu cuối phiên
-    là hợp lệ và không nên bị coi là "cũ".
-    """
     if df is None or df.empty or 'time' not in df.columns:
         return False
     now = _vn_now()
@@ -311,7 +276,6 @@ def _is_fresh(df: pd.DataFrame, max_staleness_minutes: int = 12) -> bool:
     return (now - last_time) <= timedelta(minutes=max_staleness_minutes)
 
 def _build_ohlcv_df(t_list, o, h, l, c, v) -> pd.DataFrame:
-    """Dựng DataFrame chuẩn từ các list t/o/h/l/c/v (unix timestamp)."""
     times = (
         pd.to_datetime(t_list, unit="s", utc=True)
         .tz_convert("Asia/Ho_Chi_Minh")
@@ -328,17 +292,11 @@ def _build_ohlcv_df(t_list, o, h, l, c, v) -> pd.DataFrame:
     return _normalize(df)
 
 def _fetch_intraday_dnse(day_str: str) -> pd.DataFrame:
-    """DNSE / Entrade public chart API — không cần auth."""
     key = f"VNINDEX|1m|DNSE|{day_str}"
     try:
         t_from, t_to = _day_timestamps(day_str)
         url = "https://services.entrade.com.vn/chart-api/v2/ohlcs/index"
-        params = {
-            "symbol": "VNINDEX",
-            "resolution": "1",
-            "from": t_from,
-            "to":   t_to,
-        }
+        params = {"symbol": "VNINDEX", "resolution": "1", "from": t_from, "to": t_to}
         r = _requests.get(url, params=params, headers=_INTRADAY_HEADERS, timeout=10)
         r.raise_for_status()
         data = r.json()
@@ -347,15 +305,12 @@ def _fetch_intraday_dnse(day_str: str) -> pd.DataFrame:
             LAST_ERRORS[key] = "DNSE trả về rỗng (có thể ngày nghỉ)."
             return pd.DataFrame()
         LAST_ERRORS.pop(key, None)
-        return _build_ohlcv_df(
-            t_list, data["o"], data["h"], data["l"], data["c"], data.get("v")
-        )
+        return _build_ohlcv_df(t_list, data["o"], data["h"], data["l"], data["c"], data.get("v"))
     except Exception as e:
         LAST_ERRORS[key] = f"{type(e).__name__}: {e}"
         return pd.DataFrame()
 
 def _fetch_intraday_ssi(day_str: str) -> pd.DataFrame:
-    """SSI iBoard public API — thử nhiều endpoint version."""
     key = f"VNINDEX|1m|SSI|{day_str}"
     t_from, t_to = _day_timestamps(day_str)
     endpoints = [
@@ -363,11 +318,7 @@ def _fetch_intraday_ssi(day_str: str) -> pd.DataFrame:
         "https://iboard-query.ssi.com.vn/v1/stock/chart",
         "https://iboard.ssi.com.vn/dchart/api/history",
     ]
-    headers = {
-        **_INTRADAY_HEADERS,
-        "Referer": "https://iboard.ssi.com.vn/",
-        "Origin": "https://iboard.ssi.com.vn",
-    }
+    headers = {**_INTRADAY_HEADERS, "Referer": "https://iboard.ssi.com.vn/", "Origin": "https://iboard.ssi.com.vn"}
     params = {"symbol": "VNINDEX", "resolution": "1", "from": t_from, "to": t_to}
     for url in endpoints:
         try:
@@ -380,9 +331,7 @@ def _fetch_intraday_ssi(day_str: str) -> pd.DataFrame:
             if not t_list:
                 continue
             LAST_ERRORS.pop(key, None)
-            return _build_ohlcv_df(
-                t_list, data["o"], data["h"], data["l"], data["c"], data.get("v")
-            )
+            return _build_ohlcv_df(t_list, data["o"], data["h"], data["l"], data["c"], data.get("v"))
         except Exception:
             continue
     LAST_ERRORS[key] = f"SSI: tất cả endpoints đều fail (404/403/empty) cho {day_str}"
@@ -390,17 +339,11 @@ def _fetch_intraday_ssi(day_str: str) -> pd.DataFrame:
 
 
 def _fetch_intraday_wifeed(day_str: str) -> pd.DataFrame:
-    """Wifeed / Fmarket public API."""
     key = f"VNINDEX|1m|WIFEED|{day_str}"
     try:
         t_from, t_to = _day_timestamps(day_str)
         url = "https://wifeed.vn/api/thong-tin-co-phieu/lich-su-gia-theo-phut"
-        params = {
-            "symbol": "VNINDEX",
-            "from": t_from,
-            "to":   t_to,
-            "resolution": "1",
-        }
+        params = {"symbol": "VNINDEX", "from": t_from, "to": t_to, "resolution": "1"}
         r = _requests.get(url, params=params, headers=_INTRADAY_HEADERS, timeout=10)
         r.raise_for_status()
         data = r.json()
@@ -422,17 +365,11 @@ def _fetch_intraday_wifeed(day_str: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 def _fetch_intraday_tcbs(day_str: str) -> pd.DataFrame:
-    """TCBS public chart API."""
     key = f"VNINDEX|1m|TCBS|{day_str}"
     try:
         t_from, t_to = _day_timestamps(day_str)
         url = "https://apipubaws.tcbs.com.vn/stock-insight/v1/index/intraday"
-        params = {
-            "ticker": "VNINDEX",
-            "type": "1",
-            "from": t_from,
-            "to":   t_to,
-        }
+        params = {"ticker": "VNINDEX", "type": "1", "from": t_from, "to": t_to}
         r = _requests.get(url, params=params, headers=_INTRADAY_HEADERS, timeout=10)
         r.raise_for_status()
         data = r.json()
@@ -442,12 +379,8 @@ def _fetch_intraday_tcbs(day_str: str) -> pd.DataFrame:
             return pd.DataFrame()
         df = pd.DataFrame(items)
         rename_map = {
-            "tradingDate": "time",
-            "closeIndex":  "close",
-            "openIndex":   "open",
-            "highIndex":   "high",
-            "lowIndex":    "low",
-            "tradingVolume": "volume",
+            "tradingDate": "time", "closeIndex": "close", "openIndex": "open",
+            "highIndex": "high", "lowIndex": "low", "tradingVolume": "volume",
         }
         df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
         LAST_ERRORS.pop(key, None)
@@ -457,17 +390,10 @@ def _fetch_intraday_tcbs(day_str: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 def _fetch_intraday_vndirect(day_str: str) -> pd.DataFrame:
-    """VNDirect market data API."""
     key = f"VNINDEX|1m|VNDIRECT|{day_str}"
     try:
-        # VNDirect dùng endpoint khác, lấy theo date string
         url = "https://api.vndirect.com.vn/v4/market-data/index/history"
-        params = {
-            "code": "VNINDEX",
-            "startDate": day_str,
-            "endDate": day_str,
-            "size": 400,
-        }
+        params = {"code": "VNINDEX", "startDate": day_str, "endDate": day_str, "size": 400}
         r = _requests.get(url, params=params, headers=_INTRADAY_HEADERS, timeout=10)
         r.raise_for_status()
         data = r.json()
@@ -502,32 +428,20 @@ def _fetch_intraday_vnstock(symbol: str, day_str: str) -> pd.DataFrame:
             continue
     return pd.DataFrame()
 
-
 def _fetch_intraday_day(symbol: str, day_str: str, require_fresh: bool = False) -> pd.DataFrame:
     """
     Lấy dữ liệu 1 phút cho 1 ngày.
     Thứ tự ưu tiên: DNSE → SSI → Wifeed → TCBS → VNDirect → vnstock (VCI/MSN)
 
-    Nếu require_fresh=True (dùng cho NGÀY HÔM NAY trong giờ giao dịch):
-    - Nguồn đầu tiên trả về dữ liệu ĐỦ MỚI (< 12 phút so với hiện tại) được
-      dùng ngay.
-    - Nếu KHÔNG nguồn free nào đủ mới, hàm sẽ thử LUÔN vnstock (trước đây bị
-      bỏ qua) và so sánh timestamp mới nhất giữa tất cả nguồn đã thử, trả về
-      bản có dữ liệu MỚI NHẤT tìm được — thay vì mù quáng chọn nguồn free
-      đầu tiên "không rỗng" dù nó có thể đang bị cache/stale phía server của
-      chính nguồn đó.
-    """
-    from data_loader import (  # import tại chỗ để tránh vòng lặp import khi dán patch
-        _fetch_intraday_dnse,
-        _fetch_intraday_ssi,
-        _fetch_intraday_wifeed,
-        _fetch_intraday_tcbs,
-        _fetch_intraday_vndirect,
-        _fetch_intraday_vnstock,
-        _is_fresh,
-        LAST_ERRORS,
-    )
+    ĐÃ SỬA BUG: bản cũ, hễ 1 trong 5 nguồn free trả dữ liệu KHÔNG RỖNG là return
+    ngay dù dữ liệu đó cũ (không fresh) -> dòng fallback vnstock ở cuối không
+    bao giờ chạy tới, nên nếu 1 nguồn free bị cache/stale phía server của họ,
+    app mãi mãi kẹt ở đúng 1 mốc giờ cũ dù reboot bao nhiêu lần.
 
+    Bản sửa: khi require_fresh=True và không nguồn free nào đủ mới, BẮT BUỘC
+    thử thêm vnstock rồi so sánh timestamp mới nhất giữa TẤT CẢ nguồn đã thử
+    (kể cả vnstock), trả về bản có dữ liệu mới nhất tìm được.
+    """
     fetchers = [
         _fetch_intraday_dnse,
         _fetch_intraday_ssi,
@@ -559,12 +473,10 @@ def _fetch_intraday_day(symbol: str, day_str: str, require_fresh: bool = False) 
             if not require_fresh or _is_fresh(df):
                 return df  # đủ mới (hoặc không cần fresh) -> dùng luôn
 
-            # Không fresh -> chỉ giữ làm ứng viên, KHÔNG return ngay ở đây nữa
+            # Không fresh -> chỉ giữ làm ứng viên, KHÔNG return ngay
             _consider(df, fetcher.__name__)
 
-        # ĐÃ THỬ HẾT 5 NGUỒN FREE MÀ KHÔNG CÓ NGUỒN NÀO ĐỦ MỚI
-        # -> bắt buộc thử thêm vnstock (trước đây bước này bị "chặn" bởi
-        #    return sớm ở trên, nên mãi mãi không bao giờ chạy tới)
+        # Đã thử hết 5 nguồn free mà không nguồn nào đủ mới -> bắt buộc thử vnstock
         if require_fresh:
             df_vnstock = _fetch_intraday_vnstock(symbol, day_str)
             _consider(df_vnstock, "vnstock(VCI/MSN)")
@@ -579,6 +491,80 @@ def _fetch_intraday_day(symbol: str, day_str: str, require_fresh: bool = False) 
                 LAST_ERRORS.pop(f"VNINDEX|1m|freshness|{day_str}", None)
             return best_df
 
-    # symbol khác VNINDEX, hoặc VNINDEX nhưng tất cả nguồn free đều rỗng
-    # và chưa thử vnstock ở trên (trường hợp require_fresh=False)
     return _fetch_intraday_vnstock(symbol, day_str)
+
+# ==========================================================
+# PUBLIC API
+# ==========================================================
+@st.cache_data(ttl=86400)
+def get_all_tickers(exchange='all'):
+    if not _VNSTOCK_OK:
+        return FALLBACK_TICKERS
+
+    for src in ['vci', 'kbs']:
+        try:
+            _throttle()
+            df = Listing(source=src).symbols_by_exchange()
+            df.columns = [str(c).lower().strip() for c in df.columns]
+
+            type_col = next((c for c in df.columns if 'type' in c), None)
+            if type_col:
+                df = df[df[type_col].astype(str).str.upper().isin(['STOCK', 'CP', 'CỔ PHIẾU'])]
+
+            if 'exchange' in df.columns:
+                df = df[df['exchange'].astype(str).str.upper().isin(['HOSE', 'HSX', 'HNX', 'UPCOM'])]
+                if exchange != 'all':
+                    tgt = ['HOSE', 'HSX'] if str(exchange).upper() in ('HOSE', 'HSX') else [str(exchange).upper()]
+                    df = df[df['exchange'].astype(str).str.upper().isin(tgt)]
+
+            col = 'symbol' if 'symbol' in df.columns else ('ticker' if 'ticker' in df.columns else None)
+            if col:
+                lst = [str(t).strip().upper() for t in df[col].dropna().tolist() if str(t).strip()]
+                if lst:
+                    return lst
+        except Exception as e:
+            LAST_ERRORS[f"get_all_tickers|{src}"] = f"{type(e).__name__}: {e}"
+            continue
+
+    return FALLBACK_TICKERS
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_stock_data(ticker, days_back=200):
+    cached = _read_from_cache(ticker, days_back)
+    if cached is not None and len(cached) >= min(60, days_back // 2):
+        return cached
+
+    now_vn     = _vn_now()
+    end_date   = now_vn.strftime('%Y-%m-%d')
+    start_date = (now_vn - timedelta(days=days_back)).strftime('%Y-%m-%d')
+    return _fetch(ticker, start_date, end_date, '1D')
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_vnindex_data(ticker="VNINDEX", days_back=365):
+    end_date   = datetime.now().strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+    return _fetch('VNINDEX', start_date, end_date, '1D')
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_intraday_vnindex(_cache_bust: int = 0):
+    """
+    _cache_bust: truyền int thay đổi mỗi lần gọi để buộc tạo cache key mới.
+    LƯU Ý: tham số bắt đầu bằng "_" bị Streamlit BỎ QUA khi tính hash cache key
+    -> đổi giá trị này KHÔNG thực sự force refresh. ttl=60 vẫn là cơ chế làm
+    mới thật sự đang hoạt động (refresh mỗi 60s khi có rerun xảy ra).
+    """
+    frames = []
+    for offset in range(6):
+        day = (datetime.now() - timedelta(days=offset)).strftime('%Y-%m-%d')
+        df_day = _fetch_intraday_day('VNINDEX', day, require_fresh=(offset == 0))
+        if not df_day.empty:
+            frames.append(df_day)
+        if len(frames) >= 2:
+            break
+
+    if not frames:
+        return pd.DataFrame()
+
+    result = pd.concat(frames, ignore_index=True)
+    result = result.dropna(subset=['time']).sort_values('time').reset_index(drop=True)
+    return result
