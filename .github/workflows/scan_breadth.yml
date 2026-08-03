@@ -1,127 +1,96 @@
 name: Scan Breadth HOSE
 
 on:
-  # ✅ Chạy mỗi 15 phút trong giờ giao dịch HOSE (9:00–15:30 ICT = 2:00–8:30 UTC)
   schedule:
-    - cron: '0,15,30,45 2,3,4,5,6,7,8 * * 1-5'   # Thứ 2–6, 2h–8h UTC (giờ đầy đủ)
-    - cron: '0,15,30 8 * * 1-5'                    # 8:00, 8:15, 8:30 UTC (9h–9h30 ICT cuối)
+    # Chạy mỗi 15 phút, Thứ 2–6, 2h–8h UTC (= 9h–15h ICT)
+    - cron: '0,15,30,45 2,3,4,5,6,7,8 * * 1-5'
+  workflow_dispatch:   # Cho phép chạy thủ công từ GitHub UI
 
-  # ✅ Cho phép chạy thủ công từ GitHub UI khi cần debug
-  workflow_dispatch:
-    inputs:
-      force_run:
-        description: 'Chạy dù ngoài giờ giao dịch?'
-        required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'false'
-          - 'true'
-
-# ✅ Chỉ cho phép 1 job chạy cùng lúc, cancel job cũ nếu có job mới
+# ✅ KEY FIX: Chỉ cho 1 job chạy cùng lúc — tránh 2 job tranh nhau push
 concurrency:
   group: scan-breadth-hose
-  cancel-in-progress: true
+  cancel-in-progress: true   # Job cũ bị cancel ngay khi job mới trigger
+
+permissions:
+  contents: write   # Cần để push breadth.json về repo
 
 jobs:
   scan:
     name: Quét Sức Khỏe Thị Trường HOSE
     runs-on: ubuntu-latest
-    timeout-minutes: 25   # Kill job nếu treo quá 25 phút
+    timeout-minutes: 20
 
     steps:
-      # ─── 1. Checkout code ───────────────────────────────────────────────
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          # Cần token để có thể push kết quả về repo
           token: ${{ secrets.GITHUB_TOKEN }}
+          # Fetch full history để git pull --rebase không bị lỗi
+          fetch-depth: 0
 
-      # ─── 2. Setup Python ────────────────────────────────────────────────
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      # ─── 3. Cài dependencies ────────────────────────────────────────────
       - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
-      # ─── 4. Kiểm tra giờ giao dịch (ICT = UTC+7) ────────────────────────
-      - name: Kiểm tra giờ giao dịch
+      - name: Kiểm tra giờ giao dịch (ICT)
         id: check_time
         run: |
-          # Lấy giờ hiện tại theo ICT (UTC+7)
-          HOUR_ICT=$(TZ='Asia/Ho_Chi_Minh' date +%H)
-          MIN_ICT=$(TZ='Asia/Ho_Chi_Minh' date +%M)
-          DAY_OF_WEEK=$(TZ='Asia/Ho_Chi_Minh' date +%u)  # 1=Mon, 7=Sun
+          HOUR=$(TZ='Asia/Ho_Chi_Minh' date +%H)
+          MIN=$(TZ='Asia/Ho_Chi_Minh' date +%M)
+          DOW=$(TZ='Asia/Ho_Chi_Minh' date +%u)   # 1=T2 ... 7=CN
+          echo "🕒 ICT: ${HOUR}:${MIN}, Thứ: ${DOW}"
 
-          echo "🕒 Giờ ICT hiện tại: ${HOUR_ICT}:${MIN_ICT}, Thứ: ${DAY_OF_WEEK}"
-
-          # Chỉ chạy Thứ 2–6, 9:00–15:35 ICT
-          SHOULD_RUN="false"
-          FORCE="${{ github.event.inputs.force_run }}"
-
-          if [ "${FORCE}" = "true" ]; then
-            SHOULD_RUN="true"
-            echo "⚡ Force run được kích hoạt"
-          elif [ "${DAY_OF_WEEK}" -ge 1 ] && [ "${DAY_OF_WEEK}" -le 5 ]; then
-            if [ "${HOUR_ICT}" -ge 9 ] && [ "${HOUR_ICT}" -lt 15 ]; then
-              SHOULD_RUN="true"
-            elif [ "${HOUR_ICT}" -eq 15 ] && [ "${MIN_ICT}" -le 35 ]; then
-              SHOULD_RUN="true"
+          RUN=false
+          if [ "$DOW" -le 5 ]; then
+            if   { [ "$HOUR" -ge 9  ] && [ "$HOUR" -lt 11 ]; } \
+              || { [ "$HOUR" -eq 11 ] && [ "$MIN"  -le 30  ]; } \
+              || { [ "$HOUR" -ge 13 ] && [ "$HOUR" -lt 15  ]; } \
+              || { [ "$HOUR" -eq 15 ] && [ "$MIN"  -le 40  ]; }; then
+              RUN=true
             fi
           fi
 
-          echo "should_run=${SHOULD_RUN}" >> $GITHUB_OUTPUT
-          echo "✅ Có nên chạy: ${SHOULD_RUN}"
-
-      # ─── 5. Chạy market_breadth.py ──────────────────────────────────────
-      - name: Quét Market Breadth
-        if: steps.check_time.outputs.should_run == 'true'
-        env:
-          # Thêm các secret cần thiết ở đây
-          # VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
-          PYTHONUNBUFFERED: "1"
-        run: |
-          echo "🚀 Bắt đầu quét lúc $(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S ICT')"
-          python market_breadth.py
-          echo "✅ Quét hoàn tất lúc $(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S ICT')"
-
-      # ─── 6. Skip nếu ngoài giờ ─────────────────────────────────────────
-      - name: Bỏ qua (ngoài giờ giao dịch)
-        if: steps.check_time.outputs.should_run == 'false'
-        run: |
-          echo "⏭️ Bỏ qua - ngoài giờ giao dịch HOSE"
-          echo "Giờ ICT: $(TZ='Asia/Ho_Chi_Minh' date '+%H:%M %Z')"
-
-      # ─── 7. Commit & push kết quả (nếu có thay đổi) ─────────────────────
-      - name: Commit kết quả quét
-        if: steps.check_time.outputs.should_run == 'true'
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Actions Bot"
-
-          # Chỉ commit nếu có file thay đổi
-          if git diff --quiet && git diff --staged --quiet; then
-            echo "📝 Không có thay đổi, bỏ qua commit"
-          else
-            git add -A
-            git commit -m "🤖 Auto: Cập nhật market breadth $(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M ICT')"
-            git push
-            echo "✅ Đã push kết quả lên repo"
+          # workflow_dispatch luôn cho chạy
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            RUN=true
+            echo "⚡ Manual trigger — bỏ qua kiểm tra giờ"
           fi
 
-      # ─── 8. Upload log nếu lỗi ──────────────────────────────────────────
-      - name: Upload log khi lỗi
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: error-log-${{ github.run_id }}
-          path: |
-            *.log
-            logs/
-          retention-days: 7
+          echo "run=${RUN}" >> $GITHUB_OUTPUT
+          echo "Kết quả: run=${RUN}"
+
+      - name: Quét Market Breadth
+        if: steps.check_time.outputs.run == 'true'
+        run: |
+          echo "🚀 Bắt đầu: $(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S ICT')"
+          python market_breadth.py
+          echo "✅ Xong: $(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M:%S ICT')"
+
+      - name: Commit breadth.json vào repo
+        if: steps.check_time.outputs.run == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add breadth.json
+
+          # Không có gì thay đổi thì thôi
+          if git diff --staged --quiet; then
+            echo "📝 breadth.json không đổi, bỏ qua commit"
+            exit 0
+          fi
+
+          git commit -m "🤖 Auto: cập nhật breadth.json $(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M ICT')"
+
+          # ✅ KEY FIX: pull --rebase trước khi push để tránh rejected
+          # Retry tối đa 3 lần phòng race condition hiếm gặp
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push && echo "✅ Push thành công (lần $i)" && break
+            echo "⚠️ Push lần $i thất bại, thử lại sau 5 giây..."
+            sleep 5
+          done
