@@ -221,75 +221,68 @@ def fetch_company_name(symbol: str) -> str:
 #  TÍNH CHỈ SỐ
 # ─────────────────────────────────────────────────────────────
 
-def compute_metrics(df: pd.DataFrame) -> dict:
-    """
-    Tính Sức bật, Độ giãn, Fibonacci, Swing KC/HT từ OHLCV DataFrame.
-
-    Columns cần: close, high, low, volume (optional)
-    """
+# ── ĐOẠN 1: Thay toàn bộ hàm compute_metrics() ─────────────────
+def compute_metrics(df) -> dict:
+    import numpy as np, pandas as pd
+ 
     close  = df["close"].values.astype(float)
     high   = df["high"].values.astype(float)  if "high"   in df.columns else close.copy()
     low    = df["low"].values.astype(float)   if "low"    in df.columns else close.copy()
     volume = df["volume"].values.astype(float) if "volume" in df.columns else np.ones(len(close))
-
+ 
     n          = len(close)
     price_now  = float(close[-1])
     pct_change = float((close[-1] - close[-2]) / close[-2] * 100) if n >= 2 else 0.0
-
-    # ── Xác định pha giảm: đỉnh → đáy trong 120 phiên ──────
+ 
+    # Xác định pha giảm: đỉnh → đáy trong cửa sổ
     peak_idx   = int(np.argmax(high))
-    # tìm đáy SAU đỉnh
     sub_low    = low[peak_idx:]
-    trough_sub = int(np.argmin(sub_low))
-    trough_idx = peak_idx + trough_sub
+    trough_idx = peak_idx + int(np.argmin(sub_low))
     phase_high = float(high[peak_idx])
     phase_low  = float(low[trough_idx])
-
+ 
     drop_sessions = max(trough_idx - peak_idx, 1)
-    do_gian_pct   = (phase_low - phase_high) / phase_high * 100          # âm
+    do_gian_pct   = (phase_low - phase_high) / phase_high * 100   # âm
     do_gian_abs   = abs(do_gian_pct)
-    suc_bat       = round(do_gian_abs / drop_sessions * 10, 2)           # công thức chính
+    suc_bat       = round(do_gian_abs / drop_sessions * 10, 2)
     recovery_pct  = (price_now - phase_low) / phase_low * 100 if phase_low > 0 else 0.0
-
-    # ── Fibonacci retracement (đỉnh pha → đáy pha) ─────────
+ 
     diff = phase_high - phase_low
-    fib_ratios = [0.236, 0.382, 0.5, 0.618, 0.786]
+ 
+    # ── Fibonacci: 6 mức chuẩn + 2 đầu mút ──────────────────────
+    # KC = phase_low  + diff × ratio  (hồi từ đáy lên)
+    # HT = phase_high - diff × ratio  (kéo từ đỉnh xuống)
+    FIB_RATIOS = [
+        ("0%",    0.0),
+        ("14.6%", 0.146),
+        ("23.6%", 0.236),
+        ("38.2%", 0.382),
+        ("50.0%", 0.500),
+        ("61.8%", 0.618),
+        ("78.6%", 0.786),
+        ("100%",  1.0),
+    ]
     fib_levels = []
-    for r in fib_ratios:
-        price_fib = phase_low + diff * r
-        role = "KC" if price_fib > price_now else "HT"
+    for label, ratio in FIB_RATIOS:
+        kc_price = round(phase_low  + diff * ratio, 2)
+        ht_price = round(phase_high - diff * ratio, 2)
         fib_levels.append({
-            "price": round(price_fib, 2),
-            "label": f"{r*100:.1f}%",
-            "role":  role,
+            "label":    f"fibo {label}",
+            "kc_price": kc_price,   # kháng cự
+            "ht_price": ht_price,   # hỗ trợ
         })
-
-    # ── Swing high/low cục bộ (lookback=3) ─────────────────
-    swing_h, swing_l = [], []
-    lb = 3
-    for i in range(lb, n - lb):
-        if high[i] == max(high[i-lb:i+lb+1]):
-            swing_h.append(float(high[i]))
-        if low[i]  == min(low[i-lb:i+lb+1]):
-            swing_l.append(float(low[i]))
-
-    # Lọc: kháng cự > giá hiện tại, hỗ trợ < giá hiện tại
-    res_sw = sorted(set(round(v, 2) for v in swing_h if v > price_now))[:4]
-    sup_sw = sorted(set(round(v, 2) for v in swing_l if v < price_now), reverse=True)[:4]
-
+ 
     return {
-        "price":        round(price_now, 2),
-        "pct_change":   round(pct_change, 2),
-        "phase_high":   round(phase_high, 2),
-        "phase_low":    round(phase_low, 2),
+        "price":         round(price_now, 2),
+        "pct_change":    round(pct_change, 2),
+        "phase_high":    round(phase_high, 2),
+        "phase_low":     round(phase_low, 2),
         "drop_sessions": drop_sessions,
-        "do_gian_pct":  round(do_gian_pct, 1),
-        "do_gian_abs":  round(do_gian_abs, 1),
-        "suc_bat":      suc_bat,
-        "recovery_pct": round(recovery_pct, 1),
-        "fib_levels":   fib_levels,
-        "swing_res":    res_sw,
-        "swing_sup":    sup_sw,
+        "do_gian_pct":   round(do_gian_pct, 1),
+        "do_gian_abs":   round(do_gian_abs, 1),
+        "suc_bat":       suc_bat,
+        "recovery_pct":  round(recovery_pct, 1),
+        "fib_levels":    fib_levels,   # ← format mới, không còn swing_res/swing_sup
     }
 
 
@@ -377,42 +370,56 @@ def _render_lookup_card(symbol: str, company: str, m: dict, source: str):
       </div>
     """, unsafe_allow_html=True)
 
-    # Fibonacci
+    def _render_fib_table(m: dict):
+    """Vẽ bảng Fibonacci 2 cột KC / HT — dán vào _render_lookup_card()."""
     fib = m["fib_levels"]
-    fib_rows = "".join(
-        f"""<tr>
-          <td><b>{f['price']:,.1f}</b></td>
-          <td><span class="{'badge-r' if f['role']=='KC' else 'badge-s'}">
-              {'Kháng cự' if f['role']=='KC' else 'Hỗ trợ'}</span></td>
-          <td><span class="badge-fib">{f['label']} Fib</span></td>
+    price_now = m["price"]
+ 
+    rows_html = ""
+    for f in fib:
+        kc = f["kc_price"]
+        ht = f["ht_price"]
+ 
+        # Highlight dòng gần giá hiện tại nhất (trong vòng 2%)
+        is_near = abs(kc - price_now) / price_now < 0.02 or abs(ht - price_now) / price_now < 0.02
+        row_style = "background:#1a1a3a;" if is_near else ""
+ 
+        # Màu KC: đỏ nếu KC > giá hiện tại (đang là kháng cự thật), xám nếu đã vượt
+        kc_color = "#ff5252" if kc > price_now else "#555"
+        # Màu HT: xanh nếu HT < giá hiện tại (đang là hỗ trợ thật), xám nếu đã mất
+        ht_color = "#00e676" if ht < price_now else "#555"
+ 
+        rows_html += f"""
+        <tr style="{row_style}">
+          <td style="color:#8b7fb5;font-size:11px;padding:5px 8px;">{f['label']}</td>
+          <td style="padding:5px 8px;">
+            <span style="color:{kc_color};font-weight:700;">{kc:,.2f}</span>
+            {"<span style='color:#ff5252;font-size:9px;margin-left:4px;'>▲ KC</span>" if kc > price_now else ""}
+          </td>
+          <td style="padding:5px 8px;">
+            <span style="color:{ht_color};font-weight:700;">{ht:,.2f}</span>
+            {"<span style='color:#00e676;font-size:9px;margin-left:4px;'>▼ HT</span>" if ht < price_now else ""}
+          </td>
         </tr>"""
-        for f in fib
-    )
+ 
+    import streamlit as st
     st.markdown(f"""
-      <div class="lk-section">📐 Fibonacci retracement (đỉnh pha → đáy pha)</div>
-      <table class="sr-table">
-        <thead><tr><th>Giá</th><th>Loại</th><th>Mức Fib</th></tr></thead>
-        <tbody>{fib_rows}</tbody>
+      <div class="lk-section">📐 Fibonacci Retracement (đỉnh pha → đáy pha)</div>
+      <table class="sr-table" style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="color:#555;font-size:11px;padding:4px 8px;text-align:left;">Mức Fibo</th>
+            <th style="color:#ff5252;font-size:11px;padding:4px 8px;text-align:left;">🔴 Kháng cự</th>
+            <th style="color:#00e676;font-size:11px;padding:4px 8px;text-align:left;">🟢 Hỗ trợ</th>
+          </tr>
+        </thead>
+        <tbody>{rows_html}</tbody>
       </table>
-    """, unsafe_allow_html=True)
-
-    # Swing KC/HT
-    sw_res = m["swing_res"]
-    sw_sup = m["swing_sup"]
-    max_r  = max(len(sw_res), len(sw_sup), 1)
-    sw_rows = ""
-    for i in range(min(max_r, 4)):
-        r_cell = f'<span class="badge-r">{sw_res[i]:,.1f}</span>' if i < len(sw_res) else "—"
-        s_cell = f'<span class="badge-s">{sw_sup[i]:,.1f}</span>' if i < len(sw_sup) else "—"
-        sw_rows += f"<tr><td>{r_cell}</td><td>{s_cell}</td></tr>"
-
-    st.markdown(f"""
-      <div class="lk-section">📊 Swing KC/HT cục bộ (lookback 3 phiên)</div>
-      <table class="sr-table">
-        <thead><tr><th>🔴 Kháng cự</th><th>🟢 Hỗ trợ</th></tr></thead>
-        <tbody>{sw_rows}</tbody>
-      </table>
-    </div>
+      <div style="font-size:10px;color:#555;margin-top:6px;padding:0 8px;">
+        Giá hiện tại: <b style="color:#e0e0ff;">{price_now:,.2f}</b> &nbsp;|&nbsp;
+        Đỉnh pha: <b style="color:#ff5252;">{m['phase_high']:,.2f}</b> &nbsp;|&nbsp;
+        Đáy pha: <b style="color:#00e676;">{m['phase_low']:,.2f}</b>
+      </div>
     """, unsafe_allow_html=True)
 
 
@@ -508,25 +515,7 @@ def _compute_symbol_scan(symbol: str, n_periods: int = 120) -> dict | None:
         close  = df["close"].values.astype(float)
         volume = df["volume"].values.astype(float) if "volume" in df.columns else np.ones(len(close))
 
-        # Volume Profile top 4 bucket → KC/HT
-        price_min, price_max = close.min(), close.max()
-        if price_max == price_min:
-            return None
-        buckets = 20
-        edges      = np.linspace(price_min, price_max, buckets + 1)
-        bucket_vol = np.zeros(buckets)
-        for p, v in zip(close, volume):
-            idx = min(int((p - price_min) / (price_max - price_min) * buckets), buckets - 1)
-            bucket_vol[idx] += v
-        total_vol = bucket_vol.sum() or 1
-        top4 = np.argsort(bucket_vol)[-4:][::-1]
-        sr_levels = []
-        for bi in top4:
-            center = (edges[bi] + edges[bi + 1]) / 2
-            vpct   = bucket_vol[bi] / total_vol * 100
-            role   = "KC" if center > m["price"] else "HT"
-            sr_levels.append((round(center, 2), round(vpct, 1), role))
-        sr_levels.sort(key=lambda x: x[0])
+        _compute_symbol_scan
 
         return {
             "symbol":        symbol,
