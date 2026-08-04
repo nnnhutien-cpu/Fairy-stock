@@ -161,7 +161,7 @@ tab_market, tab_screener, tab_results, tab_signals, tab_backtest, tab_reports, t
     "📑 Báo Cáo", 
     "💡 Khuyến Nghị", 
     "🚀 Sức Bật",
-    "💼 DANH MỤC"  # ✅ TAB MỚI
+    "💼 Danh mục"  # ✅ TAB MỚI
 ])
 
 # ==========================================
