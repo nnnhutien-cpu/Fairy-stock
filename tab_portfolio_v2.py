@@ -5,6 +5,9 @@
 - PHẦN TRÊN:  SCREENER "ĐIỂM MUA VÀNG" (3 điều kiện)
 - PHẦN DƯỚI:  4 MÃ × 25% danh mục
               Trạng thái: GIỮ CP | BÁN 25% | BÁN HẾT | CHỜ | MUA
+
+Giao diện dùng chung bộ CSS tối (navy/purple) với tab "Sức Bật" để
+đồng bộ trải nghiệm giữa các tab trong dashboard.
 """
 
 import concurrent.futures
@@ -17,6 +20,112 @@ from data_loader import get_stock_data
 
 
 # ══════════════════════════════════════════════
+# 0. CSS DÙNG CHUNG (tham khảo tab Sức Bật)
+# ══════════════════════════════════════════════
+
+SB_CSS = """
+<style>
+.sb-header {
+    background: linear-gradient(135deg,#1a1a2e,#16213e);
+    border-radius: 12px; padding: 16px 20px; margin-bottom: 18px;
+}
+.sb-title { font-size: 22px; font-weight: 800; color: #e0e0ff; }
+.sb-sub   { font-size: 12px; color: #888; margin-top: 2px; }
+.sb-note {
+    background: #1a1a2e; border-left: 3px solid #8b7fb5;
+    padding: 10px 14px; border-radius: 0 8px 8px 0;
+    font-size: 12px; color: #aaa; margin-bottom: 14px;
+}
+/* Card tra cứu */
+.lk-card {
+    background: #1e1e2e; border: 1px solid #2c2151;
+    border-radius: 14px; padding: 20px 24px; margin-bottom: 16px;
+}
+.lk-ticker { font-size: 28px; font-weight: 800; color: #a78bfa; letter-spacing: 2px; }
+.lk-company { font-size: 13px; color: #888; margin-top: 2px; margin-bottom: 16px; }
+.lk-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 14px; }
+.lk-metric { background: #12102a; border-radius: 10px; padding: 12px 14px; }
+.lk-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: .5px; }
+.lk-value { font-size: 22px; font-weight: 700; color: #e0e0ff; margin-top: 3px; }
+.lk-sub   { font-size: 10px; color: #555; margin-top: 2px; }
+.val-up   { color: #00e676 !important; }
+.val-down { color: #ff5252 !important; }
+.val-warn { color: #ffd740 !important; }
+.lk-section { font-size: 11px; color: #8b7fb5; text-transform: uppercase;
+               letter-spacing: .6px; margin: 14px 0 8px;
+               border-bottom: 1px solid #2c2151; padding-bottom: 4px; }
+.sr-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sr-table th { color: #666; font-weight: 400; text-align: left;
+               padding: 4px 8px; font-size: 11px; text-transform: uppercase; }
+.sr-table td { padding: 5px 8px; border-bottom: 1px solid #1e1a33; color: #ccc; }
+.sr-table tr:last-child td { border-bottom: none; }
+.badge-r { background:#3a1a1a; color:#ff5252; padding:2px 8px;
+           border-radius:4px; font-size:11px; font-weight:600; }
+.badge-s { background:#1a3a1a; color:#00e676; padding:2px 8px;
+           border-radius:4px; font-size:11px; font-weight:600; }
+.badge-fib { background:#1a1a3a; color:#7c9ef5; padding:2px 6px;
+             border-radius:4px; font-size:10px; }
+.formula-note {
+    background: #12102a; border-left: 3px solid #a78bfa;
+    padding: 10px 14px; border-radius: 0 8px 8px 0;
+    font-size: 12px; color: #999; margin-top: 12px; line-height: 1.7;
+}
+/* scan section */
+.sb-stat-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.sb-stat { background: #1e1e2e; border-radius: 10px; padding: 10px 16px;
+           flex: 1; min-width: 130px; }
+.sb-stat-label { font-size: 11px; color: #888; text-transform: uppercase; }
+.sb-stat-value { font-size: 20px; font-weight: 800; color: #e0e0ff; margin-top: 2px; }
+.src-badge { display:inline-block; padding:1px 7px; border-radius:10px;
+             font-size:10px; font-weight:600; margin-left:6px; }
+.src-vci     { background:#1a2a3a; color:#5b9bd5; }
+.src-fireant { background:#1a2e1a; color:#4caf50; }
+.src-yahoo   { background:#1a1a3a; color:#8b7fb5; }
+
+/* ── Mở rộng riêng cho tab Portfolio v2 ── */
+.badge-hold    { background:#3a2f14; color:#ffd740; padding:2px 8px;
+                 border-radius:4px; font-size:11px; font-weight:600; }
+.badge-sell25  { background:#3a2414; color:#ffab40; padding:2px 8px;
+                 border-radius:4px; font-size:11px; font-weight:600; }
+.badge-sellall { background:#3a1a1a; color:#ff5252; padding:2px 8px;
+                 border-radius:4px; font-size:11px; font-weight:600; }
+.badge-buy     { background:#1a3a1a; color:#00e676; padding:2px 8px;
+                 border-radius:4px; font-size:11px; font-weight:600; }
+.badge-wait    { background:#1e1a33; color:#8b7fb5; padding:2px 8px;
+                 border-radius:4px; font-size:11px; font-weight:600; }
+
+.slot-card {
+    background: #1e1e2e; border: 1px solid #2c2151;
+    border-radius: 14px; padding: 18px 10px 14px 10px;
+    text-align: center; min-height: 108px;
+}
+.slot-card.empty {
+    background: #16162a; border: 2px dashed #3a2f66;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.slot-empty-plus { color: #5a4a8a; font-size: 1.8rem; line-height: 1; }
+.slot-empty-label { color: #5a4a8a; font-size: .75rem; margin-top: 4px; }
+.slot-ticker { font-weight: 800; font-size: 1.15rem; color: #e0e0ff; letter-spacing: .5px; }
+.slot-pct { font-size: .72rem; color: #888; margin-top: 2px; }
+.slot-action-wrap { margin-top: 10px; }
+
+.buy-confirm-card {
+    background: #12102a; border: 1px solid #1a3a1a;
+    border-radius: 10px; padding: 12px 10px; text-align: center;
+}
+.buy-confirm-ticker { font-weight: 700; font-size: 1rem; color: #e0e0ff; }
+.buy-confirm-note { font-size: .75rem; color: #00e676; margin-top: 4px; }
+</style>
+"""
+
+
+def _inject_css():
+    if not st.session_state.get("_sb_css_injected"):
+        st.markdown(SB_CSS, unsafe_allow_html=True)
+        st.session_state["_sb_css_injected"] = True
+
+
+# ══════════════════════════════════════════════
 # 1. SESSION STATE
 # ══════════════════════════════════════════════
 
@@ -26,12 +135,19 @@ SLOT_PCT   = 25  # % mỗi mã
 
 ACTIONS = ["GIỮ CP", "BÁN 25%", "BÁN HẾT", "MUA", "CHỜ"]
 
-ACTION_STYLE = {
-    "GIỮ CP":  {"bg": "#fdf6e3", "border": "#c8a84b", "color": "#7a5c00"},
-    "BÁN 25%": {"bg": "#fff3e0", "border": "#e08030", "color": "#8a3a00"},
-    "BÁN HẾT": {"bg": "#fce8e8", "border": "#d94040", "color": "#8a0000"},
-    "MUA":     {"bg": "#e8f5e8", "border": "#3aaa3a", "color": "#1a5c1a"},
-    "CHỜ":     {"bg": "#f2f2f2", "border": "#aaaaaa", "color": "#555555"},
+# Badge class + màu dùng cho từng trạng thái (đồng bộ với SB_CSS ở trên)
+ACTION_BADGE = {
+    "GIỮ CP":  {"class": "badge-hold",    "color": "#ffd740"},
+    "BÁN 25%": {"class": "badge-sell25",  "color": "#ffab40"},
+    "BÁN HẾT": {"class": "badge-sellall", "color": "#ff5252"},
+    "MUA":     {"class": "badge-buy",     "color": "#00e676"},
+    "CHỜ":     {"class": "badge-wait",    "color": "#8b7fb5"},
+}
+
+MARKET_BADGE = {
+    "Uptrend":   {"class": "badge-buy",     "label": "🟢 Uptrend"},
+    "Sideways":  {"class": "badge-hold",    "label": "🟡 Sideways"},
+    "Downtrend": {"class": "badge-sellall", "label": "🔴 Downtrend"},
 }
 
 
@@ -194,55 +310,34 @@ def _slot_card_html(slot_idx, ticker, action, pct=25):
     """Render 1 slot card — trống thì hiện dấu +"""
     if not ticker:
         return f"""
-        <div style="
-            background:#1e1640; border:2px dashed #4a3a7a;
-            border-radius:12px; padding:18px 10px;
-            text-align:center; min-height:100px;
-            display:flex; flex-direction:column;
-            align-items:center; justify-content:center;
-        ">
-            <div style="color:#5a4a8a; font-size:1.8rem; line-height:1;">+</div>
-            <div style="color:#5a4a8a; font-size:.75rem; margin-top:4px;">Slot {slot_idx+1} · {pct}%</div>
+        <div class="slot-card empty">
+            <div class="slot-empty-plus">+</div>
+            <div class="slot-empty-label">Slot {slot_idx+1} · {pct}%</div>
         </div>
         """
-    st_cfg = ACTION_STYLE.get(action, ACTION_STYLE["CHỜ"])
+    badge = ACTION_BADGE.get(action, ACTION_BADGE["CHỜ"])
     return f"""
-    <div style="
-        background:{st_cfg['bg']};
-        border:2px solid {st_cfg['border']};
-        border-radius:12px; padding:16px 10px 12px 10px;
-        text-align:center; min-height:100px;
-    ">
-        <div style="
-            font-weight:800; font-size:1.1rem;
-            color:#111111; letter-spacing:.5px;
-        ">{ticker}</div>
-        <div style="
-            font-size:.72rem; color:#666; margin-top:2px;
-        ">{pct}% danh mục</div>
-        <div style="
-            font-size:.82rem; font-weight:700;
-            color:{st_cfg['color']};
-            margin-top:8px;
-            background:rgba(0,0,0,.06);
-            border-radius:6px; padding:3px 0;
-        ">{action}</div>
+    <div class="slot-card">
+        <div class="slot-ticker">{ticker}</div>
+        <div class="slot-pct">{pct}% danh mục</div>
+        <div class="slot-action-wrap">
+            <span class="{badge['class']}">{action}</span>
+        </div>
     </div>
     """
 
 
 def _render_dashboard(slots, now_str, market_state):
     """Header + 4 card slots"""
-    state_color = {"Uptrend": "#40c040", "Sideways": "#c0a020", "Downtrend": "#d04040"}.get(market_state, "#888")
+    mkt = MARKET_BADGE.get(market_state, MARKET_BADGE["Sideways"])
 
     st.markdown(f"""
-    <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
-        <span style="font-size:1.25rem; font-weight:700;">📊 Dashboard — Chiến lược 4 mã × 25%</span>
-        <span style="color:#40c040; font-size:.82rem;">● Cập nhật {now_str}</span>
-        <span style="
-            border:1px solid {state_color}; color:{state_color};
-            border-radius:20px; padding:2px 12px; font-size:.82rem;
-        ">{market_state}</span>
+    <div class="sb-header">
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <span class="sb-title">📊 Dashboard — Chiến lược 4 mã × 25%</span>
+            <span class="{mkt['class']}">{mkt['label']}</span>
+        </div>
+        <div class="sb-sub">● Cập nhật {now_str}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -260,11 +355,16 @@ def _render_dashboard(slots, now_str, market_state):
 # ══════════════════════════════════════════════
 
 def render_portfolio_v2_tab(priority_tickers=None):
+    _inject_css()
     _init_state()
 
     # ─── PHẦN 1: SCREENER ──────────────────────────────────────────
-    st.markdown("### 🎯 PHẦN 1 — SCREENER ĐIỂM MUA VÀNG")
-    st.caption("3 điều kiện: Giá vùng rẻ 129d · RSI 2 đáy nâng · Volume kiệt cung")
+    st.markdown("""
+    <div class="sb-header">
+        <div class="sb-title">🎯 PHẦN 1 — SCREENER ĐIỂM MUA VÀNG</div>
+        <div class="sb-sub">3 điều kiện: Giá vùng rẻ 129d · RSI 2 đáy nâng · Volume kiệt cung</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     with st.expander("⚙️ Cấu hình ngưỡng lọc", expanded=False):
         c1, c2, c3, c4 = st.columns(4)
@@ -314,7 +414,23 @@ def render_portfolio_v2_tab(priority_tickers=None):
     results = st.session_state.pv2_scan_results
     if results:
         df_res = pd.DataFrame(results)
-        st.success(f"🏆 **{len(results)}** mã đạt cả 3 điều kiện")
+
+        st.markdown(f"""
+        <div class="sb-stat-row">
+            <div class="sb-stat">
+                <div class="sb-stat-label">Mã đạt điểm mua vàng</div>
+                <div class="sb-stat-value">{len(results)}</div>
+            </div>
+            <div class="sb-stat">
+                <div class="sb-stat-label">Score cao nhất</div>
+                <div class="sb-stat-value">{results[0]['Score']}</div>
+            </div>
+            <div class="sb-stat">
+                <div class="sb-stat-label">Đã quét</div>
+                <div class="sb-stat-value">{len(tickers)}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
         with st.expander("📋 Bảng chi tiết", expanded=True):
             st.dataframe(df_res, use_container_width=True, hide_index=True,
@@ -325,7 +441,7 @@ def render_portfolio_v2_tab(priority_tickers=None):
                 })
 
         # Nạp top 4 vào 4 slot
-        st.markdown("#### 💡 Nạp vào 4 slot (25% mỗi mã)")
+        st.markdown('<div class="lk-section">Nạp vào 4 slot (25% mỗi mã)</div>', unsafe_allow_html=True)
         if st.button("📥 Nạp top 4 mã đẹp nhất vào danh mục", type="primary"):
             top4 = results[:4]
             for i, r in enumerate(top4):
@@ -346,12 +462,19 @@ def render_portfolio_v2_tab(priority_tickers=None):
             | Volume kiệt cung | 1tr CP vs TB20 = 3tr → 0.33× | ✅ |
             | Định giá rẻ 129d | Giá ở vùng < 35% biên độ 129 phiên | ✅ |
             """)
-        st.info("Nhấn **🎯 QUÉT ĐIỂM MUA** để tìm cơ hội thật.")
+        st.markdown(
+            '<div class="sb-note">Nhấn <b>🎯 QUÉT ĐIỂM MUA</b> để tìm cơ hội thật.</div>',
+            unsafe_allow_html=True,
+        )
 
     st.divider()
 
     # ─── PHẦN 2: 4 SLOT × 25% ──────────────────────────────────────
-    st.markdown("### 💼 PHẦN 2 — DANH MỤC 4 MÃ × 25%")
+    st.markdown("""
+    <div class="sb-header">
+        <div class="sb-title">💼 PHẦN 2 — DANH MỤC 4 MÃ × 25%</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # Header controls
     hc1, hc2 = st.columns([2, 3])
@@ -372,11 +495,23 @@ def render_portfolio_v2_tab(priority_tickers=None):
     # Gợi ý hành động tự động dựa thị trường
     with hc2:
         if market_state == "Downtrend":
-            st.error("⚠️ Thị trường **Downtrend** — khuyến nghị **BÁN HẾT** toàn bộ, chuyển CHỜ")
+            st.markdown(
+                '<div class="sb-note" style="border-left-color:#ff5252;">'
+                '⚠️ Thị trường <b>Downtrend</b> — khuyến nghị <b>BÁN HẾT</b> toàn bộ, chuyển CHỜ</div>',
+                unsafe_allow_html=True,
+            )
         elif market_state == "Sideways":
-            st.warning("🟡 Thị trường **Sideways** — cân nhắc **BÁN 25%** mã yếu, giữ mã mạnh")
+            st.markdown(
+                '<div class="sb-note" style="border-left-color:#ffd740;">'
+                '🟡 Thị trường <b>Sideways</b> — cân nhắc <b>BÁN 25%</b> mã yếu, giữ mã mạnh</div>',
+                unsafe_allow_html=True,
+            )
         else:
-            st.success("🟢 Thị trường **Uptrend** — duy trì **GIỮ CP**, chỉ bán khi đạt mục tiêu")
+            st.markdown(
+                '<div class="sb-note" style="border-left-color:#00e676;">'
+                '🟢 Thị trường <b>Uptrend</b> — duy trì <b>GIỮ CP</b>, chỉ bán khi đạt mục tiêu</div>',
+                unsafe_allow_html=True,
+            )
 
     now_str = st.session_state.pv2_last_updated or datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
@@ -387,25 +522,22 @@ def render_portfolio_v2_tab(priority_tickers=None):
     buy_slots = [(i, s) for i, s in enumerate(st.session_state.pv2_slots)
                  if s["ticker"] and s["action"] == "MUA"]
     if buy_slots:
-        st.markdown("---")
-        st.markdown("**Kết quả đặt lệnh hôm nay** — xác nhận trên sổ lệnh")
+        st.markdown('<div class="lk-section">Kết quả đặt lệnh hôm nay — xác nhận trên sổ lệnh</div>',
+                     unsafe_allow_html=True)
         bcols = st.columns(len(buy_slots))
         for col, (i, s) in zip(bcols, buy_slots):
             with col:
                 st.markdown(f"""
-                <div style="
-                    background:#e8f5e8; border:2px solid #40c040;
-                    border-radius:10px; padding:12px 10px; text-align:center;
-                ">
-                    <div style="font-weight:700; font-size:1rem;">{s['ticker']}</div>
-                    <div style="font-size:.75rem; color:#20a020; margin-top:4px;">✓ đã vào sổ lệnh</div>
+                <div class="buy-confirm-card">
+                    <div class="buy-confirm-ticker">{s['ticker']}</div>
+                    <div class="buy-confirm-note">✓ đã vào sổ lệnh</div>
                 </div>
                 """, unsafe_allow_html=True)
 
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
     # ── EDITOR 4 SLOT ──
-    st.markdown("#### 🎛️ Chỉnh sửa từng slot")
+    st.markdown('<div class="lk-section">Chỉnh sửa từng slot</div>', unsafe_allow_html=True)
 
     slot_cols = st.columns(4)
     for i in range(4):
@@ -434,7 +566,7 @@ def render_portfolio_v2_tab(priority_tickers=None):
     st.divider()
 
     # ── Đặt hàng loạt ──
-    st.markdown("#### ⚡ Đặt chiến lược hàng loạt")
+    st.markdown('<div class="lk-section">Đặt chiến lược hàng loạt</div>', unsafe_allow_html=True)
     bulk_cols = st.columns(5)
     labels = ["🟡 GIỮ tất cả", "🟠 BÁN 25% tất cả", "🔴 BÁN HẾT tất cả", "🟢 MUA tất cả", "⚪ CHỜ tất cả"]
     for i, (action, label) in enumerate(zip(ACTIONS, labels)):
