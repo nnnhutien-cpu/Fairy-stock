@@ -501,20 +501,64 @@ def render_lookup_section():
 
 @st.cache_data(ttl=3600)
 def get_all_symbols(exchanges: list) -> list:
+    """Lấy danh sách mã theo sàn — thử lần lượt 3 nguồn (vci/kbs/tcbs) và
+    3 cách gọi API (Vnstock 4.x / listing_companies 3.x / Listing api mới),
+    đúng logic đã chứng minh hoạt động trong breadth_scanner.py (lấy được
+    403 mã HOSE thành công)."""
     symbols = []
-    try:
-        from vnstock import Vnstock
-        stock = Vnstock().stock(symbol="VNM", source="VCI")
-        for ex in exchanges:
-            try:
-                df = stock.listing.symbols_by_exchange(exchange=ex)
-                if df is not None and not df.empty:
-                    col = "symbol" if "symbol" in df.columns else df.columns[0]
-                    symbols += df[col].str.upper().tolist()
-            except Exception:
-                pass
-    except Exception as e:
-        st.warning(f"Không lấy được danh sách mã: {e}")
+
+    def _get_listing_df(src):
+        try:
+            from vnstock import Vnstock
+            obj = Vnstock(source=src).stock(symbol='VNM', exchange='HOSE')
+            return obj.listing.symbols_by_exchange()
+        except Exception:
+            pass
+        try:
+            from vnstock import listing_companies
+            return listing_companies()
+        except Exception:
+            pass
+        try:
+            from vnstock.api.listing import Listing
+            return Listing(source=src).symbols_by_exchange()
+        except Exception:
+            pass
+        return None
+
+    for src in ['vci', 'kbs', 'tcbs']:
+        try:
+            df = _get_listing_df(src)
+            if df is None or df.empty:
+                continue
+
+            df.columns = [str(c).lower().strip() for c in df.columns]
+
+            type_col = next((c for c in df.columns if 'type' in c), None)
+            if type_col:
+                df = df[df[type_col].astype(str).str.upper().isin(
+                    ['STOCK', 'CP', 'CỔ PHIẾU', 'EQ', 'EQUITY']
+                )]
+
+            if 'exchange' in df.columns:
+                ex_map = {"HOSE": ["HOSE", "HSX"], "HNX": ["HNX"], "UPCOM": ["UPCOM"]}
+                wanted = set()
+                for ex in exchanges:
+                    wanted.update(ex_map.get(ex, [ex]))
+                df = df[df['exchange'].astype(str).str.upper().isin(wanted)]
+
+            col = next((c for c in ['symbol', 'ticker', 'code'] if c in df.columns), None)
+            if col:
+                tickers = [str(t).strip().upper() for t in df[col].dropna() if str(t).strip()]
+                if tickers:
+                    symbols = tickers
+                    break
+        except Exception:
+            continue
+
+    if not symbols:
+        st.warning("Không lấy được danh sách mã từ bất kỳ nguồn nào (vci/kbs/tcbs đều lỗi).")
+
     return list(set(symbols))
 
 
