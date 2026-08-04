@@ -225,7 +225,7 @@ st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 # ⚠️ FIX: danh sách nhãn tab trước đây chỉ có 8 phần tử trong khi vế trái
 # unpack 9 biến (thiếu nhãn cho tab_backtest) -> gây ValueError khi unpack.
 # Đã bổ sung đủ 9 nhãn, đúng thứ tự với 9 biến bên trái.
-tab_market, tab_screener, tab_results, tab_signals, tab_backtest, tab_reports, tab_recommendation, tab_suc_bat, tab_portfolio = st.tabs([
+tab_market, tab_screener, tab_results, tab_signals, tab_reports, tab_recommendation, tab_suc_bat, tab_portfolio = st.tabs([
     "🌟 Thị Trường",
     "🔍 Bộ Lọc",
     "📊 Kết Quả Quét",
