@@ -946,5 +946,5 @@ with tab_suc_bat:
 # ==========================================
 # TAB 9: QUẢN LÝ GIAO DỊCH (PORTFOLIO MANAGER)
 # ==========================================
-with tab_portfolio_v2:
+with tab_portfolio:
     render_portfolio_v2_tab(PRIORITY_TICKERS)
