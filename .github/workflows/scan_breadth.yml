@@ -59,7 +59,7 @@ jobs:
 
       - name: Quét Market Breadth
         if: steps.check_time.outputs.run == 'true'
-        run: python market_breadth.py
+        run: python breadth_scanner.py
 
       # ✅ Pull TRƯỚC khi add/commit/push — đây là fix chính
       - name: Commit breadth.json vào repo
