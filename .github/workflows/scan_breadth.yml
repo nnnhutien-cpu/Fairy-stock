@@ -63,29 +63,22 @@ jobs:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         run: python breadth_scanner.py
 
-      # ✅ Pull TRƯỚC khi add/commit/push — đây là fix chính
       - name: Commit breadth.json vào repo
         if: steps.check_time.outputs.run == 'true'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Bước 1: Pull rebase TRƯỚC để sync với remote
           git pull --rebase origin main
-
-          # Bước 2: Stage file sau khi đã rebase
           git add breadth.json
 
-          # Bước 3: Bỏ qua nếu không có gì thay đổi
           if git diff --staged --quiet; then
             echo "📝 breadth.json không đổi, bỏ qua commit"
             exit 0
           fi
 
-          # Bước 4: Commit
           git commit -m "🤖 Auto: cập nhật breadth.json $(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M ICT')"
 
-          # Bước 5: Push với retry phòng race condition hiếm gặp
           for i in 1 2 3; do
             if git push origin main; then
               echo "✅ Push thành công (lần $i)"
