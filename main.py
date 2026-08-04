@@ -30,6 +30,8 @@ from tab_portfolio_v2 import render_portfolio_v2_tab
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
 # --- 1b. GIAO DIỆN: TÍM ĐẬM SANG TRỌNG + FONT + HÒA HEADER ---
+# Bộ class dùng chung (sb-header, lk-card, badge-*, ...) — cùng bộ token màu
+# với tab "Sức Bật" / "Danh mục" để mọi tab trong app đồng bộ 1 ngôn ngữ đồ hoạ.
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');
@@ -98,8 +100,76 @@ st.markdown("""
 
     .stTextInput input, .stSelectbox div[data-baseweb="select"] { background: #1a1436; color: #dcd6ec; border-radius: 8px; }
     .stDataFrame { border-radius: 12px; overflow: hidden; }
+
+    /* ══════════ Bộ class dùng chung mọi tab (đồng bộ với Sức Bật / Danh mục) ══════════ */
+    .sb-header {
+        background: linear-gradient(135deg,#1a1a2e,#16213e);
+        border-radius: 12px; padding: 16px 20px; margin-bottom: 18px;
+    }
+    .sb-title { font-size: 22px; font-weight: 800; color: #e0e0ff; }
+    .sb-sub   { font-size: 12px; color: #888; margin-top: 2px; }
+    .sb-note {
+        background: #1a1a2e; border-left: 3px solid #8b7fb5;
+        padding: 10px 14px; border-radius: 0 8px 8px 0;
+        font-size: 12px; color: #aaa; margin-bottom: 14px;
+    }
+    .lk-card {
+        background: #1e1e2e; border: 1px solid #2c2151;
+        border-radius: 14px; padding: 20px 24px; margin-bottom: 16px;
+    }
+    .lk-ticker { font-size: 28px; font-weight: 800; color: #a78bfa; letter-spacing: 2px; }
+    .lk-company { font-size: 13px; color: #888; margin-top: 2px; margin-bottom: 16px; }
+    .lk-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 14px; }
+    .lk-metric { background: #12102a; border-radius: 10px; padding: 12px 14px; }
+    .lk-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: .5px; }
+    .lk-value { font-size: 22px; font-weight: 700; color: #e0e0ff; margin-top: 3px; }
+    .lk-sub   { font-size: 10px; color: #555; margin-top: 2px; }
+    .val-up   { color: #00e676 !important; }
+    .val-down { color: #ff5252 !important; }
+    .val-warn { color: #ffd740 !important; }
+    .lk-section { font-size: 11px; color: #8b7fb5; text-transform: uppercase;
+                   letter-spacing: .6px; margin: 14px 0 8px;
+                   border-bottom: 1px solid #2c2151; padding-bottom: 4px; }
+    .sr-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .sr-table th { color: #666; font-weight: 400; text-align: left;
+                   padding: 4px 8px; font-size: 11px; text-transform: uppercase; }
+    .sr-table td { padding: 5px 8px; border-bottom: 1px solid #1e1a33; color: #ccc; }
+    .sr-table tr:last-child td { border-bottom: none; }
+    .badge-r { background:#3a1a1a; color:#ff5252; padding:2px 8px;
+               border-radius:4px; font-size:11px; font-weight:600; }
+    .badge-s { background:#1a3a1a; color:#00e676; padding:2px 8px;
+               border-radius:4px; font-size:11px; font-weight:600; }
+    .badge-fib { background:#1a1a3a; color:#7c9ef5; padding:2px 6px;
+                 border-radius:4px; font-size:10px; }
+    .formula-note {
+        background: #12102a; border-left: 3px solid #a78bfa;
+        padding: 10px 14px; border-radius: 0 8px 8px 0;
+        font-size: 12px; color: #999; margin-top: 12px; line-height: 1.7;
+    }
+    .sb-stat-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .sb-stat { background: #1e1e2e; border-radius: 10px; padding: 10px 16px;
+               flex: 1; min-width: 130px; }
+    .sb-stat-label { font-size: 11px; color: #888; text-transform: uppercase; }
+    .sb-stat-value { font-size: 20px; font-weight: 800; color: #e0e0ff; margin-top: 2px; }
+    .src-badge { display:inline-block; padding:1px 7px; border-radius:10px;
+                 font-size:10px; font-weight:600; margin-left:6px; }
+    .src-vci     { background:#1a2a3a; color:#5b9bd5; }
+    .src-fireant { background:#1a2e1a; color:#4caf50; }
+    .src-yahoo   { background:#1a1a3a; color:#8b7fb5; }
 </style>
 """, unsafe_allow_html=True)
+
+
+def sb_header(title: str, subtitle: str = "") -> None:
+    """Header đồng bộ đồ họa cho mọi tab (thay cho st.subheader / st.markdown('###'))."""
+    sub_html = f'<div class="sb-sub">{subtitle}</div>' if subtitle else ""
+    st.markdown(f"""
+    <div class="sb-header">
+        <div class="sb-title">{title}</div>
+        {sub_html}
+    </div>
+    """, unsafe_allow_html=True)
+
 
 # --- 2. KẾT NỐI SUPABASE ---
 @st.cache_resource
@@ -152,15 +222,19 @@ setup_cache_clear_button()
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 
 # --- 4. TẠO 9 TAB (THÊM TAB QUẢN LÝ GIAO DỊCH) ---
+# ⚠️ FIX: danh sách nhãn tab trước đây chỉ có 8 phần tử trong khi vế trái
+# unpack 9 biến (thiếu nhãn cho tab_backtest) -> gây ValueError khi unpack.
+# Đã bổ sung đủ 9 nhãn, đúng thứ tự với 9 biến bên trái.
 tab_market, tab_screener, tab_results, tab_signals, tab_backtest, tab_reports, tab_recommendation, tab_suc_bat, tab_portfolio = st.tabs([
-    "🌟 Thị Trường", 
-    "🔍 Bộ Lọc", 
-    "📊 Kết Quả Quét", 
+    "🌟 Thị Trường",
+    "🔍 Bộ Lọc",
+    "📊 Kết Quả Quét",
     "📡 Tín Hiệu & Cảnh Báo",
-    "📑 Báo Cáo", 
-    "💡 Khuyến Nghị", 
+    "🛠️ Backtest",
+    "📑 Báo Cáo",
+    "💡 Khuyến Nghị",
     "🚀 Sức Bật",
-    "💼 Danh mục"  # ✅ TAB MỚI
+    "💼 Danh mục",
 ])
 
 # ==========================================
@@ -170,7 +244,7 @@ tab_market, tab_screener, tab_results, tab_signals, tab_backtest, tab_reports, t
 with tab_market:
     col_title, col_btn, col_interval = st.columns([3, 1, 1])
     with col_title:
-        st.subheader("🌟 TỔNG QUAN THỊ TRƯỜNG REAL-TIME")
+        sb_header("🌟 Tổng quan thị trường real-time")
     with col_interval:
         refresh_interval = st.selectbox(
             "⏱️ Tự làm mới",
@@ -331,12 +405,10 @@ with tab_market:
                     yday_agg = yday_agg.set_index('hour_min')
                     chart_df = chart_df.join(yday_agg, how='left')
 
-    st.markdown("---")
-    st.markdown("### 💓 NHỊP ĐẬP THỊ TRƯỜNG")
+    sb_header("💓 Nhịp đập thị trường")
     render_market_tab(chart_df, df_today)
 
-    st.markdown("---")
-    st.markdown("### 🧠 PHÂN TÍCH XU HƯỚNG")
+    sb_header("🧠 Phân tích xu hướng")
 
     row1_l, row1_r = st.columns(2)
 
@@ -455,12 +527,10 @@ with tab_market:
             else:
                 st.caption("Chưa có dữ liệu volume phiên")
 
-    st.markdown("---")
-    st.markdown("### 🏥 SỨC KHỎE THỊ TRƯỜNG (400 mã HOSE)")
+    sb_header("🏥 Sức khoẻ thị trường (400 mã HOSE)")
     render_breadth_panel(breadth)
 
-    st.markdown("---")
-    st.markdown("### 💡 KHUYẾN NGHỊ HÀNH ĐỘNG")
+    sb_header("💡 Khuyến nghị hành động")
 
     if reco is None:
         st.warning("⚠️ Chưa tính được khuyến nghị — thiếu dữ liệu kỹ thuật.")
@@ -541,7 +611,7 @@ with tab_market:
 # ==========================================
 @st.fragment
 def render_screener_fragment():
-    st.subheader(f"Danh Sách Quét Sàn {exchange_choice}")
+    sb_header(f"🔍 Danh sách quét sàn {exchange_choice}")
     scan_button = st.button("🚀 KÍCH HOẠT QUÉT TOÀN DIỆN", use_container_width=True, type="primary")
 
     if scan_button:
@@ -699,8 +769,12 @@ def render_screener_fragment():
             st.rerun()
 
     if not st.session_state.get('scan_results', []):
-        st.caption("Hãy cấu hình thông số ở Sidebar trái và bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' để bắt đầu. "
-                   "Kết quả sau khi quét xong sẽ hiển thị ở tab **📊 Kết Quả Quét**.")
+        st.markdown(
+            '<div class="sb-note">Hãy cấu hình thông số ở Sidebar trái và bấm '
+            '<b>🚀 KÍCH HOẠT QUÉT TOÀN DIỆN</b> để bắt đầu. '
+            'Kết quả sau khi quét xong sẽ hiển thị ở tab <b>📊 Kết Quả Quét</b>.</div>',
+            unsafe_allow_html=True,
+        )
     else:
         n_found = len(st.session_state['scan_results'])
         st.success(f"✅ Đã có {n_found} mã trong kết quả quét gần nhất. "
@@ -714,7 +788,7 @@ with tab_screener:
 # TAB 3: KẾT QUẢ QUÉT
 # ==========================================
 with tab_results:
-    st.subheader("📊 Kết Quả Quét")
+    sb_header("📊 Kết quả quét")
     if st.session_state.get('scan_results', []):
         raw_df = pd.DataFrame(st.session_state['scan_results'])
         df_display = render_search_and_export(raw_df)
@@ -727,7 +801,7 @@ with tab_results:
 # TAB 4: TÍN HIỆU & CẢNH BÁO
 # ==========================================
 with tab_signals:
-    st.subheader("📡 Tín Hiệu & Cảnh Báo")
+    sb_header("📡 Tín hiệu & cảnh báo")
     df_display_cached = st.session_state.get('df_display_cached')
     if isinstance(df_display_cached, pd.DataFrame) and not df_display_cached.empty:
         render_screener_signals(df_display_cached, signal_filter)
@@ -735,7 +809,23 @@ with tab_signals:
         st.info("Chưa có dữ liệu quét. Sang tab **🔍 Bộ Lọc** để quét, rồi ghé tab **📊 Kết Quả Quét** trước.")
 
 # ==========================================
-# TAB 5: BÁO CÁO CTCK
+# TAB 5: BACKTEST
+# ==========================================
+with tab_backtest:
+    sb_header("🛠️ Backtest chiến lược")
+    try:
+        bt.render_backtest_tab(get_stock_data, PRIORITY_TICKERS)
+    except AttributeError:
+        st.markdown(
+            '<div class="sb-note">Module <code>backtester.py</code> hiện chưa có hàm '
+            '<code>render_backtest_tab()</code> — mình chưa có nội dung gốc của tab này nên '
+            'không thể tái hiện logic backtest cụ thể. Nếu bạn gửi file <code>backtester.py</code>, '
+            'mình sẽ nối vào đây và áp cùng bộ đồ hoạ (sb-header / lk-card...) như các tab khác.</div>',
+            unsafe_allow_html=True,
+        )
+
+# ==========================================
+# TAB 6: BÁO CÁO CTCK
 # ==========================================
 import requests as _req
 import pandas as _pd
@@ -762,11 +852,8 @@ def _load_reports_json() -> dict:
         return {"error": str(e), "data": []}
 
 with tab_reports:
-    st.subheader("📑 Hệ Thống Báo Cáo Định Giá Cổ Phiếu")
-    st.caption(
-        "Dữ liệu tổng hợp tự động từ **DNSE · Vietstock · CafeF** — "
-        "bot cập nhật 2 lần/ngày (10:00 SA & 15:30 CH)."
-    )
+    sb_header("📑 Hệ thống báo cáo định giá cổ phiếu",
+               "Dữ liệu tổng hợp tự động từ DNSE · Vietstock · CafeF — bot cập nhật 2 lần/ngày (10:00 SA & 15:30 CH)")
 
     col_f1, col_f2, col_f3 = st.columns([1, 1, 2])
     with col_f1:
@@ -892,20 +979,20 @@ with tab_reports:
             )
 
 # ==========================================
-# TAB 6: KHUYẾN NGHỊ
+# TAB 7: KHUYẾN NGHỊ
 # ==========================================
 
 with tab_recommendation:
     render_recommendation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift) 
 
 # ========================================== 
-# TAB 7: SCREENER SỨC BẬT 
+# TAB 8: SCREENER SỨC BẬT 
 # ========================================== 
 with tab_suc_bat: 
     render_suc_bat_tab()
 
 # ==========================================
-# TAB 8: QUẢN LÝ GIAO DỊCH (PORTFOLIO MANAGER)
+# TAB 9: QUẢN LÝ GIAO DỊCH (PORTFOLIO MANAGER)
 # ==========================================
 with tab_portfolio:
     render_portfolio_v2_tab(PRIORITY_TICKERS)
