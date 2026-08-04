@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '0,15,30,45 2,3,4,5,6,7,8 * * 1-5'
   workflow_dispatch:
+    inputs:
+      force:
+        description: "true = quét cả ngoài giờ giao dịch (để test)"
+        required: false
+        default: "false"
 
 concurrency:
   group: scan-breadth-hose
@@ -16,7 +21,12 @@ jobs:
   scan:
     name: Quét Sức Khỏe Thị Trường HOSE
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35    # ✅ TĂNG từ 20 → 35 phút
+
+    env:
+      TZ: Asia/Ho_Chi_Minh
+      VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}   # ✅ TRUYỀN VÀO TẤT CẢ STEPS
+      FORCE_SCAN: ${{ github.event.inputs.force }}
 
     steps:
       - name: Checkout repo
@@ -34,12 +44,28 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # ✅ THÊM BƯỚC DEBUG: kiểm tra secret có tới runner không
+      - name: Debug - Kiểm tra secret
+        run: |
+          echo "=========================================="
+          echo "🔍 KIỂM TRA VNSTOCK_API_KEY"
+          echo "=========================================="
+          if [ -z "$VNSTOCK_API_KEY" ]; then
+            echo "❌ VNSTOCK_API_KEY TRỐNG"
+            echo "   → Kiểm tra GitHub repo → Settings → Secrets → Actions"
+            echo "   → Đảm bảo có secret tên chính xác: VNSTOCK_API_KEY"
+            exit 1
+          else
+            echo "✅ VNSTOCK_API_KEY đã truyền (dài ${#VNSTOCK_API_KEY} ký tự)"
+          fi
+          echo "=========================================="
+
       - name: Kiểm tra giờ giao dịch (ICT)
         id: check_time
         run: |
-          HOUR=$(TZ='Asia/Ho_Chi_Minh' date +%H)
-          MIN=$(TZ='Asia/Ho_Chi_Minh' date +%M)
-          DOW=$(TZ='Asia/Ho_Chi_Minh' date +%u)
+          HOUR=$(date +%H)
+          MIN=$(date +%M)
+          DOW=$(date +%u)
           echo "🕒 ICT: ${HOUR}:${MIN}, Thứ: ${DOW}"
 
           RUN=false
@@ -59,8 +85,6 @@ jobs:
 
       - name: Quét Market Breadth
         if: steps.check_time.outputs.run == 'true'
-        env:
-          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         run: python breadth_scanner.py
 
       - name: Commit breadth.json vào repo
@@ -77,7 +101,7 @@ jobs:
             exit 0
           fi
 
-          git commit -m "🤖 Auto: cập nhật breadth.json $(TZ='Asia/Ho_Chi_Minh' date '+%Y-%m-%d %H:%M ICT')"
+          git commit -m "🤖 Auto: cập nhật breadth.json $(date '+%Y-%m-%d %H:%M ICT')"
 
           for i in 1 2 3; do
             if git push origin main; then
