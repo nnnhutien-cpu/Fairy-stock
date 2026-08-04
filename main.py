@@ -23,9 +23,6 @@ from market_breadth import get_market_breadth, render_breadth_panel
 from tab_khuyen_nghi import render_recommendation_tab
 from screener_suc_bat import render_suc_bat_tab
 
-# ✅ THÊM IMPORT MỚI - QUẢN LÝ DANH MỤC
-from portfolio_manager import render_portfolio_dashboard
-
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
@@ -151,19 +148,12 @@ setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 
-# --- 4. TẠO 9 TAB (THÊM TAB QUẢN LÝ GIAO DỊCH) ---
-tab_market, tab_screener, tab_results, tab_signals, tab_backtest, tab_reports, tab_recommendation, tab_suc_bat, tab_portfolio = st.tabs([
-    "🌟 Thị Trường", 
-    "🔍 Bộ Lọc", 
-    "📊 Kết Quả Quét", 
-    "📡 Tín Hiệu & Cảnh Báo",
-    "🛠️ Backtest", 
-    "📑 Báo Cáo", 
-    "💡 Khuyến Nghị", 
-    "🚀 Sức Bật",
-    "💼 QUẢN LÝ GIAO DỊCH"  # ✅ TAB MỚI
-])
+# --- 4. TẠO 8 TAB ---
+tab_market, tab_screener, tab_results, tab_signals, tab_backtest, tab_reports, tab_recommendation, tab_suc_bat = st.tabs([
 
+    "🌟 Thị Trường", "🔍 Bộ Lọc", "📊 Kết Quả Quét", "📡 Tín Hiệu & Cảnh Báo",
+    "🛠️ Backtest", "📑 Báo Cáo", "💡 Khuyến Nghị", "🚀 Sức Bật"
+])
 # ==========================================
 # TAB 1: THỊ TRƯỜNG CHUNG
 # ==========================================
@@ -177,7 +167,7 @@ with tab_market:
             "⏱️ Tự làm mới",
             options=[0, 30, 60, 120, 300],
             format_func=lambda x: "Tắt" if x == 0 else f"{x}s",
-            index=2,
+            index=2,  # mặc định 60s
             key="refresh_interval_select",
             label_visibility="collapsed",
         )
@@ -193,12 +183,14 @@ with tab_market:
             except Exception: pass
             st.rerun()
 
+    # --- Auto-refresh bằng JS thuần — không cần package nào ---
     if refresh_interval > 0:
         import streamlit.components.v1 as _components
         _components.html(
             f"""
             <script>
                 setTimeout(function() {{
+                    // Tìm nút CẬP NHẬT và click tự động
                     const buttons = window.parent.document.querySelectorAll('button[kind="primary"]');
                     for (const btn of buttons) {{
                         if (btn.innerText.includes('CẬP NHẬT')) {{
@@ -214,7 +206,10 @@ with tab_market:
         st.caption(f"🔁 Tự động làm mới mỗi **{refresh_interval}s**")
 
     st.divider()
+    # ... phần còn lại giữ nguyên từ đây
 
+
+    # --- Khởi tạo snap, pe, breadth, reco ---
     snap = {}
     snap_error = None
     pe_stats_data = None
@@ -241,6 +236,7 @@ with tab_market:
     except Exception:
         pass
 
+    # --- Intraday data ---
     intraday_df = get_intraday_vnindex()
     chart_df, df_today = None, None
     current_index = 0
@@ -332,15 +328,20 @@ with tab_market:
                     yday_agg = yday_agg.set_index('hour_min')
                     chart_df = chart_df.join(yday_agg, how='left')
 
+    # SECTION 2 — NHỊP ĐẬP THỊ TRƯỜNG
     st.markdown("---")
     st.markdown("### 💓 NHỊP ĐẬP THỊ TRƯỜNG")
     render_market_tab(chart_df, df_today)
 
+    # ══════════════════════════════════════════════════════════════
+    # SECTION 3 — PHÂN TÍCH XU HƯỚNG (2 × 2 grid)
+    # ══════════════════════════════════════════════════════════════
     st.markdown("---")
     st.markdown("### 🧠 PHÂN TÍCH XU HƯỚNG")
 
     row1_l, row1_r = st.columns(2)
 
+    # Panel A — Xu hướng giá
     with row1_l:
         with st.container(border=True):
             st.markdown("#### 📈 Xu hướng giá")
@@ -369,6 +370,7 @@ with tab_market:
                     f"**🔴 Kháng cự:** `{resist:.1f}`"
                 )
 
+    # Panel B — Định giá P/E
     with row1_r:
         with st.container(border=True):
             st.markdown("#### 💰 Định giá P/E (20 năm)")
@@ -406,8 +408,10 @@ with tab_market:
                 except Exception:
                     pass
 
+    # Hàng 2
     row2_l, row2_r = st.columns(2)
 
+    # Panel C — Chỉ báo kỹ thuật
     with row2_l:
         with st.container(border=True):
             st.markdown("#### 📊 Chỉ báo kỹ thuật")
@@ -432,6 +436,7 @@ with tab_market:
             else:
                 st.markdown("**Trạng thái:** —")
 
+    # Panel D — Dòng tiền
     with row2_r:
         with st.container(border=True):
             st.markdown("#### 🔊 Dòng tiền (Volume)")
@@ -456,10 +461,16 @@ with tab_market:
             else:
                 st.caption("Chưa có dữ liệu volume phiên")
 
+    # ══════════════════════════════════════════════════════════════
+    # SECTION 4 — SỨC KHỎE THỊ TRƯỜNG
+    # ══════════════════════════════════════════════════════════════
     st.markdown("---")
     st.markdown("### 🏥 SỨC KHỎE THỊ TRƯỜNG (400 mã HOSE)")
     render_breadth_panel(breadth)
 
+    # ══════════════════════════════════════════════════════════════
+    # SECTION 5 — KHUYẾN NGHỊ HÀNH ĐỘNG
+    # ══════════════════════════════════════════════════════════════
     st.markdown("---")
     st.markdown("### 💡 KHUYẾN NGHỊ HÀNH ĐỘNG")
 
@@ -536,7 +547,6 @@ with tab_market:
                 cols[3].markdown(act)
                 if i == matched:
                     cols[4].markdown("⬅️ **Hiện tại**")
-
 # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU
 # ==========================================
@@ -936,15 +946,8 @@ with tab_reports:
 
 with tab_recommendation:
     render_recommendation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift) 
-
 # ========================================== 
 # TAB 8: SCREENER SỨC BẬT 
 # ========================================== 
 with tab_suc_bat: 
     render_suc_bat_tab()
-
-# ==========================================
-# TAB 9: QUẢN LÝ GIAO DỊCH (PORTFOLIO MANAGER)
-# ==========================================
-with tab_portfolio:
-    render_portfolio_dashboard()
