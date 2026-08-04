@@ -157,7 +157,6 @@ tab_market, tab_screener, tab_results, tab_signals, tab_backtest, tab_reports, t
     "🔍 Bộ Lọc", 
     "📊 Kết Quả Quét", 
     "📡 Tín Hiệu & Cảnh Báo",
-    "🛠️ Backtest", 
     "📑 Báo Cáo", 
     "💡 Khuyến Nghị", 
     "🚀 Sức Bật",
@@ -736,45 +735,7 @@ with tab_signals:
         st.info("Chưa có dữ liệu quét. Sang tab **🔍 Bộ Lọc** để quét, rồi ghé tab **📊 Kết Quả Quét** trước.")
 
 # ==========================================
-# TAB 5: BACKTEST
-# ==========================================
-with tab_backtest:
-    st.subheader("🛠️ Hệ Thống Backtest Dài Hạn (Khung 1DAY)")
-    st.caption("Thuật toán Quant: Tự động bắt Râu nến để Stoploss (-7%) hoặc Take Profit (+15%). Chặn bán nếu gãy trend Kumo.")
-
-    col_input1, col_input2 = st.columns(2)
-    with col_input1:
-        ticker_bt = st.text_input("Nhập mã cổ phiếu để test (Ví dụ: FPT, HPG):", value="FPT", key="bt_ticker").upper()
-    with col_input2:
-        years_back = st.slider("Số NĂM quá khứ muốn kiểm tra:", min_value=1, max_value=10, value=5)
-
-    if st.button("🚀 Bắt đầu chạy Backtest Tự Động"):
-        with st.spinner(f"Đang cào dữ liệu Daily trong {years_back} năm và mô phỏng giao dịch mã {ticker_bt}..."):
-            df_daily = bt.get_daily_data(ticker_bt, years_back)
-
-            if df_daily is not None and not df_daily.empty:
-                df_ichimoku = bt.calculate_ichimoku_daily(df_daily)
-
-                if df_ichimoku is not None:
-                    stats, trade_log = bt.run_ichimoku_backtest_daily(df_ichimoku)
-
-                    st.success(f"Dữ liệu kiểm thử mã {ticker_bt} trong {years_back} năm thành công!")
-
-                    st.subheader("📊 Kết quả hiệu suất chiến lược")
-                    m_col1, m_col2, m_col3 = st.columns(3)
-                    m_col1.metric("Vốn cuối kỳ", stats["Vốn cuối kỳ"])
-                    m_col2.metric("Lợi nhuận ròng", stats["Lợi nhuận ròng"])
-                    m_col3.metric("Tỷ lệ Thắng (Win Rate)", stats["Tỷ lệ Thắng (Win Rate)"])
-
-                    st.subheader("📋 Nhật ký lệnh chi tiết của Bot")
-                    st.dataframe(trade_log, use_container_width=True)
-                else:
-                    st.error("Dữ liệu quá ngắn, không đủ để tính toán đám mây Ichimoku!")
-            else:
-                st.error("Lỗi: Không lấy được dữ liệu. Hãy kiểm tra lại mã cổ phiếu hoặc API đang bảo trì!")
-
-# ==========================================
-# TAB 6: BÁO CÁO CTCK
+# TAB 5: BÁO CÁO CTCK
 # ==========================================
 import requests as _req
 import pandas as _pd
@@ -931,20 +892,20 @@ with tab_reports:
             )
 
 # ==========================================
-# TAB 7: KHUYẾN NGHỊ
+# TAB 6: KHUYẾN NGHỊ
 # ==========================================
 
 with tab_recommendation:
     render_recommendation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift) 
 
 # ========================================== 
-# TAB 8: SCREENER SỨC BẬT 
+# TAB 7: SCREENER SỨC BẬT 
 # ========================================== 
 with tab_suc_bat: 
     render_suc_bat_tab()
 
 # ==========================================
-# TAB 9: QUẢN LÝ GIAO DỊCH (PORTFOLIO MANAGER)
+# TAB 8: QUẢN LÝ GIAO DỊCH (PORTFOLIO MANAGER)
 # ==========================================
 with tab_portfolio:
     render_portfolio_v2_tab(PRIORITY_TICKERS)
