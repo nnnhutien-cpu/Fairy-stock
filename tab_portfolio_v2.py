@@ -498,22 +498,8 @@ def render_portfolio_v2_tab(priority_tickers=None):
                 unsafe_allow_html=True,
             )
 
-    # ── Quy tắc (gấp gọn, không chiếm chỗ) ──
-    with st.expander("📖 Quy tắc Mua / Bán / Chờ", expanded=False):
-        st.markdown("""
-        | Thị trường | Hành động khuyến nghị |
-        |---|---|
-        | **Uptrend** | GIỮ CP — chỉ bán khi đạt mục tiêu lãi |
-        | **Sideways** | BÁN 25% mã yếu nhất, dùng room mua mã mạnh hơn |
-        | **Downtrend** | BÁN HẾT toàn bộ → CHỜ 100% tiền mặt |
-
-        **🟢 MUA KHI:** Mã xuất hiện trong screener ĐIỂM MUA VÀNG (3 điều kiện đồng thời)
-
-        **⚪ CHỜ KHI:** Sau khi cắt lỗ — không bắt đáy ngay. Đợi tín hiệu mới từ screener.
-
-        **Cơ cấu:** 4 mã × 25% — cân bằng, không tập trung quá vào 1 mã.
-        """)
-
+    # Quy tắc Mua/Bán/Chờ không hiển thị công khai nữa — chỉ hệ thống
+    # dùng nội bộ để tính khuyến nghị (xem gợi ý theo market_state ở trên).
 
 if __name__ == "__main__":
     st.set_page_config(page_title="Portfolio v2", layout="wide")
