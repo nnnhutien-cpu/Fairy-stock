@@ -230,7 +230,6 @@ tab_market, tab_screener, tab_results, tab_signals, tab_backtest, tab_reports, t
     "🔍 Bộ Lọc",
     "📊 Kết Quả Quét",
     "📡 Tín Hiệu & Cảnh Báo",
-    "🛠️ Backtest",
     "📑 Báo Cáo",
     "💡 Khuyến Nghị",
     "🚀 Sức Bật",
@@ -807,22 +806,6 @@ with tab_signals:
         render_screener_signals(df_display_cached, signal_filter)
     else:
         st.info("Chưa có dữ liệu quét. Sang tab **🔍 Bộ Lọc** để quét, rồi ghé tab **📊 Kết Quả Quét** trước.")
-
-# ==========================================
-# TAB 5: BACKTEST
-# ==========================================
-with tab_backtest:
-    sb_header("🛠️ Backtest chiến lược")
-    try:
-        bt.render_backtest_tab(get_stock_data, PRIORITY_TICKERS)
-    except AttributeError:
-        st.markdown(
-            '<div class="sb-note">Module <code>backtester.py</code> hiện chưa có hàm '
-            '<code>render_backtest_tab()</code> — mình chưa có nội dung gốc của tab này nên '
-            'không thể tái hiện logic backtest cụ thể. Nếu bạn gửi file <code>backtester.py</code>, '
-            'mình sẽ nối vào đây và áp cùng bộ đồ hoạ (sb-header / lk-card...) như các tab khác.</div>',
-            unsafe_allow_html=True,
-        )
 
 # ==========================================
 # TAB 6: BÁO CÁO CTCK
