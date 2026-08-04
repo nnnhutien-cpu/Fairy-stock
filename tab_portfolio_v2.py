@@ -1,24 +1,10 @@
 """
 ===============================================
-💼 TAB PORTFOLIO v2 — SCREENER + QUẢN LÝ GIAO DỊCH
+💼 TAB PORTFOLIO v2 — SCREENER + QUẢN LÝ CHIẾN LƯỢC
 ===============================================
-Gộp 2 chức năng trong 1 tab:
-
-  🔝 PHẦN TRÊN:  SCREENER "ĐIỂM MUA VÀNG"
-                  - Định giá rẻ (vùng dưới của biên độ 129 ngày)
-                  - RSI tạo 2 đáy nâng (phân kỳ dương)
-                  - Volume kiệt cung dưới MA20
-                  → Chọn 4 mã đẹp nhất
-
-  🔻 PHẦN DƯỚI:  QUẢN LÝ GIAO DỊCH 4 MÃ (10-20-30-40)
-                  - Theo dõi giá, lãi/lỗ real-time
-                  - Nút nhanh: MUA / GIỮ / CẮT LỖ / CHỜ
-                  - Quy tắc tự động: bán hết khi xấu, luân chuyển vốn
-
-TÍCH HỢP VÀO main.py:
-    from tab_portfolio_v2 import render_portfolio_v2_tab
-    with tab_portfolio_v2:
-        render_portfolio_v2_tab(PRIORITY_TICKERS)
+- PHẦN TRÊN:  SCREENER "ĐIỂM MUA VÀNG" (3 điều kiện)
+- PHẦN DƯỚI:  4 MÃ × 25% danh mục
+              Trạng thái: GIỮ CP | BÁN 25% | BÁN HẾT | CHỜ | MUA
 """
 
 import concurrent.futures
@@ -34,35 +20,46 @@ from data_loader import get_stock_data
 # 1. SESSION STATE
 # ══════════════════════════════════════════════
 
+# 4 slot cố định, mỗi slot 25%
+SLOT_COUNT = 4
+SLOT_PCT   = 25  # % mỗi mã
+
+ACTIONS = ["GIỮ CP", "BÁN 25%", "BÁN HẾT", "MUA", "CHỜ"]
+
+ACTION_STYLE = {
+    "GIỮ CP":  {"bg": "#fdf6e3", "border": "#c8a84b", "color": "#7a5c00"},
+    "BÁN 25%": {"bg": "#fff3e0", "border": "#e08030", "color": "#8a3a00"},
+    "BÁN HẾT": {"bg": "#fce8e8", "border": "#d94040", "color": "#8a0000"},
+    "MUA":     {"bg": "#e8f5e8", "border": "#3aaa3a", "color": "#1a5c1a"},
+    "CHỜ":     {"bg": "#f2f2f2", "border": "#aaaaaa", "color": "#555555"},
+}
+
+
 def _init_state():
-    if 'pv2_portfolio' not in st.session_state:
-        st.session_state.pv2_portfolio = {
-            'stocks':         ['VN30-1', 'VN30-2', 'VN30-3', 'VN30-4'],
-            'allocations':    [10, 20, 30, 40],
-            'status':         ['CHỜ', 'CHỜ', 'CHỜ', 'CHỜ'],
-            'buy_prices':     [0.0, 0.0, 0.0, 0.0],
-            'current_prices': [0.0, 0.0, 0.0, 0.0],
-            'quantities':     [0, 0, 0, 0],
-            'notes':          ['', '', '', ''],
-            'last_updated':   datetime.now().strftime("%Y-%m-%d %H:%M"),
-        }
-    if 'pv2_total_capital' not in st.session_state:
-        st.session_state.pv2_total_capital = 100_000_000
+    if 'pv2_slots' not in st.session_state:
+        # 4 slot: mỗi slot là dict {ticker, action}
+        st.session_state.pv2_slots = [
+            {"ticker": "", "action": "CHỜ"} for _ in range(SLOT_COUNT)
+        ]
     if 'pv2_scan_results' not in st.session_state:
         st.session_state.pv2_scan_results = []
+    if 'pv2_last_updated' not in st.session_state:
+        st.session_state.pv2_last_updated = ""
+    if 'pv2_market_state' not in st.session_state:
+        st.session_state.pv2_market_state = "Sideways"
 
 
 # ══════════════════════════════════════════════
-# 2. SCREENER: 3 ĐIỀU KIỆN "ĐIỂM MUA VÀNG"
+# 2. SCREENER LOGIC
 # ══════════════════════════════════════════════
 
 def _rsi(close: pd.Series, period: int = 14) -> pd.Series:
     delta = close.diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-    avg_gain = gain.ewm(alpha=1 / period, min_periods=period).mean()
-    avg_loss = loss.ewm(alpha=1 / period, min_periods=period).mean()
-    rs = avg_gain / avg_loss.replace(0, np.nan)
+    gain  = delta.clip(lower=0)
+    loss  = -delta.clip(upper=0)
+    ag = gain.ewm(alpha=1/period, min_periods=period).mean()
+    al = loss.ewm(alpha=1/period, min_periods=period).mean()
+    rs = ag / al.replace(0, np.nan)
     return (100 - (100 / (1 + rs))).fillna(50)
 
 
@@ -71,66 +68,60 @@ def _normalize(df: pd.DataFrame) -> pd.DataFrame:
     m = {}
     for col in df.columns:
         lc = str(col).lower().strip()
-        if lc in ('close', 'price', 'c', 'gia', 'giá'):
+        if lc in ('close','price','c','gia','giá'):
             m[col] = 'close'
-        elif lc in ('volume', 'vol', 'v', 'khối lượng', 'matchvolume'):
+        elif lc in ('volume','vol','v','khối lượng','matchvolume'):
             m[col] = 'volume'
     df = df.rename(columns=m)
-    for c in ('close', 'volume'):
+    for c in ('close','volume'):
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors='coerce')
     return df.dropna(subset=['close'])
 
 
-def check_valuation_129(df, lookback=129, max_pos=0.35):
-    """Giá nằm trong vùng rẻ nhất của 129 phiên"""
-    close = df['close'].iloc[-lookback:]
+def _check_val129(df, max_pos=0.35):
+    close = df['close'].iloc[-129:]
     if len(close) < 60:
         return None
     lo, hi = close.min(), close.max()
     if hi <= lo:
         return None
     pos = (close.iloc[-1] - lo) / (hi - lo)
-    return {'ok': pos <= max_pos, 'position': round(pos, 2),
-            'low129': round(lo, 2), 'high129': round(hi, 2)}
+    return {'ok': pos <= max_pos, 'position': round(pos, 2)}
 
 
 def _find_rsi_bottoms(rsi, close, max_rsi, win=2):
     vals = rsi.values
     bottoms = []
-    for i in range(win, len(vals) - win):
-        seg = vals[i - win:i + win + 1]
+    for i in range(win, len(vals)-win):
+        seg = vals[i-win:i+win+1]
         if vals[i] <= seg.min() and vals[i] <= max_rsi:
             if bottoms and (i - bottoms[-1]['idx']) < 4:
                 if vals[i] < bottoms[-1]['rsi']:
-                    bottoms[-1] = {'idx': i, 'rsi': vals[i],
-                                   'price': close.iloc[i], 'date': rsi.index[i]}
+                    bottoms[-1] = {'idx':i,'rsi':vals[i],'price':close.iloc[i],'date':rsi.index[i]}
                 continue
-            bottoms.append({'idx': i, 'rsi': vals[i],
-                            'price': close.iloc[i], 'date': rsi.index[i]})
+            bottoms.append({'idx':i,'rsi':vals[i],'price':close.iloc[i],'date':rsi.index[i]})
     return bottoms
 
 
-def check_rsi_double_bottom(df, lookback=120, max_rsi=35.0,
-                             min_gap=2.0, min_days=5, b2_max_age=25):
-    """RSI 2 đáy nâng — phân kỳ dương"""
+def _check_rsi2bot(df, max_rsi=35.0, min_gap=2.0, min_days=5, b2_max_age=25):
     close = df['close']
-    rsi = _rsi(close)
-    if len(rsi) < lookback + 14:
+    rsi   = _rsi(close)
+    if len(rsi) < 134:
         return None
-    rsi_w = rsi.iloc[-lookback:]
-    close_w = close.iloc[-lookback:]
+    rsi_w  = rsi.iloc[-120:]
+    close_w = close.iloc[-120:]
     bottoms = _find_rsi_bottoms(rsi_w, close_w, max_rsi)
     if len(bottoms) < 2:
         return None
     n = len(rsi_w)
-    for j in range(len(bottoms) - 1, 0, -1):
+    for j in range(len(bottoms)-1, 0, -1):
         b2 = bottoms[j]
-        if (n - 1) - b2['idx'] > b2_max_age:
+        if (n-1) - b2['idx'] > b2_max_age:
             continue
-        for k in range(j - 1, -1, -1):
+        for k in range(j-1, -1, -1):
             b1 = bottoms[k]
-            if (b2['idx'] - b1['idx']) < min_days:
+            if (b2['idx']-b1['idx']) < min_days:
                 continue
             gap = b2['rsi'] - b1['rsi']
             if gap < min_gap:
@@ -139,29 +130,24 @@ def check_rsi_double_bottom(df, lookback=120, max_rsi=35.0,
                 continue
             return {
                 'ok': True,
-                'b1_rsi': round(b1['rsi'], 1),
-                'b2_rsi': round(b2['rsi'], 1),
-                'gap': round(gap, 1),
+                'b1_rsi': round(b1['rsi'],1), 'b2_rsi': round(b2['rsi'],1),
+                'gap': round(gap,1),
                 'b1_date': pd.Timestamp(b1['date']).strftime('%d/%m'),
                 'b2_date': pd.Timestamp(b2['date']).strftime('%d/%m'),
-                'rsi_now': round(rsi.iloc[-1], 1),
+                'rsi_now': round(rsi.iloc[-1],1),
             }
     return None
 
 
-def check_volume_dryup(df, dry_ratio=0.45):
-    """Volume cạn kiệt dưới MA20"""
+def _check_vol_dryup(df, dry_ratio=0.45):
     vol = df['volume']
     if vol.sum() <= 0 or len(vol) < 30:
         return None
     ma20 = vol.rolling(20).mean().iloc[-1]
     if not ma20 or ma20 <= 0:
         return None
-    ratio_last = vol.iloc[-1] / ma20
-    ratio_3d = vol.iloc[-3:].mean() / ma20
-    ratio = min(ratio_last, ratio_3d)
-    return {'ok': ratio <= dry_ratio, 'ratio': round(ratio, 2),
-            'vol_last': vol.iloc[-1], 'vol_ma20': ma20}
+    ratio = min(vol.iloc[-1]/ma20, vol.iloc[-3:].mean()/ma20)
+    return {'ok': ratio <= dry_ratio, 'ratio': round(ratio,2)}
 
 
 @st.cache_data(ttl=900, show_spinner=False)
@@ -173,16 +159,16 @@ def _analyze_ticker(ticker, days, max_rsi, min_gap, dry_ratio, max_pos):
         df = _normalize(df)
         if len(df) < 150 or 'volume' not in df.columns:
             return None
-        val = check_valuation_129(df, max_position=max_pos)
-        rsi2 = check_rsi_double_bottom(df, max_rsi_bottom=max_rsi, min_gap=min_gap)
-        vol = check_volume_dryup(df, dry_ratio=dry_ratio)
+        val  = _check_val129(df, max_pos=max_pos)
+        rsi2 = _check_rsi2bot(df, max_rsi=max_rsi, min_gap=min_gap)
+        vol  = _check_vol_dryup(df, dry_ratio=dry_ratio)
         if not (val and val['ok'] and rsi2 and rsi2['ok'] and vol and vol['ok']):
             return None
         score = round(
-            max(0.0, (max_pos - val['position'])) * 60
+            max(0.0, max_pos - val['position']) * 60
             + max(0.0, rsi2['gap']) * 1.5
-            + max(0.0, (dry_ratio - vol['ratio'])) * 80
-            , 1)
+            + max(0.0, dry_ratio - vol['ratio']) * 80
+        , 1)
         return {
             'Mã CP': ticker,
             'Giá': round(df['close'].iloc[-1], 2),
@@ -193,9 +179,7 @@ def _analyze_ticker(ticker, days, max_rsi, min_gap, dry_ratio, max_pos):
             'Ngày đáy 2': rsi2['b2_date'],
             'RSI hiện tại': rsi2['rsi_now'],
             'Vol/MA20': vol['ratio'],
-            'Vol hiện tại (tr)': round(vol['vol_last'] / 1e6, 2),
-            'Vol TB20 (tr)': round(vol['vol_ma20'] / 1e6, 2),
-            'Vị thế 129 ngày': val['position'],
+            'Vị thế 129d': val['position'],
             'Score': score,
         }
     except Exception:
@@ -203,125 +187,101 @@ def _analyze_ticker(ticker, days, max_rsi, min_gap, dry_ratio, max_pos):
 
 
 # ══════════════════════════════════════════════
-# 3. PORTFOLIO LOGIC
+# 3. CARD RENDERER
 # ══════════════════════════════════════════════
 
-def _calc_pl(i):
-    buy = st.session_state.pv2_portfolio['buy_prices'][i]
-    cur = st.session_state.pv2_portfolio['current_prices'][i]
-    if buy > 0 and cur > 0:
-        return round(((cur - buy) / buy) * 100, 2)
-    return 0.0
+def _slot_card_html(slot_idx, ticker, action, pct=25):
+    """Render 1 slot card — trống thì hiện dấu +"""
+    if not ticker:
+        return f"""
+        <div style="
+            background:#1e1640; border:2px dashed #4a3a7a;
+            border-radius:12px; padding:18px 10px;
+            text-align:center; min-height:100px;
+            display:flex; flex-direction:column;
+            align-items:center; justify-content:center;
+        ">
+            <div style="color:#5a4a8a; font-size:1.8rem; line-height:1;">+</div>
+            <div style="color:#5a4a8a; font-size:.75rem; margin-top:4px;">Slot {slot_idx+1} · {pct}%</div>
+        </div>
+        """
+    st_cfg = ACTION_STYLE.get(action, ACTION_STYLE["CHỜ"])
+    return f"""
+    <div style="
+        background:{st_cfg['bg']};
+        border:2px solid {st_cfg['border']};
+        border-radius:12px; padding:16px 10px 12px 10px;
+        text-align:center; min-height:100px;
+    ">
+        <div style="
+            font-weight:800; font-size:1.1rem;
+            color:#111111; letter-spacing:.5px;
+        ">{ticker}</div>
+        <div style="
+            font-size:.72rem; color:#666; margin-top:2px;
+        ">{pct}% danh mục</div>
+        <div style="
+            font-size:.82rem; font-weight:700;
+            color:{st_cfg['color']};
+            margin-top:8px;
+            background:rgba(0,0,0,.06);
+            border-radius:6px; padding:3px 0;
+        ">{action}</div>
+    </div>
+    """
 
 
-def _portfolio_summary():
-    total = st.session_state.pv2_total_capital
-    invested = 0
-    cfg = st.session_state.pv2_portfolio
-    for i in range(4):
-        invested += cfg['quantities'][i] * cfg['current_prices'][i]
-    cash = total - invested
-    total_pl = sum(
-        cfg['quantities'][i] * (cfg['current_prices'][i] - cfg['buy_prices'][i])
-        for i in range(4) if cfg['buy_prices'][i] > 0
-    )
-    return {
-        'total': total, 'invested': invested, 'cash': cash,
-        'total_pl': total_pl,
-        'cash_ratio': (cash / total * 100) if total > 0 else 0,
-    }
+def _render_dashboard(slots, now_str, market_state):
+    """Header + 4 card slots"""
+    state_color = {"Uptrend": "#40c040", "Sideways": "#c0a020", "Downtrend": "#d04040"}.get(market_state, "#888")
 
+    st.markdown(f"""
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+        <span style="font-size:1.25rem; font-weight:700;">📊 Dashboard — Chiến lược 4 mã × 25%</span>
+        <span style="color:#40c040; font-size:.82rem;">● Cập nhật {now_str}</span>
+        <span style="
+            border:1px solid {state_color}; color:{state_color};
+            border-radius:20px; padding:2px 12px; font-size:.82rem;
+        ">{market_state}</span>
+    </div>
+    """, unsafe_allow_html=True)
 
-def _suggest_trades(market_condition):
-    cfg = st.session_state.pv2_portfolio
-    suggestions = []
-    if market_condition == 'XẤU':
-        for i, stock in enumerate(cfg['stocks']):
-            if cfg['status'][i] in ['MUA', 'GIỮ']:
-                suggestions.append(('SELL_ALL', stock,
-                                    '🚨 Thị trường xấu → bán hết, chuyển sang CHỜ', 'CAO'))
-        return suggestions
-    for i, stock in enumerate(cfg['stocks']):
-        pl = _calc_pl(i)
-        if pl < -5:
-            suggestions.append(('CUT_LOSS', stock,
-                                f'⚠️ Lỗ {pl:.1f}% → cắt lỗ hoặc hạ tỷ lệ', 'CAO'))
-        elif pl > 15:
-            suggestions.append(('TAKE_PROFIT', stock,
-                                f'🎯 Lãi {pl:.1f}% → có thể chốt 50%', 'TRUNG BÌNH'))
-    if market_condition == 'TỐT':
-        best, best_pl = None, -999
-        for i, stock in enumerate(cfg['stocks']):
-            pl = _calc_pl(i)
-            if pl > best_pl and pl > 0:
-                best_pl = pl
-                best = stock
-        if best:
-            suggestions.append(('INCREASE', best,
-                                f'📈 Mã mạnh nhất ({best_pl:.1f}%) — có thể tăng tỷ lệ', 'THẤP'))
-    return suggestions
-
-
-def _push_top4_to_portfolio(top4):
-    allocs = [40, 30, 20, 10]
-    cfg = st.session_state.pv2_portfolio
-    for i, r in enumerate(top4[:4]):
-        cfg['stocks'][i]         = r['Mã CP']
-        cfg['allocations'][i]    = allocs[i]
-        cfg['status'][i]         = 'MUA'
-        cfg['current_prices'][i] = r['Giá']
-        cfg['buy_prices'][i]     = 0.0
-        cfg['quantities'][i]     = 0
-        cfg['notes'][i] = (
-            f"Điểm mua vàng: RSI {r['RSI đáy 1']}→{r['RSI đáy 2']} "
-            f"({r['Ngày đáy 1']}→{r['Ngày đáy 2']}), "
-            f"vol {r['Vol/MA20']}x MA20, vị thế {int(r['Vị thế 129 ngày']*100)}%/129d"
-        )
-    cfg['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    cols = st.columns(4)
+    for i, slot in enumerate(slots):
+        with cols[i]:
+            st.markdown(
+                _slot_card_html(i, slot["ticker"], slot["action"]),
+                unsafe_allow_html=True,
+            )
 
 
 # ══════════════════════════════════════════════
-# 4. GIAO DIỆN TAB — GỘP CẢ 2 PHẦN
+# 4. MAIN RENDER
 # ══════════════════════════════════════════════
 
 def render_portfolio_v2_tab(priority_tickers=None):
     _init_state()
 
-    st.markdown("## 💼 SĂN ĐIỂM MUA VÀNG & QUẢN LÝ DANH MỤC 4 MÃ")
-    st.caption(
-        "**Luồng làm việc:** Quét cổ phiếu theo 3 điều kiện → "
-        "Chọn 4 mã đẹp nhất (10-20-30-40%) → Theo dõi lãi/lỗ → "
-        "Cắt lỗ / Chốt lời / Chờ khi thị trường xấu"
-    )
-
-    st.divider()
-
-    # ═══════════════════════════════════════
-    # PHẦN TRÊN: SCREENER
-    # ═══════════════════════════════════════
+    # ─── PHẦN 1: SCREENER ──────────────────────────────────────────
     st.markdown("### 🎯 PHẦN 1 — SCREENER ĐIỂM MUA VÀNG")
+    st.caption("3 điều kiện: Giá vùng rẻ 129d · RSI 2 đáy nâng · Volume kiệt cung")
 
-    with st.expander("⚙️ Cấu hình bộ lọc (nhấn để điều chỉnh ngưỡng)", expanded=False):
+    with st.expander("⚙️ Cấu hình ngưỡng lọc", expanded=False):
         c1, c2, c3, c4 = st.columns(4)
-        max_position  = c1.slider("📉 Vùng giá rẻ 129d ≤", 0.10, 0.60, 0.35, 0.05,
-                                   help="Giá nằm trong vùng dưới 35% biên độ 129 phiên = rẻ")
-        max_rsi       = c2.slider("🔻 RSI coi là đáy ≤", 25.0, 45.0, 35.0, 1.0)
-        min_rsi_gap   = c3.slider("📐 Đáy 2 cao hơn đáy 1 tối thiểu", 1.0, 10.0, 2.0, 0.5)
-        dry_ratio     = c4.slider("🥵 Volume cạn ≤ (× MA20)", 0.20, 0.80, 0.45, 0.05)
+        max_position = c1.slider("📉 Vùng giá rẻ 129d ≤", 0.10, 0.60, 0.35, 0.05)
+        max_rsi      = c2.slider("🔻 RSI coi là đáy ≤", 25.0, 45.0, 35.0, 1.0)
+        min_rsi_gap  = c3.slider("📐 Khoảng cách RSI 2 đáy", 1.0, 10.0, 2.0, 0.5)
+        dry_ratio    = c4.slider("🥵 Volume cạn ≤ (× MA20)", 0.20, 0.80, 0.45, 0.05)
 
     custom = st.text_input(
-        "🏷️ Danh sách mã quét (để trống = dùng danh sách ưu tiên VN30 của app)",
-        placeholder="VD: PVT, FPT, HPG, VCB ...", value="",
+        "🏷️ Danh sách mã quét (để trống = dùng danh sách VN30 ưu tiên)",
+        placeholder="VD: PVT, FPT, HPG, VCB ...",
         key="pv2_custom_input",
     )
     tickers = [t.strip().upper() for t in custom.replace(',', ' ').split()] if custom.strip() \
               else list(priority_tickers or [])
 
-    col_btn1, col_btn2 = st.columns([1, 4])
-    with col_btn1:
-        scan_clicked = st.button("🎯 QUÉT ĐIỂM MUA", type="primary", use_container_width=True)
-
-    if scan_clicked:
+    if st.button("🎯 QUÉT ĐIỂM MUA", type="primary"):
         if not tickers:
             st.warning("Chưa có danh sách mã.")
             st.stop()
@@ -345,229 +305,161 @@ def render_portfolio_v2_tab(priority_tickers=None):
                         pass
             status.update(
                 label=f"✅ Hoàn tất — {len(results)} mã đạt ĐIỂM MUA VÀNG",
-                state="complete",
-                expanded=bool(results),
+                state="complete", expanded=bool(results),
             )
-        st.session_state.pv2_scan_results = sorted(
-            results, key=lambda x: x['Score'], reverse=True)
+        st.session_state.pv2_scan_results = sorted(results, key=lambda x: x['Score'], reverse=True)
+        st.session_state.pv2_last_updated = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
-    # ═══════════════════════════════════════
-    # KẾT QUẢ QUÉT + GỢI Ý 4 MÃ
-    # ═══════════════════════════════════════
+    # ── Kết quả quét ──
     results = st.session_state.pv2_scan_results
     if results:
         df_res = pd.DataFrame(results)
-        st.success(f"🏆 Tìm thấy **{len(results)}** mã đạt cả 3 điều kiện")
+        st.success(f"🏆 **{len(results)}** mã đạt cả 3 điều kiện")
 
-        with st.expander("📋 Bảng chi tiết (nhấn để mở)", expanded=True):
-            st.dataframe(
-                df_res, use_container_width=True, hide_index=True,
+        with st.expander("📋 Bảng chi tiết", expanded=True):
+            st.dataframe(df_res, use_container_width=True, hide_index=True,
                 column_config={
-                    'Vị thế 129 ngày': st.column_config.ProgressColumn(
+                    'Vị thế 129d': st.column_config.ProgressColumn(
                         "Vị thế 129d", min_value=0.0, max_value=1.0, format="%.0f%%"),
                     'Vol/MA20': st.column_config.NumberColumn("Vol/MA20", format="%.2f x"),
-                },
-            )
+                })
 
-        top4 = results[:4]
-        st.markdown("#### 💡 Gợi ý 4 mã đẹp nhất (mã mạnh nhất → 40%)")
-
-        allocs = [40, 30, 20, 10]
-        rows = []
-        for i, r in enumerate(top4):
-            rows.append({
-                'Slot': f"#{i+1}",
-                'Mã CP': r['Mã CP'],
-                'Tỷ lệ': f"{allocs[i]}%",
-                'Giá': f"{r['Giá']:,.2f}",
-                'RSI': f"{r['RSI đáy 1']} → {r['RSI đáy 2']}",
-                'Vol': f"{r['Vol hiện tại (tr)']}tr / {r['Vol TB20 (tr)']}tr",
-                'Điểm': r['Score'],
-            })
-        st.table(pd.DataFrame(rows))
-
-        if st.button("📥 NẠP 4 MÃ VÀO PHẦN QUẢN LÝ DANH MỤC",
-                     type="primary", use_container_width=True):
-            _push_top4_to_portfolio(top4)
-            st.success("✅ Đã nạp! Cuộn xuống **PHẦN 2** để nhập giá mua, số lượng và theo dõi.")
+        # Nạp top 4 vào 4 slot
+        st.markdown("#### 💡 Nạp vào 4 slot (25% mỗi mã)")
+        if st.button("📥 Nạp top 4 mã đẹp nhất vào danh mục", type="primary"):
+            top4 = results[:4]
+            for i, r in enumerate(top4):
+                st.session_state.pv2_slots[i] = {"ticker": r['Mã CP'], "action": "MUA"}
+            # Slot thừa nếu ít hơn 4 mã → giữ nguyên
+            st.session_state.pv2_last_updated = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            st.success("✅ Đã nạp! Xem bảng chiến lược bên dưới.")
             st.rerun()
 
     else:
-        st.info("Chưa quét hoặc chưa có mã nào đạt cả 3 điều kiện. "
-                "Thử nới ngưỡng (vùng giá rẻ ↑, dry ratio ↑) rồi quét lại.")
-        with st.expander("📖 Giải thích chiến lược + ví dụ PVT"):
+        with st.expander("📖 Chiến lược hoạt động như thế nào? (ví dụ minh họa)", expanded=False):
             st.markdown("""
-            **Ví dụ điểm mua PVT:**
+            > ⚠️ **Đây là ví dụ MINH HỌA** — không phải kết quả quét thật.
 
-            | Điều kiện | Thực tế | Đạt? |
+            | Điều kiện | Ví dụ PVT | Đạt? |
             |---|---|---|
             | RSI 2 đáy nâng | Đáy 1 = 21 → Đáy 2 = 28 (giá không giảm thêm) | ✅ |
-            | Volume kiệt cung | 1 triệu CP vs TB 20 phiên 3 triệu = 0.33x | ✅ |
-            | Định giá rẻ 129d | Giá nằm ở vùng < 35% biên độ 129 phiên | ✅ |
-
-            **Vì sao bộ 3 này mạnh?**
-            - RSI đáy sau cao hơn đáy trước → *phe bán đã yếu* (phân kỳ dương)
-            - Volume cạn → *không còn ai bán tháo*, cung đã kiệt
-            - Giá vùng rẻ 129 ngày → *biên an toàn cao*, xuống ít – lên nhiều
-
-            → Chỉ cần lực mua nhỏ xuất hiện là giá bật mạnh.
+            | Volume kiệt cung | 1tr CP vs TB20 = 3tr → 0.33× | ✅ |
+            | Định giá rẻ 129d | Giá ở vùng < 35% biên độ 129 phiên | ✅ |
             """)
+        st.info("Nhấn **🎯 QUÉT ĐIỂM MUA** để tìm cơ hội thật.")
 
     st.divider()
 
-    # ═══════════════════════════════════════
-    # PHẦN DƯỚI: QUẢN LÝ DANH MỤC
-    # ═══════════════════════════════════════
-    st.markdown("### 💼 PHẦN 2 — QUẢN LÝ DANH MỤC 4 MÃ")
+    # ─── PHẦN 2: 4 SLOT × 25% ──────────────────────────────────────
+    st.markdown("### 💼 PHẦN 2 — DANH MỤC 4 MÃ × 25%")
 
-    col_h1, col_h2, col_h3 = st.columns([2, 1, 1])
-    with col_h1:
-        st.session_state.pv2_total_capital = st.number_input(
-            "💰 Tổng vốn (VNĐ)",
-            value=st.session_state.pv2_total_capital,
-            step=1_000_000, format="%d", key="pv2_capital",
+    # Header controls
+    hc1, hc2 = st.columns([2, 3])
+    with hc1:
+        market_state = st.selectbox(
+            "📊 Trạng thái thị trường",
+            ["Uptrend", "Sideways", "Downtrend"],
+            index=["Uptrend","Sideways","Downtrend"].index(
+                st.session_state.pv2_market_state
+                if st.session_state.pv2_market_state in ["Uptrend","Sideways","Downtrend"]
+                else "Sideways"
+            ),
+            key="pv2_mkt_state",
         )
-    with col_h2:
-        market_condition = st.selectbox(
-            "📊 Đánh giá thị trường",
-            ["TỐT", "TRUNG TÍNH", "XẤU"], key="pv2_mkt_cond",
-        )
-    with col_h3:
-        st.caption(f"🕐 Cập nhật: {st.session_state.pv2_portfolio['last_updated']}")
+        if market_state != st.session_state.pv2_market_state:
+            st.session_state.pv2_market_state = market_state
 
-    # ── Bảng tổng quan 4 slot ──
-    cfg = st.session_state.pv2_portfolio
-    rows = []
-    for i in range(4):
-        pl = _calc_pl(i)
-        capital = st.session_state.pv2_total_capital * (cfg['allocations'][i] / 100)
-        rows.append({
-            'Slot': f"#{i+1}",
-            'Mã CP': cfg['stocks'][i],
-            'Tỷ lệ': f"{cfg['allocations'][i]}%",
-            'Vốn (tr)': f"{capital/1e6:.1f}",
-            'Trạng thái': cfg['status'][i],
-            'Giá mua': f"{cfg['buy_prices'][i]:,.2f}" if cfg['buy_prices'][i] > 0 else '—',
-            'Giá HT': f"{cfg['current_prices'][i]:,.2f}" if cfg['current_prices'][i] > 0 else '—',
-            'SL': cfg['quantities'][i] if cfg['quantities'][i] > 0 else '—',
-            'Lãi/Lỗ %': f"{pl:+.2f}%" if (cfg['buy_prices'][i] > 0 and cfg['current_prices'][i] > 0) else '—',
-        })
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-
-    # ── Điều khiển chi tiết 4 slot ──
-    st.markdown("#### 🎛️ Điều khiển từng slot (nhấn để mở)")
-    cols = st.columns(2)
-    for i in range(4):
-        with cols[i % 2]:
-            with st.expander(f"🔍 Slot #{i+1}: {cfg['stocks'][i]} ({cfg['allocations'][i]}%)"):
-                new_stock = st.text_input("Mã CP", value=cfg['stocks'][i], key=f"pv2_s_{i}")
-
-                c_a, c_b = st.columns(2)
-                with c_a:
-                    new_alloc = st.number_input(
-                        "Tỷ lệ (%)", value=float(cfg['allocations'][i]),
-                        min_value=0.0, max_value=100.0, step=5.0, key=f"pv2_a_{i}")
-                with c_b:
-                    new_status = st.selectbox(
-                        "Trạng thái",
-                        ["CHỜ", "MUA", "GIỮ", "BÁN"],
-                        index=["CHỜ", "MUA", "GIỮ", "BÁN"].index(cfg['status'][i]),
-                        key=f"pv2_st_{i}")
-
-                c_c, c_d, c_e = st.columns(3)
-                with c_c:
-                    new_buy = st.number_input(
-                        "Giá mua", value=float(cfg['buy_prices'][i]),
-                        min_value=0.0, step=0.1, key=f"pv2_b_{i}")
-                with c_d:
-                    new_cur = st.number_input(
-                        "Giá hiện tại", value=float(cfg['current_prices'][i]),
-                        min_value=0.0, step=0.1, key=f"pv2_c_{i}")
-                with c_e:
-                    new_qty = st.number_input(
-                        "Số lượng", value=cfg['quantities'][i],
-                        min_value=0, step=100, key=f"pv2_q_{i}")
-
-                new_note = st.text_input("Ghi chú", value=cfg['notes'][i], key=f"pv2_n_{i}")
-
-                bc1, bc2, bc3 = st.columns(3)
-                with bc1:
-                    if st.button("💾 Lưu", key=f"pv2_save_{i}", use_container_width=True):
-                        cfg['stocks'][i] = new_stock
-                        cfg['allocations'][i] = int(new_alloc)
-                        cfg['status'][i] = new_status
-                        cfg['buy_prices'][i] = new_buy
-                        cfg['current_prices'][i] = new_cur
-                        cfg['quantities'][i] = new_qty
-                        cfg['notes'][i] = new_note
-                        cfg['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                        st.success(f"✅ Đã lưu {new_stock}")
-                        st.rerun()
-                with bc2:
-                    if st.button("🟢 MUA", key=f"pv2_buy_{i}", use_container_width=True):
-                        cfg['status'][i] = 'MUA'
-                        cfg['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                        st.rerun()
-                with bc3:
-                    if st.button("🔴 CẮT LỖ", key=f"pv2_cut_{i}", use_container_width=True):
-                        cfg['status'][i] = 'BÁN'
-                        cfg['last_updated'] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                        st.rerun()
-
-    st.divider()
-
-    # ── Tổng kết & Đề xuất ──
-    st.markdown("### 📊 TỔNG KẾT & ĐỀ XUẤT")
-
-    summary = _portfolio_summary()
-    col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-    col_s1.metric("💵 Tổng vốn", f"{summary['total']/1e6:.1f} Tr")
-    col_s2.metric("📈 Đang đầu tư", f"{summary['invested']/1e6:.1f} Tr",
-                  f"{(summary['invested']/summary['total']*100):.1f}%" if summary['total'] > 0 else None)
-    col_s3.metric("💰 Tiền mặt", f"{summary['cash']/1e6:.1f} Tr",
-                  f"{summary['cash_ratio']:.1f}%")
-    col_s4.metric("💎 Lãi/Lỗ tổng", f"{summary['total_pl']/1e6:.2f} Tr")
-
-    st.progress(
-        summary['invested'] / summary['total'] if summary['total'] > 0 else 0,
-        text=f"Đầu tư {summary['invested']/1e6:.1f} Tr · Tiền mặt {summary['cash']/1e6:.1f} Tr",
-    )
-
-    suggestions = _suggest_trades(market_condition)
-    st.markdown("#### 💡 Đề xuất tự động")
-    if suggestions:
-        for t, stock, reason, prio in suggestions:
-            if prio == 'CAO':
-                st.error(f"**{stock}** — {reason}")
-            elif prio == 'TRUNG BÌNH':
-                st.warning(f"**{stock}** — {reason}")
-            else:
-                st.info(f"**{stock}** — {reason}")
-    else:
-        if market_condition == 'TỐT':
-            st.success("✅ Danh mục ổn định — tiếp tục giữ và theo dõi")
+    # Gợi ý hành động tự động dựa thị trường
+    with hc2:
+        if market_state == "Downtrend":
+            st.error("⚠️ Thị trường **Downtrend** — khuyến nghị **BÁN HẾT** toàn bộ, chuyển CHỜ")
+        elif market_state == "Sideways":
+            st.warning("🟡 Thị trường **Sideways** — cân nhắc **BÁN 25%** mã yếu, giữ mã mạnh")
         else:
-            st.info("ℹ️ Thị trường trung tính — quan sát thêm")
+            st.success("🟢 Thị trường **Uptrend** — duy trì **GIỮ CP**, chỉ bán khi đạt mục tiêu")
 
-    # ── Quy tắc hành động ──
-    with st.expander("📖 Quy tắc Mua / Bán / Chờ (nhấn để đọc)"):
+    now_str = st.session_state.pv2_last_updated or datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+    # ── 4 CARD SLOTS ──
+    _render_dashboard(st.session_state.pv2_slots, now_str, market_state)
+
+    # ── Kết quả đặt lệnh hôm nay (mã đang MUA) ──
+    buy_slots = [(i, s) for i, s in enumerate(st.session_state.pv2_slots)
+                 if s["ticker"] and s["action"] == "MUA"]
+    if buy_slots:
+        st.markdown("---")
+        st.markdown("**Kết quả đặt lệnh hôm nay** — xác nhận trên sổ lệnh")
+        bcols = st.columns(len(buy_slots))
+        for col, (i, s) in zip(bcols, buy_slots):
+            with col:
+                st.markdown(f"""
+                <div style="
+                    background:#e8f5e8; border:2px solid #40c040;
+                    border-radius:10px; padding:12px 10px; text-align:center;
+                ">
+                    <div style="font-weight:700; font-size:1rem;">{s['ticker']}</div>
+                    <div style="font-size:.75rem; color:#20a020; margin-top:4px;">✓ đã vào sổ lệnh</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+
+    # ── EDITOR 4 SLOT ──
+    st.markdown("#### 🎛️ Chỉnh sửa từng slot")
+
+    slot_cols = st.columns(4)
+    for i in range(4):
+        with slot_cols[i]:
+            st.markdown(f"**Slot {i+1} · 25%**")
+            slot = st.session_state.pv2_slots[i]
+
+            new_ticker = st.text_input(
+                "Mã CP", value=slot["ticker"],
+                placeholder="VD: FPT",
+                key=f"pv2_ticker_{i}",
+            ).upper().strip()
+
+            new_action = st.selectbox(
+                "Chiến lược",
+                ACTIONS,
+                index=ACTIONS.index(slot["action"]) if slot["action"] in ACTIONS else 4,
+                key=f"pv2_action_{i}",
+            )
+
+            if st.button("💾 Lưu", key=f"pv2_save_{i}", use_container_width=True):
+                st.session_state.pv2_slots[i] = {"ticker": new_ticker, "action": new_action}
+                st.session_state.pv2_last_updated = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                st.rerun()
+
+    st.divider()
+
+    # ── Đặt hàng loạt ──
+    st.markdown("#### ⚡ Đặt chiến lược hàng loạt")
+    bulk_cols = st.columns(5)
+    labels = ["🟡 GIỮ tất cả", "🟠 BÁN 25% tất cả", "🔴 BÁN HẾT tất cả", "🟢 MUA tất cả", "⚪ CHỜ tất cả"]
+    for i, (action, label) in enumerate(zip(ACTIONS, labels)):
+        with bulk_cols[i]:
+            if st.button(label, key=f"pv2_bulk_{i}", use_container_width=True):
+                for s in st.session_state.pv2_slots:
+                    if s["ticker"]:  # chỉ slot có mã
+                        s["action"] = action
+                st.session_state.pv2_last_updated = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                st.rerun()
+
+    # ── Quy tắc ──
+    with st.expander("📖 Quy tắc Mua / Bán / Chờ", expanded=False):
         st.markdown("""
-        **🔴 BÁN KHI:**
-        - Mã lỗ **> 5%** → cắt lỗ
-        - Mã lãi **> 15%** → chốt 50%
-        - **Thị trường XẤU** → bán toàn bộ 4 mã, chuyển sang CHỜ 100% tiền mặt
-        - Bán mã xấu nhất, dùng vốn mua mã có tín hiệu TÍCH CỰC mạnh nhất
+        | Thị trường | Hành động khuyến nghị |
+        |---|---|
+        | **Uptrend** | GIỮ CP — chỉ bán khi đạt mục tiêu lãi |
+        | **Sideways** | BÁN 25% mã yếu nhất, dùng room mua mã mạnh hơn |
+        | **Downtrend** | BÁN HẾT toàn bộ → CHỜ 100% tiền mặt |
 
-        **🟢 MUA KHI:**
-        - Mã xuất hiện trong screener **ĐIỂM MUA VÀNG** (3 điều kiện đồng thời)
-        - Thị trường TỐT, VN-Index trên MA20, thanh khoản tăng
-        - Phân bổ theo tỷ lệ 10-20-30-40% (mã đẹp nhất → 40%)
+        **🟢 MUA KHI:** Mã xuất hiện trong screener ĐIỂM MUA VÀNG (3 điều kiện đồng thời)
 
-        **⚪ CHỜ KHI:**
-        - Thị trường giảm mạnh **> 5%** (PANIC)
-        - Sau khi cắt lỗ, chờ tín hiệu mới
-        - Giữ 100% tiền mặt trong 3-5 phiên, **không bắt đáy**
-        - Quay lại khi có mã bứt phá với khối lượng lớn
+        **⚪ CHỜ KHI:** Sau khi cắt lỗ — không bắt đáy ngay. Đợi tín hiệu mới từ screener.
+
+        **Cơ cấu:** 4 mã × 25% — cân bằng, không tập trung quá vào 1 mã.
         """)
 
 
