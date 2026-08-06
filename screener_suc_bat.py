@@ -9,7 +9,7 @@ Lý thuyết Sức bật:
   • Sức bật  = (Độ giãn% / Số phiên giảm) × 10
               → Giảm 30% trong 15 phiên >>> giảm 30% trong 60 phiên
               → VIX, GEX, VRE bật nhanh hơn CTG, TCB cùng pha vì nén nhanh hơn
-  • Độ giãn  = % drawdown từ đỉnh pha → đáy pha (120 phiên)
+  • Độ giãn  = % drawdown từ đỉnh pha → đáy pha (toàn bộ lịch sử từ 01/2022 đến nay)
 
 Tích hợp vào main.py:
     from screener_suc_bat import render_suc_bat_tab
@@ -101,9 +101,9 @@ _CSS = """
 #  DATA LAYER — fallback chain VCI → FireAnt → yfinance
 # ─────────────────────────────────────────────────────────────
 
-# Ngày bắt đầu lấy dữ liệu — cố định từ đầu 01/2022 thay vì chỉ giới hạn
-# ở n phiên gần nhất như trước. Cửa sổ phân tích pha giảm/hồi (mặc định
-# 120 phiên) vẫn được áp dụng ở bước tính chỉ số, trên bộ dữ liệu đầy đủ này.
+# Ngày bắt đầu lấy dữ liệu — cố định từ đầu 01/2022 đến nay. Pha giảm/hồi
+# (sức bật) được tính trên TOÀN BỘ dữ liệu này, không còn cắt về n phiên
+# gần nhất như trước — pha có thể trải dài nhiều năm nếu dữ liệu cho thấy vậy.
 _DATA_START = "2022-01-01"
 
 
@@ -397,7 +397,7 @@ def _render_lookup_card(symbol: str, company: str, m: dict, source: str):
     st.markdown(f"""
     <div class="lk-card">
       <div class="lk-ticker">{symbol} {src_html}</div>
-      <div class="lk-company">{company or "—"} · dữ liệu từ 01/2022 · phân tích 120 phiên gần nhất</div>
+      <div class="lk-company">{company or "—"} · phân tích toàn bộ dữ liệu từ 01/2022 đến nay</div>
       <div class="lk-grid">
         <div class="lk-metric">
           <div class="lk-label">Giá hiện tại</div>
@@ -486,9 +486,9 @@ def render_lookup_section():
                      "Kiểm tra lại mã hoặc thử lại sau.")
             st.session_state.pop("sb_lookup_result", None)
             return
-        # Dữ liệu gốc trải dài từ 01/2022 đến nay; pha giảm/hồi (sức bật) vẫn
-        # được xác định trên cửa sổ 120 phiên gần nhất, như thiết kế ban đầu.
-        metrics = compute_metrics(df.tail(120))
+        # Pha giảm/hồi (sức bật) được xác định trên TOÀN BỘ lịch sử từ 01/2022
+        # đến nay — không còn cắt về 120 phiên gần nhất như trước.
+        metrics = compute_metrics(df)
         st.session_state["sb_lookup_result"] = {
             "symbol":  symbol_input,
             "company": company,
@@ -575,22 +575,19 @@ def get_all_symbols(exchanges: list) -> list:
     return list(set(symbols))
 
 
-def _compute_symbol_scan(symbol: str, n_periods: int = 120) -> dict | None:
+def _compute_symbol_scan(symbol: str) -> dict | None:
     """Tính chỉ số cho 1 mã trong batch scan, dùng fallback chain.
 
-    fetch_ohlcv giờ luôn trả về toàn bộ lịch sử từ 01/2022 đến nay; cửa sổ
-    `n_periods` (mặc định 120) chỉ dùng để xác định pha giảm/hồi gần nhất.
+    Pha giảm/hồi được xác định trên TOÀN BỘ lịch sử từ 01/2022 đến nay mà
+    fetch_ohlcv trả về — không còn cắt về n phiên gần nhất.
     """
     df, src = fetch_ohlcv(symbol)
     if df is None or len(df) < 20:
         return None
-    df_window = df.tail(n_periods) if n_periods else df
-    if len(df_window) < 20:
-        df_window = df
     try:
-        m = compute_metrics(df_window)
-        close  = df_window["close"].values.astype(float)
-        volume = df_window["volume"].values.astype(float) if "volume" in df_window.columns else np.ones(len(close))
+        m = compute_metrics(df)
+        close  = df["close"].values.astype(float)
+        volume = df["volume"].values.astype(float) if "volume" in df.columns else np.ones(len(close))
 
         # NOTE: sr_levels (vùng KC/HT theo volume profile) chưa được tính ở đây
         # trong bản gốc — để trống nhằm tránh NameError, không phải phần Fibonacci.
@@ -617,12 +614,11 @@ def _compute_symbol_scan(symbol: str, n_periods: int = 120) -> dict | None:
 
 
 @st.cache_data(ttl=1800)
-def _vnindex_drawdown(n_periods: int = 120) -> float:
+def _vnindex_drawdown() -> float:
     df, _ = fetch_ohlcv("VNINDEX")
     if df is None or df.empty:
         return 0.01
-    df_window = df.tail(n_periods) if n_periods else df
-    close = df_window["close"].values.astype(float)
+    close = df["close"].values.astype(float)
     peak  = close.max()
     now   = close[-1]
     dd    = abs((now - peak) / peak)
@@ -631,12 +627,11 @@ def _vnindex_drawdown(n_periods: int = 120) -> float:
 
 def scan_all(
     symbols: list,
-    n_periods: int = 120,
     batch_delay: float = 0.12,
     progress_bar=None,
     status_text=None,
 ) -> pd.DataFrame:
-    vn_dd   = _vnindex_drawdown(n_periods)
+    vn_dd   = _vnindex_drawdown()
     results = []
     total   = len(symbols)
 
@@ -646,7 +641,7 @@ def scan_all(
         if status_text:
             status_text.text(f"⏳ {sym}")
 
-        row = _compute_symbol_scan(sym, n_periods)
+        row = _compute_symbol_scan(sym)
         if row:
             beta = row["_drawdown_abs"] / vn_dd if vn_dd > 0 else 1.0
             row["beta_dd"]       = round(beta, 2)
@@ -691,17 +686,13 @@ def render_scan_section():
     """Phần scan toàn thị trường — bên dưới lookup."""
     st.markdown("### 🔍 Scan toàn thị trường")
 
-    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+    col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         exchanges = st.multiselect(
             "Sàn giao dịch", ["HOSE", "HNX", "UPCOM"], default=["HOSE"])
     with col2:
-        n_periods = st.selectbox("Cửa sổ phân tích (phiên)", [60, 120, 180], index=1,
-                                 help="Dữ liệu gốc luôn được tải từ 01/2022 đến nay; "
-                                      "số này chỉ xác định cửa sổ gần nhất dùng để tính pha giảm/hồi.")
-    with col3:
         top_n = st.number_input("Hiển thị Top", min_value=10, max_value=200, value=50, step=10)
-    with col4:
+    with col3:
         min_dd = st.number_input("DD tối thiểu (%)", min_value=5, max_value=60, value=15)
 
     col_a, col_b = st.columns([1, 2])
@@ -709,10 +700,10 @@ def render_scan_section():
         run_btn = st.button("▶ Bắt đầu Scan", use_container_width=True,
                             type="primary", key="sb_scan_btn")
     with col_b:
-        st.caption("⏱️ Dữ liệu tải từ 01/2022 đến nay · HOSE ~700 mã ≈ 5–10 phút | "
-                   "HNX+UPCOM thêm ~800 mã. Nên chọn 1 sàn trước.")
+        st.caption("⏱️ Dữ liệu tải từ 01/2022 đến nay, pha giảm/hồi tính trên toàn bộ lịch sử · "
+                   "HOSE ~700 mã ≈ 5–10 phút | HNX+UPCOM thêm ~800 mã. Nên chọn 1 sàn trước.")
 
-    cache_key = f"suc_bat_df_{','.join(sorted(exchanges))}_{n_periods}"
+    cache_key = f"suc_bat_df_{','.join(sorted(exchanges))}"
 
     if run_btn:
         if not exchanges:
@@ -726,7 +717,7 @@ def render_scan_section():
         st.info(f"📋 Tổng {len(symbols)} mã — bắt đầu quét…")
         prog   = st.progress(0)
         status = st.empty()
-        df = scan_all(symbols, n_periods=n_periods, batch_delay=0.12,
+        df = scan_all(symbols, batch_delay=0.12,
                       progress_bar=prog, status_text=status)
         st.session_state[cache_key] = df
         prog.empty(); status.empty()
@@ -852,7 +843,7 @@ def render_scan_section():
     )
     st.caption(
         f"Dữ liệu: tổng hợp đa nguồn (từ 01/2022 đến nay), tự động chọn nguồn nhanh nhất còn hoạt động · "
-        f"cửa sổ phân tích {n_periods} phiên gần nhất · Cập nhật: {datetime.date.today().strftime('%d/%m/%Y')} · "
+        f"pha giảm/hồi tính trên toàn bộ lịch sử · Cập nhật: {datetime.date.today().strftime('%d/%m/%Y')} · "
         "Không phải khuyến nghị đầu tư"
     )
 
