@@ -197,11 +197,12 @@ def _fetch_yfinance(symbol: str, start: str = _DATA_START):
 @st.cache_data(ttl=1800, show_spinner=False)  # 30 phút — dữ liệu giờ trải dài từ 2022 (nặng hơn trước) nên cache lâu hơn, tránh tải lại toàn bộ lịch sử mỗi lần gõ
 def fetch_ohlcv(symbol: str, start: str = _DATA_START):
     """
-    Fallback chain: VCI → FireAnt → yfinance.
-    Lấy TOÀN BỘ lịch sử giá từ `start` (mặc định 01/01/2022) đến hiện tại — không còn
-    giới hạn ở n phiên gần nhất như trước. Việc chọn "cửa sổ" bao nhiêu phiên gần nhất
-    để tính pha giảm/hồi (sức bật) giờ do các hàm gọi (compute_metrics, scan_all, ...)
-    tự cắt (df.tail(n)) trên bộ dữ liệu đầy đủ này.
+    Fallback chain TUẦN TỰ: VCI → FireAnt → yfinance.
+    Dùng cho SCAN TOÀN THỊ TRƯỜNG (hàng trăm mã) — cố tình chạy tuần tự,
+    không đua song song, để không gửi 3x số request cùng lúc tới mỗi nguồn
+    (dễ bị rate-limit/chặn khi quét cả sàn). Cho tra cứu 1 mã, dùng
+    fetch_ohlcv_fast() bên dưới — nhanh hơn nhiều vì đua 3 nguồn cùng lúc.
+    Lấy TOÀN BỘ lịch sử giá từ `start` (mặc định 01/01/2022) đến hiện tại.
     Returns (df, source_name) hoặc (None, None)
     """
     df, src = _fetch_vnstock(symbol, start)
@@ -212,6 +213,49 @@ def fetch_ohlcv(symbol: str, start: str = _DATA_START):
         return df, src
     df, src = _fetch_yfinance(symbol, start)
     return df, src
+
+
+def _fetch_ohlcv_race(symbol: str, start: str = _DATA_START, race_timeout: float = 3.0):
+    """Đua song song CẢ 3 nguồn (VCI, FireAnt, yfinance) cùng lúc, lấy kết quả
+    của nguồn nào về ĐẦU TIÊN và hợp lệ — thay vì đợi lần lượt từng nguồn.
+
+    Trước đây gọi tuần tự: nếu VCI timeout mới thử FireAnt, FireAnt lỗi mới thử
+    yfinance -> tệ nhất phải cộng dồn thời gian chờ của cả 3 nguồn. Giờ bắn cả
+    3 request cùng lúc trên 3 luồng riêng, trả kết quả ngay khi nguồn nhanh
+    nhất xong (thường 1-2s) — không đợi 2 nguồn còn lại nữa.
+
+    Chỉ dùng cho TRA CỨU 1 MÃ (ít request, không lo rate-limit); scan toàn thị
+    trường vẫn dùng fetch_ohlcv() tuần tự ở trên để tránh gửi 3x request.
+    """
+    fetchers = (_fetch_vnstock, _fetch_fireant, _fetch_yfinance)
+    ex = _cf.ThreadPoolExecutor(max_workers=3)
+    futures = [ex.submit(fn, symbol, start) for fn in fetchers]
+    result = (None, None)
+    try:
+        for fut in _cf.as_completed(futures, timeout=race_timeout):
+            try:
+                df, src = fut.result()
+            except Exception:
+                continue
+            if df is not None and len(df) >= 20:
+                result = (df, src)
+                break
+    except _cf.TimeoutError:
+        pass  # không nguồn nào kịp trả lời trong race_timeout giây
+    finally:
+        # wait=False: không đợi các luồng còn lại (VCI/yfinance có thể vẫn
+        # đang chạy nền) — trả kết quả ngay cho người dùng, không bị nguồn
+        # chậm nhất kéo lùi tốc độ phản hồi.
+        ex.shutdown(wait=False)
+    return result
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_ohlcv_fast(symbol: str, start: str = _DATA_START):
+    """Bản nhanh của fetch_ohlcv — dùng cho tra cứu 1 mã, đua 3 nguồn song song.
+    Cùng cache key/TTL với fetch_ohlcv nên nếu mã đã được scan toàn thị trường
+    tra trước đó thì lần tra cứu riêng vẫn có thể đã có sẵn trong cache."""
+    return _fetch_ohlcv_race(symbol, start)
 
 
 @st.cache_data(ttl=86400, show_spinner=False)  # tên công ty gần như không đổi -> cache 1 ngày
@@ -384,7 +428,7 @@ def _render_fib_table(m: dict):
     st.markdown(table_html, unsafe_allow_html=True)
 
 
-def _render_lookup_card(symbol: str, company: str, m: dict, source: str):
+def _render_lookup_card(symbol: str, company: str, m: dict, source: str, elapsed: float | None = None):
     pct  = m["pct_change"]
     pc   = "val-up" if pct >= 0 else "val-down"
     ps   = "+" if pct >= 0 else ""
@@ -393,10 +437,16 @@ def _render_lookup_card(symbol: str, company: str, m: dict, source: str):
 
     src_html = _SRC_BADGE.get(source, f'<span class="src-badge">{source}</span>')
 
+    speed_html = ""
+    if elapsed is not None:
+        speed_color = "#00e676" if elapsed <= 2 else ("#ffd740" if elapsed <= 4 else "#ff5252")
+        speed_html = (f'<span class="src-badge" style="background:#12102a;color:{speed_color};">'
+                      f'⚡ {elapsed:.1f}s</span>')
+
     # header
     st.markdown(f"""
     <div class="lk-card">
-      <div class="lk-ticker">{symbol} {src_html}</div>
+      <div class="lk-ticker">{symbol} {src_html}{speed_html}</div>
       <div class="lk-company">{company or "—"} · phân tích toàn bộ dữ liệu từ 01/2022 đến nay</div>
       <div class="lk-grid">
         <div class="lk-metric">
@@ -473,17 +523,20 @@ def render_lookup_section():
 
     if trigger and symbol_input:
         st.session_state["sb_lookup_last"] = symbol_input
-        with st.spinner(f"Đang lấy dữ liệu {symbol_input}…"):
-            # Lấy giá + tên công ty SONG SONG (trước đây chạy tuần tự, cộng dồn thời
-            # gian chờ) — cắt giảm đáng kể độ trễ tra cứu 1 mã.
+        _t0 = time.time()
+        with st.spinner(f"⚡ Đang đua 3 nguồn dữ liệu cho {symbol_input}…"):
+            # Lấy giá + tên công ty SONG SONG, và bản thân việc lấy giá cũng
+            # đua song song cả 3 nguồn (fetch_ohlcv_fast) — không còn chờ
+            # tuần tự VCI → FireAnt → yfinance như bản scan toàn thị trường.
             with _cf.ThreadPoolExecutor(max_workers=2) as ex:
-                fut_ohlcv = ex.submit(fetch_ohlcv, symbol_input)
+                fut_ohlcv = ex.submit(fetch_ohlcv_fast, symbol_input)
                 fut_name  = ex.submit(fetch_company_name, symbol_input)
                 df, src   = fut_ohlcv.result()
                 company   = fut_name.result()
+        _elapsed = time.time() - _t0
         if df is None or len(df) < 20:
-            st.error(f"❌ Không lấy được dữ liệu cho **{symbol_input}**. "
-                     "Kiểm tra lại mã hoặc thử lại sau.")
+            st.error(f"❌ Không lấy được dữ liệu cho **{symbol_input}** sau {_elapsed:.1f}s "
+                     "(cả 3 nguồn đều không phản hồi kịp). Kiểm tra lại mã hoặc thử lại sau.")
             st.session_state.pop("sb_lookup_result", None)
             return
         # Pha giảm/hồi (sức bật) được xác định trên TOÀN BỘ lịch sử từ 01/2022
@@ -494,6 +547,7 @@ def render_lookup_section():
             "company": company,
             "metrics": metrics,
             "source":  src,
+            "elapsed": round(_elapsed, 1),
         }
 
     result = st.session_state.get("sb_lookup_result")
@@ -503,6 +557,7 @@ def render_lookup_section():
             result["company"],
             result["metrics"],
             result["source"],
+            result.get("elapsed"),
         )
 
     st.divider()
