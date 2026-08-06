@@ -221,16 +221,14 @@ setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 
-# --- 4. TẠO 9 TAB (THÊM TAB QUẢN LÝ GIAO DỊCH) ---
-# ⚠️ FIX: danh sách nhãn tab trước đây chỉ có 8 phần tử trong khi vế trái
-# unpack 9 biến (thiếu nhãn cho tab_backtest) -> gây ValueError khi unpack.
-# Đã bổ sung đủ 9 nhãn, đúng thứ tự với 9 biến bên trái.
-tab_market, tab_screener, tab_results, tab_signals, tab_reports, tab_recommendation, tab_suc_bat, tab_portfolio = st.tabs([
+# --- 4. TẠO 8 TAB (THÊM TAB QUẢN LÝ GIAO DỊCH) ---
+# Đã bỏ tab "📑 Báo Cáo" (gọi reports.json qua mạng mỗi lần render, làm chậm
+# tải trang) để web load nhanh hơn — các tab còn lại không phụ thuộc vào nó.
+tab_market, tab_screener, tab_results, tab_signals, tab_recommendation, tab_suc_bat, tab_portfolio = st.tabs([
     "🌟 Thị Trường",
     "🔍 Bộ Lọc",
     "📊 Kết Quả Quét",
     "📡 Tín Hiệu & Cảnh Báo",
-    "📑 Báo Cáo",
     "💡 Khuyến Nghị",
     "🚀 Sức Bật",
     "💼 Danh mục",
@@ -808,174 +806,20 @@ with tab_signals:
         st.info("Chưa có dữ liệu quét. Sang tab **🔍 Bộ Lọc** để quét, rồi ghé tab **📊 Kết Quả Quét** trước.")
 
 # ==========================================
-# TAB 6: BÁO CÁO CTCK
-# ==========================================
-import requests as _req
-import pandas as _pd
-from datetime import datetime as _dt, timedelta as _td
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def _load_reports_json() -> dict:
-    import requests as _r
-    try:
-        base = st.secrets.get("GITHUB_RAW_BASE", "").rstrip("/")
-    except Exception:
-        base = ""
-    if not base:
-        base = "https://raw.githubusercontent.com/nnnhutien-cpu/Fairy-stock/main"
-
-    url = f"{base}/reports.json"
-    try:
-        resp = _r.get(url, timeout=10)
-        resp.encoding = "utf-8"
-        if resp.status_code == 200:
-            return resp.json()
-        return {"error": f"HTTP {resp.status_code}", "data": []}
-    except Exception as e:
-        return {"error": str(e), "data": []}
-
-with tab_reports:
-    sb_header("📑 Hệ thống báo cáo định giá cổ phiếu",
-               "Dữ liệu tổng hợp tự động từ DNSE · Vietstock · CafeF — bot cập nhật 2 lần/ngày (10:00 SA & 15:30 CH)")
-
-    col_f1, col_f2, col_f3 = st.columns([1, 1, 2])
-    with col_f1:
-        filter_action = st.selectbox(
-            "Lọc Khuyến Nghị:",
-            ["Tất cả", "MUA", "NẮM GIỮ", "BÁN", "TÍCH LŨY", "KHẢ QUAN"],
-        )
-    with col_f2:
-        filter_source = st.selectbox(
-            "Nguồn dữ liệu:",
-            ["Tất cả", "DNSE", "DNSE Research", "Vietstock", "CafeF"],
-        )
-    with col_f3:
-        rep_ticker = st.text_input(
-            "Mã cổ phiếu (để trống = toàn thị trường):",
-            value="", key="rep_ticker_v5",
-            placeholder="Ví dụ: FPT, HPG, VNM...",
-        ).upper().strip()
-
-    col_btn, col_note = st.columns([1, 4])
-    with col_btn:
-        force_refresh = st.button("🔄 Làm mới", key="refresh_reports_v5")
-
-    if force_refresh:
-        _load_reports_json.clear()
-
-    with st.spinner("Đang tải dữ liệu báo cáo..."):
-        payload = _load_reports_json()
-
-    reports_ok = True
-
-    if "error" in payload and not payload.get("data"):
-        st.error(
-            f"⚠️ Không tải được reports.json: `{payload['error']}`\n\n"
-            "**Kiểm tra:**\n"
-            "1. File `reports.json` đã có trong repo chưa? "
-            "Vào GitHub → Actions → chạy thủ công workflow **Scrape Analyst Reports**.\n"
-            "2. Repo có public không? Nếu private cần thêm token vào secrets.\n"
-        )
-        reports_ok = False
-
-    if reports_ok:
-        updated_at = payload.get("updated_at", "")
-        raw_data   = payload.get("data", [])
-
-        with col_note:
-            st.caption(f"⏱️ Dữ liệu cập nhật lần cuối: **{updated_at}** — {len(raw_data)} báo cáo")
-
-        df_all = pd.DataFrame(raw_data)
-
-        if df_all.empty:
-            st.info(
-                "Kho báo cáo hiện đang trống.\n\n"
-                "Vào **GitHub → Actions → Scrape Analyst Reports → Run workflow** "
-                "để bot cào dữ liệu về ngay."
-            )
-            reports_ok = False
-
-    if reports_ok:
-        for col in ["buy_price", "target_price"]:
-            if col in df_all.columns:
-                df_all[col] = pd.to_numeric(
-                    df_all[col].astype(str).str.replace(",", "").str.replace(".", ""),
-                    errors="coerce"
-                ).fillna(0)
-
-        mask = (df_all["buy_price"] > 0) & (df_all["target_price"] > 0)
-        df_all["upside_pct"] = 0.0
-        df_all.loc[mask, "upside_pct"] = (
-            (df_all.loc[mask, "target_price"] - df_all.loc[mask, "buy_price"])
-            / df_all.loc[mask, "buy_price"] * 100
-        ).round(1)
-
-        df_show = df_all.copy()
-        if rep_ticker:
-            df_show = df_show[df_show["ticker"].str.upper() == rep_ticker]
-        if filter_action != "Tất cả":
-            df_show = df_show[
-                df_show["action"].str.upper().str.contains(filter_action, na=False)
-            ]
-        if filter_source != "Tất cả":
-            df_show = df_show[df_show["source"] == filter_source]
-
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("📋 Tổng báo cáo", len(df_show))
-        n_buy  = df_show["action"].str.upper().str.contains("MUA|TÍCH LŨY|KHẢ QUAN|BUY", na=False).sum()
-        n_hold = df_show["action"].str.upper().str.contains("GIỮ|HOLD|NEUTRAL", na=False).sum()
-        n_sell = df_show["action"].str.upper().str.contains("BÁN|SELL", na=False).sum()
-        m2.metric("🟢 Mua / Tích lũy", int(n_buy))
-        m3.metric("🟡 Nắm giữ", int(n_hold))
-        m4.metric("🔴 Bán", int(n_sell))
-
-        st.divider()
-
-        if df_show.empty:
-            st.warning("Không có báo cáo nào khớp bộ lọc.")
-        else:
-            st.dataframe(
-                df_show[["date", "ticker", "company", "action",
-                         "buy_price", "target_price", "upside_pct",
-                         "source", "report_url"]],
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "date":         st.column_config.TextColumn("📅 Ngày"),
-                    "ticker":       st.column_config.TextColumn("🏷️ Mã"),
-                    "company":      st.column_config.TextColumn("🏢 CTCK"),
-                    "action":       st.column_config.TextColumn("⚡ Khuyến Nghị"),
-                    "buy_price":    st.column_config.NumberColumn("💰 Giá Khuyến Nghị", format="%d ₫"),
-                    "target_price": st.column_config.NumberColumn("🎯 Giá Mục Tiêu",    format="%d ₫"),
-                    "upside_pct":   st.column_config.NumberColumn("🚀 Upside",          format="%.1f %%"),
-                    "source":       st.column_config.TextColumn("🔗 Nguồn"),
-                    "report_url":   st.column_config.LinkColumn("📥 Báo Cáo", display_text="Xem"),
-                },
-            )
-
-            csv_bytes = df_show.to_csv(index=False).encode("utf-8-sig")
-            st.download_button(
-                label="⬇️ Tải CSV",
-                data=csv_bytes,
-                file_name=f"bao_cao_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-            )
-
-# ==========================================
-# TAB 7: KHUYẾN NGHỊ
+# TAB 5: KHUYẾN NGHỊ
 # ==========================================
 
 with tab_recommendation:
     render_recommendation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift) 
 
 # ========================================== 
-# TAB 8: SCREENER SỨC BẬT 
+# TAB 6: SCREENER SỨC BẬT 
 # ========================================== 
 with tab_suc_bat: 
     render_suc_bat_tab()
 
 # ==========================================
-# TAB 9: QUẢN LÝ GIAO DỊCH (PORTFOLIO MANAGER)
+# TAB 7: QUẢN LÝ GIAO DỊCH (PORTFOLIO MANAGER)
 # ==========================================
 with tab_portfolio:
     render_portfolio_v2_tab(PRIORITY_TICKERS)
