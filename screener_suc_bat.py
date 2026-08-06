@@ -101,38 +101,44 @@ _CSS = """
 #  DATA LAYER — fallback chain VCI → FireAnt → yfinance
 # ─────────────────────────────────────────────────────────────
 
-def _fetch_vnstock(symbol: str, n: int = 120):
-    """Thử vnstock VCI source."""
+# Ngày bắt đầu lấy dữ liệu — cố định từ đầu 01/2022 thay vì chỉ giới hạn
+# ở n phiên gần nhất như trước. Cửa sổ phân tích pha giảm/hồi (mặc định
+# 120 phiên) vẫn được áp dụng ở bước tính chỉ số, trên bộ dữ liệu đầy đủ này.
+_DATA_START = "2022-01-01"
+
+
+def _fetch_vnstock(symbol: str, start: str = _DATA_START):
+    """Thử vnstock VCI source — lấy toàn bộ lịch sử từ `start` (mặc định 01/2022) đến nay."""
     try:
         from vnstock import Vnstock
         end   = datetime.date.today()
-        start = end - datetime.timedelta(days=int(n * 1.7))
         stock = Vnstock().stock(symbol=symbol, source="VCI")
         df = stock.quote.history(
-            start=start.strftime("%Y-%m-%d"),
+            start=start,
             end=end.strftime("%Y-%m-%d"),
             interval="1D",
         )
         if df is not None and len(df) >= 20:
             df.columns = [c.lower() for c in df.columns]
-            return df.tail(n).reset_index(drop=True), "VCI"
+            return df.reset_index(drop=True), "VCI"
     except Exception:
         pass
     return None, None
 
 
-def _fetch_fireant(symbol: str, n: int = 120):
-    """Thử FireAnt undocumented API."""
+def _fetch_fireant(symbol: str, start: str = _DATA_START):
+    """Thử FireAnt undocumented API — lấy toàn bộ lịch sử từ `start` (mặc định 01/2022) đến nay."""
     try:
-        end   = datetime.date.today()
-        start = end - datetime.timedelta(days=int(n * 1.7))
+        end        = datetime.date.today()
+        start_date = datetime.datetime.strptime(start, "%Y-%m-%d").date()
+        span_days  = (end - start_date).days
         url = (
             f"https://api.fireant.vn/symbols/{symbol}/historical-quotes"
-            f"?startDate={start.strftime('%Y-%m-%d')}"
+            f"?startDate={start}"
             f"&endDate={end.strftime('%Y-%m-%d')}"
-            f"&offset=0&limit={n + 20}"
+            f"&offset=0&limit={span_days + 20}"
         )
-        r = requests.get(url, timeout=4,
+        r = requests.get(url, timeout=6,
                          headers={"User-Agent": "Mozilla/5.0"})
         if r.status_code != 200:
             return None, None
@@ -156,18 +162,19 @@ def _fetch_fireant(symbol: str, n: int = 120):
         df = df.dropna(subset=["close"])
         df = df.sort_values("time").reset_index(drop=True)
         if len(df) >= 20:
-            return df.tail(n).reset_index(drop=True), "FireAnt"
+            return df, "FireAnt"
     except Exception:
         pass
     return None, None
 
 
-def _fetch_yfinance(symbol: str, n: int = 120):
-    """Thử yfinance với suffix .VN."""
+def _fetch_yfinance(symbol: str, start: str = _DATA_START):
+    """Thử yfinance với suffix .VN — lấy toàn bộ lịch sử từ `start` (mặc định 01/2022) đến nay."""
     try:
         import yfinance as yf
         ticker = f"{symbol}.VN"
-        df = yf.Ticker(ticker).history(period="8mo")
+        end = datetime.date.today().strftime("%Y-%m-%d")
+        df = yf.Ticker(ticker).history(start=start, end=end)
         if df is None or df.empty:
             return None, None
         df = df.reset_index()
@@ -179,7 +186,7 @@ def _fetch_yfinance(symbol: str, n: int = 120):
                 break
         df["close"]  = pd.to_numeric(df.get("close", 0),  errors="coerce")
         df["volume"] = pd.to_numeric(df.get("volume", 0), errors="coerce").fillna(0)
-        df = df.dropna(subset=["close"]).tail(n).reset_index(drop=True)
+        df = df.dropna(subset=["close"]).reset_index(drop=True)
         if len(df) >= 20:
             return df, "Yahoo"
     except Exception:
@@ -187,19 +194,23 @@ def _fetch_yfinance(symbol: str, n: int = 120):
     return None, None
 
 
-@st.cache_data(ttl=900, show_spinner=False)  # 15 phút — đủ mới cho tra cứu nhanh, tránh gọi lại API mỗi lần gõ
-def fetch_ohlcv(symbol: str, n: int = 120):
+@st.cache_data(ttl=1800, show_spinner=False)  # 30 phút — dữ liệu giờ trải dài từ 2022 (nặng hơn trước) nên cache lâu hơn, tránh tải lại toàn bộ lịch sử mỗi lần gõ
+def fetch_ohlcv(symbol: str, start: str = _DATA_START):
     """
-    Fallback chain: VCI → FireAnt → yfinance
+    Fallback chain: VCI → FireAnt → yfinance.
+    Lấy TOÀN BỘ lịch sử giá từ `start` (mặc định 01/01/2022) đến hiện tại — không còn
+    giới hạn ở n phiên gần nhất như trước. Việc chọn "cửa sổ" bao nhiêu phiên gần nhất
+    để tính pha giảm/hồi (sức bật) giờ do các hàm gọi (compute_metrics, scan_all, ...)
+    tự cắt (df.tail(n)) trên bộ dữ liệu đầy đủ này.
     Returns (df, source_name) hoặc (None, None)
     """
-    df, src = _fetch_vnstock(symbol, n)
+    df, src = _fetch_vnstock(symbol, start)
     if df is not None:
         return df, src
-    df, src = _fetch_fireant(symbol, n)
+    df, src = _fetch_fireant(symbol, start)
     if df is not None:
         return df, src
-    df, src = _fetch_yfinance(symbol, n)
+    df, src = _fetch_yfinance(symbol, start)
     return df, src
 
 
@@ -386,7 +397,7 @@ def _render_lookup_card(symbol: str, company: str, m: dict, source: str):
     st.markdown(f"""
     <div class="lk-card">
       <div class="lk-ticker">{symbol} {src_html}</div>
-      <div class="lk-company">{company or "—"} · 120 phiên</div>
+      <div class="lk-company">{company or "—"} · dữ liệu từ 01/2022 · phân tích 120 phiên gần nhất</div>
       <div class="lk-grid">
         <div class="lk-metric">
           <div class="lk-label">Giá hiện tại</div>
@@ -466,7 +477,7 @@ def render_lookup_section():
             # Lấy giá + tên công ty SONG SONG (trước đây chạy tuần tự, cộng dồn thời
             # gian chờ) — cắt giảm đáng kể độ trễ tra cứu 1 mã.
             with _cf.ThreadPoolExecutor(max_workers=2) as ex:
-                fut_ohlcv = ex.submit(fetch_ohlcv, symbol_input, 120)
+                fut_ohlcv = ex.submit(fetch_ohlcv, symbol_input)
                 fut_name  = ex.submit(fetch_company_name, symbol_input)
                 df, src   = fut_ohlcv.result()
                 company   = fut_name.result()
@@ -475,7 +486,9 @@ def render_lookup_section():
                      "Kiểm tra lại mã hoặc thử lại sau.")
             st.session_state.pop("sb_lookup_result", None)
             return
-        metrics = compute_metrics(df)
+        # Dữ liệu gốc trải dài từ 01/2022 đến nay; pha giảm/hồi (sức bật) vẫn
+        # được xác định trên cửa sổ 120 phiên gần nhất, như thiết kế ban đầu.
+        metrics = compute_metrics(df.tail(120))
         st.session_state["sb_lookup_result"] = {
             "symbol":  symbol_input,
             "company": company,
@@ -563,14 +576,21 @@ def get_all_symbols(exchanges: list) -> list:
 
 
 def _compute_symbol_scan(symbol: str, n_periods: int = 120) -> dict | None:
-    """Tính chỉ số cho 1 mã trong batch scan, dùng fallback chain."""
-    df, src = fetch_ohlcv(symbol, n=n_periods)
+    """Tính chỉ số cho 1 mã trong batch scan, dùng fallback chain.
+
+    fetch_ohlcv giờ luôn trả về toàn bộ lịch sử từ 01/2022 đến nay; cửa sổ
+    `n_periods` (mặc định 120) chỉ dùng để xác định pha giảm/hồi gần nhất.
+    """
+    df, src = fetch_ohlcv(symbol)
     if df is None or len(df) < 20:
         return None
+    df_window = df.tail(n_periods) if n_periods else df
+    if len(df_window) < 20:
+        df_window = df
     try:
-        m = compute_metrics(df)
-        close  = df["close"].values.astype(float)
-        volume = df["volume"].values.astype(float) if "volume" in df.columns else np.ones(len(close))
+        m = compute_metrics(df_window)
+        close  = df_window["close"].values.astype(float)
+        volume = df_window["volume"].values.astype(float) if "volume" in df_window.columns else np.ones(len(close))
 
         # NOTE: sr_levels (vùng KC/HT theo volume profile) chưa được tính ở đây
         # trong bản gốc — để trống nhằm tránh NameError, không phải phần Fibonacci.
@@ -598,10 +618,11 @@ def _compute_symbol_scan(symbol: str, n_periods: int = 120) -> dict | None:
 
 @st.cache_data(ttl=1800)
 def _vnindex_drawdown(n_periods: int = 120) -> float:
-    df, _ = fetch_ohlcv("VNINDEX", n=n_periods)
+    df, _ = fetch_ohlcv("VNINDEX")
     if df is None or df.empty:
         return 0.01
-    close = df["close"].values.astype(float)
+    df_window = df.tail(n_periods) if n_periods else df
+    close = df_window["close"].values.astype(float)
     peak  = close.max()
     now   = close[-1]
     dd    = abs((now - peak) / peak)
@@ -675,7 +696,9 @@ def render_scan_section():
         exchanges = st.multiselect(
             "Sàn giao dịch", ["HOSE", "HNX", "UPCOM"], default=["HOSE"])
     with col2:
-        n_periods = st.selectbox("Số phiên", [60, 120, 180], index=1)
+        n_periods = st.selectbox("Cửa sổ phân tích (phiên)", [60, 120, 180], index=1,
+                                 help="Dữ liệu gốc luôn được tải từ 01/2022 đến nay; "
+                                      "số này chỉ xác định cửa sổ gần nhất dùng để tính pha giảm/hồi.")
     with col3:
         top_n = st.number_input("Hiển thị Top", min_value=10, max_value=200, value=50, step=10)
     with col4:
@@ -686,7 +709,8 @@ def render_scan_section():
         run_btn = st.button("▶ Bắt đầu Scan", use_container_width=True,
                             type="primary", key="sb_scan_btn")
     with col_b:
-        st.caption("⏱️ HOSE ~700 mã ≈ 5–10 phút | HNX+UPCOM thêm ~800 mã. Nên chọn 1 sàn trước.")
+        st.caption("⏱️ Dữ liệu tải từ 01/2022 đến nay · HOSE ~700 mã ≈ 5–10 phút | "
+                   "HNX+UPCOM thêm ~800 mã. Nên chọn 1 sàn trước.")
 
     cache_key = f"suc_bat_df_{','.join(sorted(exchanges))}_{n_periods}"
 
@@ -827,8 +851,8 @@ def render_scan_section():
         mime="text/csv",
     )
     st.caption(
-        f"Dữ liệu: tổng hợp đa nguồn, tự động chọn nguồn nhanh nhất còn hoạt động · "
-        f"{n_periods} phiên · Cập nhật: {datetime.date.today().strftime('%d/%m/%Y')} · "
+        f"Dữ liệu: tổng hợp đa nguồn (từ 01/2022 đến nay), tự động chọn nguồn nhanh nhất còn hoạt động · "
+        f"cửa sổ phân tích {n_periods} phiên gần nhất · Cập nhật: {datetime.date.today().strftime('%d/%m/%Y')} · "
         "Không phải khuyến nghị đầu tư"
     )
 
