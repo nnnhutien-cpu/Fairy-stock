@@ -84,10 +84,12 @@ def _read_from_cache(ticker, days_back):
         rows = resp.data or []
         if not rows:
             return None
-        newest_date = pd.to_datetime(rows[0]["date"]).date()
-        expected_date = get_expected_latest_trading_date()
-        if newest_date < expected_date:
-            return None
+        # ĐÃ SỬA: không còn gate theo "newest_date >= expected_date".
+        # Trước đây hễ Supabase trễ dù chỉ 1 phiên (bot chạy chậm/lỗi) là toàn bộ
+        # request rơi xuống _fetch() sống (vnstock VCI→MSN→Yahoo, có thể mất
+        # vài giây tới cả phút nếu dính _throttle) -> "tải mã" bị chậm hẳn.
+        # Giờ luôn trả cache Supabase ngay lập tức (banner độ trễ + nút "Làm mới"
+        # ở UI đã lo phần cảnh báo/refresh chủ động), giữ load mã ổn định <1s.
         df = pd.DataFrame(rows)
         df = df.rename(columns={"date": "time"})
         return _normalize(df)
