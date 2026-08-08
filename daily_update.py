@@ -1,13 +1,16 @@
 """
-daily_update.py — Phiên bản DNSE API (bỏ Supabase)
+daily_update.py — Phiên bản DNSE API + Supabase
 ====================================================
 Lấy OHLCV ~7 ngày gần nhất từ DNSE Chart API (public, không cần auth)
-cho toàn bộ mã niêm yết, lưu vào data/stock_prices.csv.
+cho toàn bộ mã niêm yết, lưu vào data/stock_prices.csv VÀ đẩy lên Supabase.
 
 GitHub Actions commit file CSV lên repo sau mỗi lần chạy.
-Streamlit đọc CSV từ repo → không cần Supabase, không cần DB.
+Streamlit đọc CSV từ repo → không cần Supabase để hiển thị.
+Supabase dùng để lưu lịch sử / truy vấn qua API nếu cần sau này.
 
 Cách chạy local:
+    export SUPABASE_URL=https://xxxx.supabase.co
+    export SUPABASE_KEY=xxxx
     python daily_update.py
 
 Cách chạy GitHub Actions: xem .github/workflows/daily_update.yml
@@ -21,6 +24,23 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+
+# ── Supabase (tùy chọn — nếu thiếu env thì bỏ qua bước đẩy DB) ────────────────
+try:
+    from supabase import create_client, Client
+except ImportError:
+    create_client = None
+    Client = None
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+sb = None
+if create_client and SUPABASE_URL and SUPABASE_KEY:
+    sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+    print("✅ Supabase client sẵn sàng")
+else:
+    print("⚠️  Thiếu SUPABASE_URL/SUPABASE_KEY hoặc chưa cài package 'supabase' — bỏ qua bước đẩy Supabase.")
 
 # ── Cấu hình ──────────────────────────────────────────────────────────────────
 DAYS_BACK   = 7        # đủ bù nghỉ lễ dài
@@ -43,13 +63,12 @@ def get_all_tickers() -> list[str]:
         resp = requests.get(url, timeout=15)
         if resp.ok:
             data = resp.json()
-            # DNSE trả về list các instrument, lọc loại cổ phiếu (ST)
             tickers = [
                 item["symbol"] for item in data
                 if isinstance(item, dict)
                 and item.get("productGrpId") in ("ST", "STOCK", None)
                 and item.get("symbol")
-                and len(item["symbol"]) <= 5   # loại bỏ mã phái sinh dài
+                and len(item["symbol"]) <= 5
                 and not item["symbol"].startswith("VN30F")
             ]
             if tickers:
@@ -58,7 +77,6 @@ def get_all_tickers() -> list[str]:
     except Exception as e:
         print(f"⚠️  DNSE instruments API lỗi: {e}")
 
-    # Fallback: dùng vnstock nếu cài
     try:
         from vnstock.api.listing import Listing
         for src in ["vci", "kbs"]:
@@ -86,10 +104,7 @@ def get_all_tickers() -> list[str]:
 
 
 def fetch_ohlcv_dnse(symbol: str, start_ts: int, end_ts: int) -> pd.DataFrame:
-    """
-    Lấy OHLCV từ DNSE Chart API (public endpoint, không cần API key).
-    Trả về DataFrame rỗng nếu lỗi.
-    """
+    """Lấy OHLCV từ DNSE Chart API. Trả về DataFrame rỗng nếu lỗi."""
     try:
         resp = requests.get(
             DNSE_BASE,
@@ -145,6 +160,23 @@ def save_csv(df: pd.DataFrame):
     print(f"💾 Đã lưu {len(df):,} dòng → {OUTPUT_CSV}")
 
 
+def upsert_supabase(df: pd.DataFrame, batch_size: int = 500):
+    """Đẩy dữ liệu lên Supabase theo batch, upsert theo (ticker, date)."""
+    if sb is None or df.empty:
+        return
+    records = df.where(pd.notnull(df), None).to_dict(orient="records")
+    total_ok, total_fail = 0, 0
+    for i in range(0, len(records), batch_size):
+        batch = records[i:i + batch_size]
+        try:
+            sb.table("stock_prices").upsert(batch, on_conflict="ticker,date").execute()
+            total_ok += len(batch)
+        except Exception as e:
+            total_fail += len(batch)
+            print(f"⚠️  Lỗi upsert batch {i}-{i+len(batch)}: {e}")
+    print(f"☁️  Supabase: {total_ok:,} dòng OK, {total_fail:,} dòng lỗi")
+
+
 def main():
     tickers = get_all_tickers()
     print(f"\n🚀 Cập nhật {len(tickers)} mã — {DAYS_BACK} ngày gần nhất\n")
@@ -154,7 +186,7 @@ def main():
 
     existing = load_existing()
     new_rows = []
-    ok, fail, skip = 0, 0, 0
+    ok, fail = 0, 0
 
     t0 = time.time()
     for idx, ticker in enumerate(tickers, 1):
@@ -176,7 +208,6 @@ def main():
         print("❌ Không lấy được dữ liệu nào từ DNSE!")
         sys.exit(1)
 
-    # Merge với data cũ (upsert theo ticker+date)
     new_df = pd.concat(new_rows, ignore_index=True)
     if not existing.empty:
         combined = pd.concat([existing, new_df], ignore_index=True)
@@ -184,6 +215,7 @@ def main():
         combined = new_df
 
     save_csv(combined)
+    upsert_supabase(new_df)   # chỉ đẩy dữ liệu MỚI lấy được lần này
 
     elapsed = time.time() - t0
     print(f"\n🎉 Xong: ✅{ok} mã cập nhật | ❌{fail} mã lỗi | ⏱️{elapsed:.0f}s")
