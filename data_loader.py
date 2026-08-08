@@ -14,7 +14,32 @@ try:
     _VNSTOCK_OK = True
 except ImportError:
     _VNSTOCK_OK = False
-
+    
+def _fetch_dnse(symbol, days_back=350):
+    """DNSE Chart API — public, không cần auth, thêm vào trước Yahoo."""
+    import requests
+    from datetime import datetime, timedelta
+    end_ts   = int(datetime.now().timestamp())
+    start_ts = int((datetime.now() - timedelta(days=days_back)).timestamp())
+    try:
+        resp = requests.get(
+            "https://services.entrade.com.vn/chart/history",
+            params={"symbol": symbol.upper(), "resolution": "D",
+                    "from": start_ts, "to": end_ts},
+            timeout=10
+        )
+        data = resp.json()
+        if data.get("s") != "ok" or not data.get("t"):
+            return pd.DataFrame()
+        df = pd.DataFrame({
+            "time":   pd.to_datetime(data["t"], unit="s"),
+            "open":   data["o"], "high": data["h"],
+            "low":    data["l"], "close": data["c"],
+            "volume": data["v"],
+        })
+        return _normalize(df.sort_values("time").reset_index(drop=True))
+    except Exception:
+        return pd.DataFrame()
 # ==========================================================
 # CACHE DÀI HẠN TỪ SUPABASE (DO BOT NỀN BƠM SẴN 1 LẦN/NGÀY)
 # ==========================================================
@@ -160,22 +185,29 @@ def _normalize(df):
 # ==========================================================
 # YAHOO FINANCE (fallback cho dữ liệu daily)
 # ==========================================================
-def _fetch_yahoo(symbol, start, end):
-    try:
-        import yfinance as yf
-        yf_symbol = "^VNINDEX" if symbol == "VNINDEX" else f"{symbol}.VN"
-        df = yf.download(yf_symbol, start=start, end=end, progress=False, auto_adjust=True)
-        if df is None or df.empty:
-            return pd.DataFrame()
-        df = df.reset_index()
-        df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
-        df.columns = [str(c).lower().strip() for c in df.columns]
-        if 'date' in df.columns:
-            df.rename(columns={'date': 'time'}, inplace=True)
-        return _normalize(df)
-    except Exception as e:
-        LAST_ERRORS[f"{symbol}|yahoo"] = str(e)
-        return pd.DataFrame()
+# Sửa hàm _fetch() — thêm DNSE vào trước Yahoo:
+def _fetch(symbol, start, end, interval):
+    sources = ['VCI', 'MSN']
+    for src in sources:
+        try:
+            _throttle()
+            df = Quote(symbol=symbol, source=src).history(
+                start=start, end=end, interval=interval)
+            if df is not None and not df.empty:
+                return _normalize(df)
+        except Exception:
+            continue
+    
+    # ← MỚI: DNSE trước Yahoo (chỉ cho daily, data VN tốt hơn Yahoo)
+    if interval == '1D':
+        days = (datetime.strptime(end, '%Y-%m-%d') - 
+                datetime.strptime(start, '%Y-%m-%d')).days + 10
+        df = _fetch_dnse(symbol, days_back=days)
+        if not df.empty:
+            return df
+        return _fetch_yahoo(symbol, start, end)
+    
+    return pd.DataFrame()
 
 # ==========================================================
 # FETCH DAILY (dùng cho lịch sử dài hạn)
