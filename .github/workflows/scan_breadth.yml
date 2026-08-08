@@ -2,7 +2,10 @@ name: Scan Breadth HOSE
 
 on:
   schedule:
-    - cron: '0,15,30,45 2,3,4,5,6,7,8 * * 1-5'
+    # UTC+7 = ICT. Phiên sáng 9h-11h30, chiều 13h-15h40 ICT
+    # = 2h-4h30 UTC (sáng) + 6h-8h40 UTC (chiều)
+    # Chạy mỗi 15 phút, bao phủ toàn bộ 2 phiên:
+    - cron: '0,15,30,45 2,3,4,6,7,8 * * 1-5'
   workflow_dispatch:
     inputs:
       force:
@@ -21,11 +24,11 @@ jobs:
   scan:
     name: Quét Sức Khỏe Thị Trường HOSE
     runs-on: ubuntu-latest
-    timeout-minutes: 35    # ✅ TĂNG từ 20 → 35 phút
+    timeout-minutes: 35
 
     env:
       TZ: Asia/Ho_Chi_Minh
-      VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}   # ✅ TRUYỀN VÀO TẤT CẢ STEPS
+      VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
       FORCE_SCAN: ${{ github.event.inputs.force }}
 
     steps:
@@ -44,17 +47,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # ✅ THÊM BƯỚC DEBUG: kiểm tra secret có tới runner không
+      # Chỉ cảnh báo nếu thiếu API key, KHÔNG exit 1 — bot vẫn chạy với rate limit thấp hơn
       - name: Debug - Kiểm tra secret
         run: |
           echo "=========================================="
           echo "🔍 KIỂM TRA VNSTOCK_API_KEY"
           echo "=========================================="
           if [ -z "$VNSTOCK_API_KEY" ]; then
-            echo "❌ VNSTOCK_API_KEY TRỐNG"
-            echo "   → Kiểm tra GitHub repo → Settings → Secrets → Actions"
-            echo "   → Đảm bảo có secret tên chính xác: VNSTOCK_API_KEY"
-            exit 1
+            echo "⚠️  VNSTOCK_API_KEY TRỐNG — bot sẽ chạy không có API key (rate limit 18/phút)"
+            echo "   → Nếu muốn tăng tốc: GitHub → Settings → Secrets → Actions → thêm VNSTOCK_API_KEY"
           else
             echo "✅ VNSTOCK_API_KEY đã truyền (dài ${#VNSTOCK_API_KEY} ký tự)"
           fi
@@ -73,7 +74,7 @@ jobs:
             if   { [ "$HOUR" -ge 9  ] && [ "$HOUR" -lt 11 ]; } \
               || { [ "$HOUR" -eq 11 ] && [ "$MIN"  -le 30  ]; } \
               || { [ "$HOUR" -ge 13 ] && [ "$HOUR" -lt 15  ]; } \
-              || { [ "$HOUR" -eq 15 ] && [ "$MIN"  -le 40  ]; }; then
+              || { [ "$HOUR" -eq 15 ] && [ "$MIN"  -le 50  ]; }; then
               RUN=true
             fi
           fi
