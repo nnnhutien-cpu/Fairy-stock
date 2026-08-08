@@ -1,21 +1,6 @@
 # ==================================================================================
 # TAB KHUYẾN NGHỊ MUA / BÁN — Hệ thống "Cô Tiên"
-#
-# Logic khuyến nghị dựa 100% trên:
-#   - 3 đường: Kijun17 / Knife65 / Knife129
-#   - Volume vs MA20 (tỷ lệ và xu hướng tăng/giảm)
-#   - RSI14 (chỉ dùng khi Sideway — đúng triết lý Cô Tiên)
-#   - Vị trí giá so với Knife129 (định giá)
-#   - "Kiệt cung": volume < 50% MA20 (thanh khoản cạn) — dùng để bắt tín hiệu
-#     mua thăm dò / bắt đáy khi giá đã chiết khấu rẻ, dù đang Sideway hay Giảm.
-#
-# Tỷ trọng khuyến nghị:
-#   🟢 MUA MẠNH                        → 30%
-#   🟢 MUA                             → 20%
-#   🔵 MUA THĂM DÒ (Sideway đủ điều kiện) → 10%
-#   🔵 MUA THĂM DÒ (Sideway, 5%)       → 5%  (kiệt cung HOẶC RSI ≤ 32 + giá dưới 129)
-#   🟡 MUA THĂM DÒ (Kiệt Cung, GIẢM)  → 5%
-#   🟡 BẮT ĐÁY CẨN THẬN (Vol Đột Biến)→ 10%
+# (Font đồng bộ với tab Sức Bật — dùng sb-header / lk-card CSS class từ main.py)
 # ==================================================================================
 
 import streamlit as st
@@ -26,56 +11,41 @@ from plotly.subplots import make_subplots
 
 from data_loader import get_data_freshness, get_expected_latest_trading_date
 
-# Ngưỡng "kiệt cung": volume thấp hơn phân nửa (50%) trung bình 20 phiên
 KIET_CUNG_RATIO = 0.5
 
 
 def _compute_recommendation_data(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=52, p_shift=26):
-    """
-    Tính toán đầy đủ dữ liệu kỹ thuật Cô Tiên cho tab Khuyến nghị.
-    Trả về dict chứa: df có đủ cột, latest row, các cờ phân tích.
-    """
     df = df.copy()
     df.columns = [str(c).lower().strip() for c in df.columns]
 
-    # --- Ichimoku cổ điển (dùng vẽ biểu đồ) ---
     df['tenkan'] = (df['high'].rolling(p_tenkan).max() + df['low'].rolling(p_tenkan).min()) / 2
     df['kijun26'] = (df['high'].rolling(p_kijun).max() + df['low'].rolling(p_kijun).min()) / 2
     df['senkou_a'] = ((df['tenkan'] + df['kijun26']) / 2).shift(p_shift)
     df['senkou_b'] = ((df['high'].rolling(p_senkou_b).max() + df['low'].rolling(p_senkou_b).min()) / 2).shift(p_shift)
 
-    # --- Ba đường Cô Tiên ---
     df['kijun17'] = (df['high'].rolling(17).max() + df['low'].rolling(17).min()) / 2
     df['knife65'] = (df['high'].rolling(65).max() + df['low'].rolling(65).min()) / 2
     df['knife129'] = (df['high'].rolling(129).max() + df['low'].rolling(129).min()) / 2
 
-    # Hướng đi (5 phiên)
     df['kijun17_up'] = df['kijun17'] > df['kijun17'].shift(5)
     df['knife65_up'] = df['knife65'] > df['knife65'].shift(5)
     df['knife129_up'] = df['knife129'] > df['knife129'].shift(5)
 
-    # Mây nội bộ Cô Tiên
     df['fmay_top'] = df[['knife65', 'knife129']].max(axis=1)
     df['fmay_bot'] = df[['knife65', 'knife129']].min(axis=1)
 
-    # RSI14
     delta = df['close'].diff()
     gain = delta.clip(lower=0).rolling(14).mean()
     loss = (-delta.clip(upper=0)).rolling(14).mean()
     df['rsi14'] = 100 - (100 / (1 + gain / loss.replace(0, np.nan)))
 
-    # Volume
     df['vol_ma20'] = df['volume'].rolling(20).mean()
-    # Xu hướng vol_ma20 (3 phiên — tăng dần hay giảm dần)
     df['vol_ma20_trend'] = df['vol_ma20'] - df['vol_ma20'].shift(3)
-
-    # Khoảng cách giá vs Knife129
     df['pct_vs_129'] = (df['close'] - df['knife129']) / df['knife129'] * 100
 
     latest = df.iloc[-1]
     close = latest['close']
 
-    # --- Xu hướng tổng ---
     knife_core_up = (
         latest['knife65'] > latest['knife129']
         and bool(latest['knife65_up'])
@@ -110,13 +80,8 @@ def _compute_recommendation_data(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=
     pct_vs_129 = latest['pct_vs_129']
     v_ratio = latest['volume'] / latest['vol_ma20'] if latest['vol_ma20'] > 0 else 0
     rsi = latest['rsi14']
-    vol_ma20_trend = latest['vol_ma20_trend']  # > 0 = vol đang nhích lên
-
-    # "Kiệt cung": volume hiện tại thấp hơn phân nửa trung bình 20 phiên
+    vol_ma20_trend = latest['vol_ma20_trend']
     kiet_cung = v_ratio < KIET_CUNG_RATIO
-
-    # --- LOGIC KHUYẾN NGHỊ CÔ TIÊN ---
-    # Ưu tiên từ mạnh -> yếu
 
     ly_do = []
 
@@ -140,7 +105,6 @@ def _compute_recommendation_data(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=
         vol_nhich_len = vol_ma20_trend > 0
         gia_duoi_129 = pct_vs_129 <= 0
 
-        # Điều kiện đầy đủ nhất: kiệt cung + RSI thấp + vol MA20 nhích lên + giá dưới 129
         if kiet_cung and rsi_qua_ban and vol_nhich_len and gia_duoi_129:
             khuyen_nghi = "🔵 MUA THĂM DÒ (10%)"
             mo_ta = "Sideway vùng đáy: thanh khoản kiệt (<50% MA20), RSI thấp, vol MA20 đang nhích lên — dấu hiệu cạn cung. Giải ngân 10% vốn."
@@ -148,8 +112,6 @@ def _compute_recommendation_data(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=
             ly_do.append(f"📉 RSI = {rsi:.1f} → vùng quá bán")
             ly_do.append(f"📈 Vol MA20 đang nhích lên (+{vol_ma20_trend:,.0f} cp) → tích lũy")
             ly_do.append(f"💰 Giá dưới Knife129 {abs(pct_vs_129):.1f}% → chiết khấu")
-
-        # Chỉ cần 1 trong 2: kiệt cung HOẶC RSI ≤ 32, kết hợp giá dưới Knife129
         elif (kiet_cung or rsi_qua_ban) and gia_duoi_129:
             khuyen_nghi = "🔵 MUA THĂM DÒ (5%)"
             if kiet_cung and not rsi_qua_ban:
@@ -165,7 +127,6 @@ def _compute_recommendation_data(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=
                 ly_do.append(f"📊 Vol chỉ {v_ratio:.2f}x MA20 (< {KIET_CUNG_RATIO:.0%}) → kiệt cung")
                 ly_do.append(f"📉 RSI = {rsi:.1f} → quá bán")
                 ly_do.append(f"💰 Giá dưới Knife129 {abs(pct_vs_129):.1f}% → chiết khấu")
-
         elif pd.notna(rsi) and rsi >= 68:
             khuyen_nghi = "🔴 BÁN MỘT PHẦN"
             mo_ta = "Sideway nhưng RSI tiệm cận vùng quá mua. Chốt một phần nếu đang có lợi nhuận."
@@ -193,7 +154,6 @@ def _compute_recommendation_data(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=
             khuyen_nghi = "🔴 BÁN / TRÁNH"
             mo_ta = "Xu hướng giảm rõ ràng. Không nên giữ hoặc mua mới."
 
-    # Bổ sung cảnh báo tạo đỉnh
     near_high = close >= df['close'].rolling(20).max().iloc[-1] * 0.97
     if near_high and v_ratio < 0.7 and xu_huong == "TANG":
         ly_do.append("⚠️ Giá gần đỉnh 20 phiên nhưng vol yếu → cảnh báo tạo đỉnh, tránh mua đuổi")
@@ -218,12 +178,13 @@ def _compute_recommendation_data(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=
 
 
 def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senkou_b=52, p_shift=26):
-    """
-    Render tab Khuyến Nghị MUA/BÁN.
-    Gọi từ main.py: render_recommendation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift)
-    """
-    st.subheader("🎯 Khuyến Nghị MUA / BÁN — Hệ Thống Cô Tiên")
-    st.caption("Phân tích dựa trên Kijun17 / Knife65 / Knife129 + Volume MA20 + RSI14 (Sideway) + Kiệt Cung (<50% MA20)")
+    # ── Header đồng bộ font với tab Sức Bật ──────────────────────────────────
+    st.markdown("""
+    <div class="sb-header">
+        <div class="sb-title">💡 Khuyến Nghị MUA / BÁN — Hệ Thống Cô Tiên</div>
+        <div class="sb-sub">Phân tích dựa trên Kijun17 / Knife65 / Knife129 + Volume MA20 + RSI14 (Sideway) + Kiệt Cung (&lt;50% MA20)</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     col_input, col_btn, col_refresh = st.columns([3, 1, 1])
     with col_input:
@@ -261,7 +222,7 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
         st.info(f"Bấm **PHÂN TÍCH** để xem khuyến nghị cho **{rec_ticker}**.")
         return
 
-    # Load dữ liệu (cache session)
+    # Load dữ liệu (cache session — không gọi lại API nếu đã có)
     if run_btn or refresh_btn or f"rec_data_{rec_ticker}" not in st.session_state:
         with st.spinner(f"Đang tải dữ liệu {rec_ticker}..."):
             df_raw = get_stock_data_fn(rec_ticker, days_back=300)
@@ -289,7 +250,7 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
     kiet_cung = result.get("kiet_cung", False)
     xu_huong_label = {"TANG": "🟢 Xu hướng TĂNG", "GIAM": "🔴 Xu hướng GIẢM", "SIDEWAY": "🟡 SIDEWAY"}.get(result["xu_huong"], "—")
 
-    # --- CẢNH BÁO DỮ LIỆU BỊ CHẬM ---
+    # Cảnh báo dữ liệu chậm
     freshness = get_data_freshness(df)
     if freshness["is_stale"] and freshness["latest_date"] is not None:
         lag = freshness["lag_days"]
@@ -301,10 +262,9 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
             "có thể chưa phản ánh đúng phiên gần nhất."
         )
 
-    # --- PANEL KHUYẾN NGHỊ ---
     st.divider()
 
-    # Màu background theo khuyến nghị
+    # ── Panel khuyến nghị (dùng lk-card class đồng bộ CSS) ──────────────────
     color_map = {
         "MUA MẠNH": "#00C853",
         "MUA THĂM DÒ": "#29B6F6",
@@ -323,19 +283,13 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
             break
 
     st.markdown(f"""
-    <div style="
-        background: linear-gradient(135deg, {kn_color}22, {kn_color}11);
-        border: 2px solid {kn_color};
-        border-radius: 16px;
-        padding: 20px 24px;
-        margin-bottom: 16px;
-    ">
-        <div style="font-size: 2rem; font-weight: 800; color: {kn_color};">{khuyen_nghi}</div>
-        <div style="font-size: 1rem; color: #dcd6ec; margin-top: 6px;">{mo_ta}</div>
+    <div class="lk-card" style="border-color:{kn_color}40;">
+        <div style="font-size:1.8rem;font-weight:800;color:{kn_color};">{khuyen_nghi}</div>
+        <div style="font-size:0.95rem;color:#dcd6ec;margin-top:8px;">{mo_ta}</div>
     </div>
     """, unsafe_allow_html=True)
 
-    # --- SỐ LIỆU NHANH ---
+    # ── Số liệu nhanh ────────────────────────────────────────────────────────
     col1, col2, col3, col4 = st.columns(4)
     col1.metric(
         "📅 Ngày dữ liệu",
@@ -358,15 +312,14 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
     col7.metric("📈 Vol MA20 (trend)", "⬆️ Nhích lên" if vol_ma20_trend > 0 else "⬇️ Giảm dần")
     col8.metric("🏹 Knife129", f"{latest['knife129']:,.2f}")
 
-    # --- LÝ DO CHI TIẾT ---
     if ly_do:
-        st.markdown("**📋 Các tín hiệu chính:**")
+        st.markdown('<div class="lk-section">📋 Các tín hiệu chính</div>', unsafe_allow_html=True)
         for ld in ly_do:
             st.markdown(f"- {ld}")
 
-    # --- BẢNG 3 ĐƯỜNG ---
+    # ── 3 Đường định giá ─────────────────────────────────────────────────────
     st.divider()
-    st.markdown("**📐 3 Đường Định Giá Cô Tiên:**")
+    st.markdown('<div class="lk-section">📐 3 Đường Định Giá Cô Tiên</div>', unsafe_allow_html=True)
     d3_col1, d3_col2, d3_col3 = st.columns(3)
     d3_col1.metric("Kijun17 (nhanh)", f"{latest['kijun17']:,.2f}",
                    "⬆️ Đang lên" if latest['kijun17_up'] else "⬇️ Đang xuống")
@@ -375,9 +328,9 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
     d3_col3.metric("Knife129 (quan trọng nhất)", f"{latest['knife129']:,.2f}",
                    "⬆️ Đang lên" if latest['knife129_up'] else "⬇️ Đang xuống")
 
-    # --- BIỂU ĐỒ ---
+    # ── Biểu đồ ──────────────────────────────────────────────────────────────
     st.divider()
-    st.markdown(f"**📊 Biểu Đồ Phân Tích: {ticker} (100 phiên gần nhất)**")
+    st.markdown(f'<div class="lk-section">📊 Biểu Đồ Phân Tích: {ticker} (100 phiên gần nhất)</div>', unsafe_allow_html=True)
 
     plot_df = df.tail(120).copy()
     if 'time' in plot_df.columns:
@@ -392,7 +345,6 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
         subplot_titles=["Giá & 3 Đường Cô Tiên", "Volume vs MA20", "RSI14"]
     )
 
-    # Nến giá
     fig.add_trace(go.Candlestick(
         x=plot_df.index,
         open=plot_df['open'], high=plot_df['high'],
@@ -401,7 +353,6 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
         name='Giá', showlegend=False
     ), row=1, col=1)
 
-    # Mây Ichimoku cổ điển (mờ)
     fig.add_trace(go.Scatter(
         x=plot_df.index, y=plot_df['senkou_a'],
         line=dict(color='rgba(0,200,83,0.3)', width=1), name='Senkou A', showlegend=False
@@ -412,7 +363,6 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
         fill='tonexty', fillcolor='rgba(128,128,128,0.1)', name='Mây Kumo', showlegend=True
     ), row=1, col=1)
 
-    # 3 đường Cô Tiên
     fig.add_trace(go.Scatter(
         x=plot_df.index, y=plot_df['kijun17'],
         line=dict(color='#29B6F6', width=1.5, dash='dot'), name='Kijun17'
@@ -426,7 +376,6 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
         line=dict(color='#EF5350', width=2.5), name='Knife129 ★'
     ), row=1, col=1)
 
-    # Volume + MA20
     vol_colors = ['#00C853' if plot_df['close'].iloc[i] >= plot_df['open'].iloc[i] else '#FF1744'
                   for i in range(len(plot_df))]
     fig.add_trace(go.Bar(
@@ -437,14 +386,12 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
         x=plot_df.index, y=plot_df['vol_ma20'],
         line=dict(color='#FF6D00', width=2, shape='spline'), name='Vol MA20'
     ), row=2, col=1)
-    # Đường 50% MA20 để trực quan hoá ngưỡng "kiệt cung"
     fig.add_trace(go.Scatter(
         x=plot_df.index, y=plot_df['vol_ma20'] * KIET_CUNG_RATIO,
         line=dict(color='rgba(255,255,255,0.4)', width=1, dash='dot'),
         name=f'{KIET_CUNG_RATIO:.0%} MA20 (Kiệt cung)'
     ), row=2, col=1)
 
-    # RSI14 + vùng quá mua/quá bán
     fig.add_trace(go.Scatter(
         x=plot_df.index, y=plot_df['rsi14'],
         line=dict(color='#CE93D8', width=1.5), name='RSI14'
@@ -458,16 +405,14 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
         margin=dict(l=10, r=10, t=40, b=10),
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='#dcd6ec'),
+        font=dict(color='#dcd6ec', family='Sora, sans-serif'),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         xaxis_rangeslider_visible=False,
         dragmode='pan',
     )
     fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
-
     st.plotly_chart(fig, use_container_width=True)
 
-    # --- HƯỚNG DẪN ĐỌC ---
     with st.expander("📖 Hướng dẫn đọc khuyến nghị Cô Tiên"):
         st.markdown(f"""
 **Cách hệ thống ra quyết định:**
@@ -485,15 +430,8 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
 | 🔴 **BÁN MỘT PHẦN** | RSI tiệm cận quá mua trong Sideway, hoặc cảnh báo tạo đỉnh | — |
 | 🔴 **BÁN / TRÁNH** | Xu hướng GIẢM rõ ràng, không có tín hiệu kiệt cung hay bắt đáy | — |
 
-**Kiệt cung là gì?**
-- Volume phiên hiện tại **thấp hơn 50% (phân nửa) trung bình 20 phiên (MA20)**.
-- Ý nghĩa: cả bên mua lẫn bên bán đều "án binh bất động" — đặc biệt khi giá đã chiết khấu (rẻ so Knife129), khả năng cao bên bán đã cạn lực bán ra, chờ lực cầu quay lại.
-- Đây **không phải tín hiệu chắc chắn** đảo chiều — chỉ là dấu hiệu để **thăm dò tỷ trọng nhỏ**, cần theo dõi thêm vol MA20 có nhích lên (dòng tiền quay lại) hay không.
-
 **Knife129 là đường quan trọng nhất:**
 - Giá dưới Knife129 → vùng chiết khấu, xem xét mua
 - Giá vượt Knife129 + 15% → cảnh báo mua đuổi
 - Giá cắt xuống Knife129 → tín hiệu kết thúc xu hướng tăng
-
-**RSI14 chỉ dùng khi SIDEWAY** — đúng theo triết lý Cô Tiên.
         """)
