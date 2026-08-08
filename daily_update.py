@@ -37,7 +37,10 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     sys.exit(1)
 
 sb = create_client(SUPABASE_URL, SUPABASE_KEY)
-
+# Thêm ngay sau dòng "sb = create_client(SUPABASE_URL, SUPABASE_KEY)"
+print(f"DEBUG URL: '{SUPABASE_URL}'")
+print(f"DEBUG URL length: {len(SUPABASE_URL)}")
+print(f"DEBUG URL repr: {repr(SUPABASE_URL)}")
 _call_timestamps = []
 
 
