@@ -1,19 +1,15 @@
 name: 🤖 Daily Update (DNSE API)
-
 on:
   schedule:
     # 17:30 giờ VN = 10:30 UTC, thứ 2-6
     - cron: "30 10 * * 1-5"
   workflow_dispatch:   # chạy thủ công từ GitHub UI
-
 jobs:
   update:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     permissions:
       contents: write   # cần để commit CSV lên repo
-
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v4
@@ -25,9 +21,12 @@ jobs:
           cache: pip
 
       - name: 📦 Install dependencies
-        run: pip install requests pandas
+        run: pip install requests pandas supabase
 
       - name: 🚀 Run daily update (DNSE API)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: python daily_update.py
 
       - name: 💾 Commit CSV lên repo
