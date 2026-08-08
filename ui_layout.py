@@ -35,8 +35,14 @@ def render_sidebar():
 
 def render_market_tab(chart_df, df_today):
     """Render biểu đồ volume intraday — P/E và 4 cột phân tích do main.py xử lý."""
+    # Header đồng bộ font với tab Sức Bật (dùng class sb-header từ main.py)
+    st.markdown("""
+    <div class="sb-header">
+        <div class="sb-title">💓 Nhịp Đập Thị Trường</div>
+        <div class="sb-sub">Thanh khoản intraday so sánh hôm nay vs hôm qua</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.subheader("Nhịp Đập Thị Trường")
     if chart_df is not None and not chart_df.empty:
         st.line_chart(chart_df, color=["#8b7fb5", "#34d399"], height=380)
         st.caption("🟣 Hôm qua (tham chiếu) · 🟢 Hôm nay (real-time)")
@@ -60,7 +66,15 @@ def render_screener_results(results_df, signal_filter):
     if df.empty:
         st.info("Chưa có dữ liệu.")
         return
-    st.caption(f"📊 Tìm thấy {len(df)} mã khớp bộ lọc.")
+
+    st.markdown(f"""
+    <div class="sb-stat-row">
+        <div class="sb-stat">
+            <div class="sb-stat-label">Mã khớp bộ lọc</div>
+            <div class="sb-stat-value">{len(df)}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     def pick(cols):
         return [c for c in cols if c in df.columns]
@@ -94,7 +108,11 @@ def render_screener_signals(results_df, signal_filter):
     if df.empty:
         st.info("Chưa có dữ liệu. Sang tab 🔍 Bộ Lọc để quét trước.")
         return
-    st.caption(f"📡 {len(df)} mã — tín hiệu RSI/MFI chỉ có ý nghĩa mua/bán khi mã đang ở trạng thái Sideway.")
+    st.markdown(f"""
+    <div class="sb-note">
+        📡 <b>{len(df)} mã</b> — tín hiệu RSI/MFI chỉ có ý nghĩa mua/bán khi mã đang ở trạng thái Sideway.
+    </div>
+    """, unsafe_allow_html=True)
     cols = [c for c in [
         "Mã CP", "Giá", "Xu Hướng", "Cảnh Báo Tạo Đỉnh",
         "Tín Hiệu Bắt Đáy", "RSI14", "MFI14", "Tín Hiệu Sideway (MFI/RSI)",
