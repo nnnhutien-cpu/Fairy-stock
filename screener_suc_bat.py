@@ -98,36 +98,71 @@ _CSS = """
 """
 
 # ─────────────────────────────────────────────────────────────
-#  DATA LAYER — fallback chain VCI → FireAnt → yfinance
+#  DATA LAYER — fallback chain DNSE → FireAnt → VCI → yfinance
 # ─────────────────────────────────────────────────────────────
+# DNSE đứng đầu vì hoạt động tốt nhất trên Streamlit Cloud (không bị IP block,
+# không cần auth, trả JSON nhanh ~1-2s). VCI/vnstock thường bị rate-limit hoặc
+# raise exception ngay → gây lỗi "0.0s" khi race timeout bị tính sai.
 
-# Ngày bắt đầu lấy dữ liệu — cố định từ đầu 01/2022 đến nay. Pha giảm/hồi
-# (sức bật) được tính trên TOÀN BỘ dữ liệu này, không còn cắt về n phiên
-# gần nhất như trước — pha có thể trải dài nhiều năm nếu dữ liệu cho thấy vậy.
 _DATA_START = "2022-01-01"
 
 
-def _fetch_vnstock(symbol: str, start: str = _DATA_START):
-    """Thử vnstock VCI source — lấy toàn bộ lịch sử từ `start` (mặc định 01/2022) đến nay."""
+_BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+}
+
+
+def _fetch_dnse(symbol: str, start: str = _DATA_START):
+    """DNSE public chart API — thường hoạt động tốt trên Streamlit Cloud."""
     try:
-        from vnstock import Vnstock
-        end   = datetime.date.today()
-        stock = Vnstock().stock(symbol=symbol, source="VCI")
-        df = stock.quote.history(
-            start=start,
-            end=end.strftime("%Y-%m-%d"),
-            interval="1D",
+        end        = datetime.date.today()
+        start_date = datetime.datetime.strptime(start, "%Y-%m-%d").date()
+        ts_from = int(datetime.datetime.combine(start_date, datetime.time()).timestamp())
+        ts_to   = int(datetime.datetime.combine(end, datetime.time(23, 59, 59)).timestamp())
+        url = (
+            f"https://services.entrade.com.vn/chart-api/v2/ohlcs/stock"
+            f"?from={ts_from}&to={ts_to}&symbol={symbol}&resolution=D"
         )
-        if df is not None and len(df) >= 20:
-            df.columns = [c.lower() for c in df.columns]
-            return df.reset_index(drop=True), "VCI"
+        hdrs = {**_BROWSER_HEADERS, "Referer": "https://dstock.dnse.com.vn/",
+                "Origin": "https://dstock.dnse.com.vn"}
+        r = requests.get(url, timeout=8, headers=hdrs)
+        if r.status_code != 200:
+            return None, None
+        raw = r.json()
+        if not raw or "t" not in raw or len(raw["t"]) < 20:
+            return None, None
+        df = pd.DataFrame({
+            "time":   pd.to_datetime(raw["t"], unit="s", utc=True)
+                        .tz_convert("Asia/Ho_Chi_Minh").dt.date,
+            "open":   raw.get("o", raw["c"]),
+            "high":   raw.get("h", raw["c"]),
+            "low":    raw.get("l", raw["c"]),
+            "close":  raw["c"],
+            "volume": raw.get("v", [0] * len(raw["t"])),
+        })
+        df["close"]  = pd.to_numeric(df["close"],  errors="coerce")
+        df["volume"] = pd.to_numeric(df["volume"], errors="coerce").fillna(0)
+        df = df.dropna(subset=["close"]).sort_values("time").reset_index(drop=True)
+        # DNSE có thể trả giá thực (VD: 24500) hoặc rút gọn (24.5) tuỳ endpoint
+        # Chuẩn hoá: nếu median < 1000 thì nhân 1000 (đơn vị VNĐ × 1000)
+        if df["close"].median() < 1000:
+            for col in ("open", "high", "low", "close"):
+                df[col] = df[col] * 1000
+        if len(df) >= 20:
+            return df, "DNSE"
     except Exception:
         pass
     return None, None
 
 
 def _fetch_fireant(symbol: str, start: str = _DATA_START):
-    """Thử FireAnt undocumented API — lấy toàn bộ lịch sử từ `start` (mặc định 01/2022) đến nay."""
+    """FireAnt API với browser headers — tăng khả năng qua được Cloudflare."""
     try:
         end        = datetime.date.today()
         start_date = datetime.datetime.strptime(start, "%Y-%m-%d").date()
@@ -138,29 +173,28 @@ def _fetch_fireant(symbol: str, start: str = _DATA_START):
             f"&endDate={end.strftime('%Y-%m-%d')}"
             f"&offset=0&limit={span_days + 20}"
         )
-        r = requests.get(url, timeout=6,
-                         headers={"User-Agent": "Mozilla/5.0"})
+        hdrs = {**_BROWSER_HEADERS, "Referer": "https://fireant.vn/",
+                "Origin": "https://fireant.vn"}
+        r = requests.get(url, timeout=8, headers=hdrs)
         if r.status_code != 200:
             return None, None
         raw = r.json()
         if not raw:
             return None, None
         df = pd.DataFrame(raw)
-        # FireAnt trả về: date, open, high, low, close, volume, dealVolume, priceAverage
         rename = {}
         for col in df.columns:
             lc = col.lower()
-            if lc == "date":             rename[col] = "time"
-            elif lc == "open":           rename[col] = "open"
-            elif lc == "high":           rename[col] = "high"
-            elif lc == "low":            rename[col] = "low"
-            elif lc == "close":          rename[col] = "close"
-            elif lc in ("volume", "totalvolume"): rename[col] = "volume"
+            if lc == "date":                       rename[col] = "time"
+            elif lc == "open":                     rename[col] = "open"
+            elif lc == "high":                     rename[col] = "high"
+            elif lc == "low":                      rename[col] = "low"
+            elif lc == "close":                    rename[col] = "close"
+            elif lc in ("volume", "totalvolume"):  rename[col] = "volume"
         df.rename(columns=rename, inplace=True)
-        df["close"] = pd.to_numeric(df.get("close", 0), errors="coerce")
+        df["close"]  = pd.to_numeric(df.get("close", 0),  errors="coerce")
         df["volume"] = pd.to_numeric(df.get("volume", 0), errors="coerce").fillna(0)
-        df = df.dropna(subset=["close"])
-        df = df.sort_values("time").reset_index(drop=True)
+        df = df.dropna(subset=["close"]).sort_values("time").reset_index(drop=True)
         if len(df) >= 20:
             return df, "FireAnt"
     except Exception:
@@ -168,8 +202,24 @@ def _fetch_fireant(symbol: str, start: str = _DATA_START):
     return None, None
 
 
+def _fetch_vnstock(symbol: str, start: str = _DATA_START):
+    """vnstock — thử TCBS trước (ít bị block hơn VCI trên Streamlit Cloud), rồi VCI."""
+    end = datetime.date.today().strftime("%Y-%m-%d")
+    for source in ("TCBS", "VCI"):
+        try:
+            from vnstock import Vnstock
+            stock = Vnstock().stock(symbol=symbol, source=source)
+            df = stock.quote.history(start=start, end=end, interval="1D")
+            if df is not None and len(df) >= 20:
+                df.columns = [c.lower() for c in df.columns]
+                return df.reset_index(drop=True), source
+        except Exception:
+            continue
+    return None, None
+
+
 def _fetch_yfinance(symbol: str, start: str = _DATA_START):
-    """Thử yfinance với suffix .VN — lấy toàn bộ lịch sử từ `start` (mặc định 01/2022) đến nay."""
+    """yfinance với suffix .VN — fallback cuối cùng."""
     try:
         import yfinance as yf
         ticker = f"{symbol}.VN"
@@ -179,7 +229,6 @@ def _fetch_yfinance(symbol: str, start: str = _DATA_START):
             return None, None
         df = df.reset_index()
         df.columns = [c.lower() for c in df.columns]
-        # yfinance trả về: date, open, high, low, close, volume
         for col in df.columns:
             if "date" in col.lower():
                 df.rename(columns={col: "time"}, inplace=True)
@@ -194,67 +243,54 @@ def _fetch_yfinance(symbol: str, start: str = _DATA_START):
     return None, None
 
 
-@st.cache_data(ttl=1800, show_spinner=False)  # 30 phút — dữ liệu giờ trải dài từ 2022 (nặng hơn trước) nên cache lâu hơn, tránh tải lại toàn bộ lịch sử mỗi lần gõ
+@st.cache_data(ttl=1800, show_spinner=False)
 def fetch_ohlcv(symbol: str, start: str = _DATA_START):
     """
-    Fallback chain TUẦN TỰ: VCI → FireAnt → yfinance.
-    Dùng cho SCAN TOÀN THỊ TRƯỜNG (hàng trăm mã) — cố tình chạy tuần tự,
-    không đua song song, để không gửi 3x số request cùng lúc tới mỗi nguồn
-    (dễ bị rate-limit/chặn khi quét cả sàn). Cho tra cứu 1 mã, dùng
-    fetch_ohlcv_fast() bên dưới — nhanh hơn nhiều vì đua 3 nguồn cùng lúc.
-    Lấy TOÀN BỘ lịch sử giá từ `start` (mặc định 01/01/2022) đến hiện tại.
-    Returns (df, source_name) hoặc (None, None)
+    Fallback chain TUẦN TỰ: DNSE → FireAnt → VCI → yfinance.
+    Dùng cho SCAN TOÀN THỊ TRƯỜNG — chạy tuần tự để tránh 4x request cùng lúc.
+    Returns (df, source_name) hoặc (None, None).
     """
-    df, src = _fetch_vnstock(symbol, start)
-    if df is not None:
-        return df, src
-    df, src = _fetch_fireant(symbol, start)
-    if df is not None:
-        return df, src
-    df, src = _fetch_yfinance(symbol, start)
-    return df, src
+    for fn in (_fetch_dnse, _fetch_fireant, _fetch_vnstock, _fetch_yfinance):
+        df, src = fn(symbol, start)
+        if df is not None:
+            return df, src
+    return None, None
 
 
-def _fetch_ohlcv_race(symbol: str, start: str = _DATA_START, race_timeout: float = 3.0):
-    """Đua song song CẢ 3 nguồn (VCI, FireAnt, yfinance) cùng lúc, lấy kết quả
-    của nguồn nào về ĐẦU TIÊN và hợp lệ — thay vì đợi lần lượt từng nguồn.
+def _fetch_ohlcv_race(symbol: str, start: str = _DATA_START, race_timeout: float = 12.0):
+    """Đua song song DNSE → FireAnt → VCI → yfinance, lấy nguồn về đầu tiên.
 
-    Trước đây gọi tuần tự: nếu VCI timeout mới thử FireAnt, FireAnt lỗi mới thử
-    yfinance -> tệ nhất phải cộng dồn thời gian chờ của cả 3 nguồn. Giờ bắn cả
-    3 request cùng lúc trên 3 luồng riêng, trả kết quả ngay khi nguồn nhanh
-    nhất xong (thường 1-2s) — không đợi 2 nguồn còn lại nữa.
+    BUG CŨ: race_timeout=3.0s quá ngắn; VCI/vnstock raise exception ngay lập tức
+    (không phải timeout thật) → as_completed trả về ngay → elapsed ≈ 0.0s →
+    lỗi "không lấy được dữ liệu sau 0.0s". Fix: tăng timeout + DNSE làm nguồn đầu.
 
-    Chỉ dùng cho TRA CỨU 1 MÃ (ít request, không lo rate-limit); scan toàn thị
-    trường vẫn dùng fetch_ohlcv() tuần tự ở trên để tránh gửi 3x request.
+    Chỉ dùng cho TRA CỨU 1 MÃ. Scan toàn thị trường dùng fetch_ohlcv() tuần tự.
     """
-    fetchers = (_fetch_vnstock, _fetch_fireant, _fetch_yfinance)
-    ex = _cf.ThreadPoolExecutor(max_workers=3)
-    futures = [ex.submit(fn, symbol, start) for fn in fetchers]
+    fetchers = (_fetch_dnse, _fetch_fireant, _fetch_vnstock, _fetch_yfinance)
     result = (None, None)
-    try:
-        for fut in _cf.as_completed(futures, timeout=race_timeout):
-            try:
-                df, src = fut.result()
-            except Exception:
-                continue
-            if df is not None and len(df) >= 20:
-                result = (df, src)
-                break
-    except _cf.TimeoutError:
-        pass  # không nguồn nào kịp trả lời trong race_timeout giây
-    finally:
-        # wait=False: không đợi các luồng còn lại (VCI/yfinance có thể vẫn
-        # đang chạy nền) — trả kết quả ngay cho người dùng, không bị nguồn
-        # chậm nhất kéo lùi tốc độ phản hồi.
-        ex.shutdown(wait=False)
+    # Dùng context manager để executor được cleanup đúng cách
+    with _cf.ThreadPoolExecutor(max_workers=4) as ex:
+        futures = {ex.submit(fn, symbol, start): fn.__name__ for fn in fetchers}
+        try:
+            for fut in _cf.as_completed(futures, timeout=race_timeout):
+                try:
+                    df, src = fut.result()
+                except Exception:
+                    continue
+                if df is not None and len(df) >= 20:
+                    result = (df, src)
+                    # Cancel các futures chưa chạy xong (best-effort)
+                    for f in futures:
+                        f.cancel()
+                    break
+        except _cf.TimeoutError:
+            pass  # không nguồn nào kịp trả lời trong race_timeout giây
     return result
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def fetch_ohlcv_fast(symbol: str, start: str = _DATA_START):
-    """Bản nhanh của fetch_ohlcv — dùng cho tra cứu 1 mã, đua 3 nguồn song song.
-    Cùng cache key/TTL với fetch_ohlcv nên nếu mã đã được scan toàn thị trường
-    tra trước đó thì lần tra cứu riêng vẫn có thể đã có sẵn trong cache."""
+    """Bản nhanh — tra cứu 1 mã, đua 4 nguồn song song (DNSE ưu tiên)."""
     return _fetch_ohlcv_race(symbol, start)
 
 
@@ -343,14 +379,14 @@ def compute_metrics(df) -> dict:
 # ─────────────────────────────────────────────────────────────
 
 _SRC_BADGE = {
+    "DNSE":    '<span class="src-badge" style="background:#1a2a1a;color:#69db7c;">DNSE</span>',
     "VCI":     '<span class="src-badge src-vci">vnstock VCI</span>',
     "FireAnt": '<span class="src-badge src-fireant">FireAnt</span>',
     "Yahoo":   '<span class="src-badge src-yahoo">Nguồn dự phòng</span>',
 }
 
-# Nhãn hiển thị "sạch" cho cột Nguồn trong bảng scan — không lộ tên nhà cung
-# cấp dự phòng (Yahoo) ra ngoài, dù bên trong vẫn đang dùng nguồn đó.
 _SRC_DISPLAY_MAP = {
+    "DNSE":    "DNSE",
     "VCI":     "VCI",
     "FireAnt": "FireAnt",
     "Yahoo":   "Dự phòng",
