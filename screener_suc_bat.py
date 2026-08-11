@@ -9,7 +9,7 @@ Lý thuyết Sức bật:
   • Sức bật  = (Độ giãn% / Số phiên giảm) × 10
               → Giảm 30% trong 15 phiên >>> giảm 30% trong 60 phiên
               → VIX, GEX, VRE bật nhanh hơn CTG, TCB cùng pha vì nén nhanh hơn
-  • Độ giãn  = % drawdown từ đỉnh pha → đáy pha (toàn bộ lịch sử từ 01/2022 đến nay)
+  • Độ giãn  = % drawdown từ đỉnh pha → đáy pha (biến động ngắn hạn từ 01/2025 đến nay)
 
 Tích hợp vào main.py:
     from screener_suc_bat import render_suc_bat_tab
@@ -104,7 +104,11 @@ _CSS = """
 # không cần auth, trả JSON nhanh ~1-2s). VCI/vnstock thường bị rate-limit hoặc
 # raise exception ngay → gây lỗi "0.0s" khi race timeout bị tính sai.
 
-_DATA_START = "2022-01-01"
+# THAY ĐỔI: 2022-01-01 → 2025-01-01.
+# Lý do: công cụ này giờ đo BIẾN ĐỘNG NGẮN HẠN (pha tăng/giảm 2025-2026),
+# không còn đo mức hồi phục từ đáy vĩ mô 2022. Cắt bớt dữ liệu cũ cũng giúp
+# tải nhanh hơn và giảm khả năng timeout/rate-limit khi scan toàn thị trường.
+_DATA_START = "2025-01-01"
 
 
 _BROWSER_HEADERS = {
@@ -243,18 +247,32 @@ def _fetch_yfinance(symbol: str, start: str = _DATA_START):
     return None, None
 
 
+class OhlcvNotFound(Exception):
+    """Raise khi cả 4 nguồn đều không lấy được dữ liệu.
+
+    QUAN TRỌNG: dùng exception thay vì return (None, None) để st.cache_data
+    KHÔNG lưu kết quả rỗng vào cache. Trước đây fetch_ohlcv/_fast trả về
+    (None, None) khi fail — Streamlit vẫn cache y hệt giá trị đó trong 1800s,
+    khiến lần tra cứu lại KHÔNG hề gọi mạng nữa mà trả thẳng cache rỗng ngay
+    lập tức → hiện đúng lỗi "sau 0.0s (cả 3 nguồn đều không phản hồi kịp)"
+    dù thực chất không có request nào được gửi đi cả. Raise exception giúp
+    mỗi lần gọi lại đều retry thật.
+    """
+    pass
+
+
 @st.cache_data(ttl=1800, show_spinner=False)
 def fetch_ohlcv(symbol: str, start: str = _DATA_START):
     """
     Fallback chain TUẦN TỰ: DNSE → FireAnt → VCI → yfinance.
     Dùng cho SCAN TOÀN THỊ TRƯỜNG — chạy tuần tự để tránh 4x request cùng lúc.
-    Returns (df, source_name) hoặc (None, None).
+    Returns (df, source_name). Raise OhlcvNotFound nếu cả 4 nguồn đều fail.
     """
     for fn in (_fetch_dnse, _fetch_fireant, _fetch_vnstock, _fetch_yfinance):
         df, src = fn(symbol, start)
         if df is not None:
             return df, src
-    return None, None
+    raise OhlcvNotFound(symbol)
 
 
 def _fetch_ohlcv_race(symbol: str, start: str = _DATA_START, race_timeout: float = 12.0):
@@ -290,8 +308,15 @@ def _fetch_ohlcv_race(symbol: str, start: str = _DATA_START, race_timeout: float
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def fetch_ohlcv_fast(symbol: str, start: str = _DATA_START):
-    """Bản nhanh — tra cứu 1 mã, đua 4 nguồn song song (DNSE ưu tiên)."""
-    return _fetch_ohlcv_race(symbol, start)
+    """Bản nhanh — tra cứu 1 mã, đua 4 nguồn song song (DNSE ưu tiên).
+
+    Raise OhlcvNotFound nếu cả 4 nguồn đều fail, để không bị st.cache_data
+    "nhốt" kết quả rỗng trong 1800 giây (xem docstring OhlcvNotFound).
+    """
+    df, src = _fetch_ohlcv_race(symbol, start)
+    if df is None:
+        raise OhlcvNotFound(symbol)
+    return df, src
 
 
 @st.cache_data(ttl=86400, show_spinner=False)  # tên công ty gần như không đổi -> cache 1 ngày
@@ -483,7 +508,7 @@ def _render_lookup_card(symbol: str, company: str, m: dict, source: str, elapsed
     st.markdown(f"""
     <div class="lk-card">
       <div class="lk-ticker">{symbol} {src_html}{speed_html}</div>
-      <div class="lk-company">{company or "—"} · phân tích toàn bộ dữ liệu từ 01/2022 đến nay</div>
+      <div class="lk-company">{company or "—"} · phân tích biến động ngắn hạn từ 01/2025 đến nay</div>
       <div class="lk-grid">
         <div class="lk-metric">
           <div class="lk-label">Giá hiện tại</div>
@@ -567,16 +592,19 @@ def render_lookup_section():
             with _cf.ThreadPoolExecutor(max_workers=2) as ex:
                 fut_ohlcv = ex.submit(fetch_ohlcv_fast, symbol_input)
                 fut_name  = ex.submit(fetch_company_name, symbol_input)
-                df, src   = fut_ohlcv.result()
-                company   = fut_name.result()
+                try:
+                    df, src = fut_ohlcv.result()
+                except OhlcvNotFound:
+                    df, src = None, None
+                company = fut_name.result()
         _elapsed = time.time() - _t0
         if df is None or len(df) < 20:
             st.error(f"❌ Không lấy được dữ liệu cho **{symbol_input}** sau {_elapsed:.1f}s "
                      "(cả 3 nguồn đều không phản hồi kịp). Kiểm tra lại mã hoặc thử lại sau.")
             st.session_state.pop("sb_lookup_result", None)
             return
-        # Pha giảm/hồi (sức bật) được xác định trên TOÀN BỘ lịch sử từ 01/2022
-        # đến nay — không còn cắt về 120 phiên gần nhất như trước.
+        # Pha giảm/hồi (sức bật) được xác định trên biến động ngắn hạn từ
+        # 01/2025 đến nay — không phải toàn bộ lịch sử từ đáy 2022.
         metrics = compute_metrics(df)
         st.session_state["sb_lookup_result"] = {
             "symbol":  symbol_input,
@@ -669,10 +697,13 @@ def get_all_symbols(exchanges: list) -> list:
 def _compute_symbol_scan(symbol: str) -> dict | None:
     """Tính chỉ số cho 1 mã trong batch scan, dùng fallback chain.
 
-    Pha giảm/hồi được xác định trên TOÀN BỘ lịch sử từ 01/2022 đến nay mà
-    fetch_ohlcv trả về — không còn cắt về n phiên gần nhất.
+    Pha giảm/hồi được xác định trên biến động ngắn hạn từ 01/2025 đến nay
+    mà fetch_ohlcv trả về — không phải toàn bộ lịch sử từ đáy 2022.
     """
-    df, src = fetch_ohlcv(symbol)
+    try:
+        df, src = fetch_ohlcv(symbol)
+    except OhlcvNotFound:
+        return None
     if df is None or len(df) < 20:
         return None
     try:
@@ -706,7 +737,10 @@ def _compute_symbol_scan(symbol: str) -> dict | None:
 
 @st.cache_data(ttl=1800)
 def _vnindex_drawdown() -> float:
-    df, _ = fetch_ohlcv("VNINDEX")
+    try:
+        df, _ = fetch_ohlcv("VNINDEX")
+    except OhlcvNotFound:
+        return 0.01
     if df is None or df.empty:
         return 0.01
     close = df["close"].values.astype(float)
@@ -791,8 +825,8 @@ def render_scan_section():
         run_btn = st.button("▶ Bắt đầu Scan", use_container_width=True,
                             type="primary", key="sb_scan_btn")
     with col_b:
-        st.caption("⏱️ Dữ liệu tải từ 01/2022 đến nay, pha giảm/hồi tính trên toàn bộ lịch sử · "
-                   "HOSE ~700 mã ≈ 5–10 phút | HNX+UPCOM thêm ~800 mã. Nên chọn 1 sàn trước.")
+        st.caption("⏱️ Dữ liệu tải từ 01/2025 đến nay (biến động ngắn hạn), pha giảm/hồi tính trên "
+                   "khung này · HOSE ~700 mã ≈ 5–10 phút | HNX+UPCOM thêm ~800 mã. Nên chọn 1 sàn trước.")
 
     cache_key = f"suc_bat_df_{','.join(sorted(exchanges))}"
 
@@ -933,9 +967,9 @@ def render_scan_section():
         mime="text/csv",
     )
     st.caption(
-        f"Dữ liệu: tổng hợp đa nguồn (từ 01/2022 đến nay), tự động chọn nguồn nhanh nhất còn hoạt động · "
-        f"pha giảm/hồi tính trên toàn bộ lịch sử · Cập nhật: {datetime.date.today().strftime('%d/%m/%Y')} · "
-        "Không phải khuyến nghị đầu tư"
+        f"Dữ liệu: tổng hợp đa nguồn (từ 01/2025 đến nay, biến động ngắn hạn), tự động chọn nguồn "
+        f"nhanh nhất còn hoạt động · pha giảm/hồi tính trên khung này · "
+        f"Cập nhật: {datetime.date.today().strftime('%d/%m/%Y')} · Không phải khuyến nghị đầu tư"
     )
 
 
@@ -959,7 +993,8 @@ def render_suc_bat_tab():
 
     st.markdown("""
     <div class="sb-note">
-        ⚠️ Screener này áp dụng cho <b>giai đoạn đầu sóng hồi</b> (T7/2026).
+        ⚠️ Screener này đo <b>pha tăng/giảm ngắn hạn từ 01/2025 đến nay</b> —
+        không còn phản ánh mức hồi phục từ đáy vĩ mô 2022.
         Về sau cần kết hợp Volume + Ichimoku — không áp dụng mãi.
     </div>
     """, unsafe_allow_html=True)
@@ -969,3 +1004,15 @@ def render_suc_bat_tab():
 
     # 2. Scan toàn thị trường (bên dưới)
     render_scan_section()
+
+    # 3. Nút xoá cache thủ công — hữu ích khi nghi ngờ đang bị "kẹt" cache
+    #    (VD: mới sửa code / đổi mốc thời gian nhưng kết quả cũ vẫn hiện ra,
+    #    hoặc một mã bị lỗi tạm thời đã bị cache 30 phút — xem OhlcvNotFound
+    #    ở trên để biết lý do lỗi đó không còn tái diễn kể từ bản patch này).
+    st.divider()
+    if st.button("🗑️ Xoá cache dữ liệu Sức Bật", key="sb_clear_cache"):
+        fetch_ohlcv.clear()
+        fetch_ohlcv_fast.clear()
+        _vnindex_drawdown.clear()
+        st.success("Đã xoá cache — thử tra cứu / scan lại.")
+        st.rerun()
