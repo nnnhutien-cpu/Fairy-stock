@@ -2,11 +2,13 @@ name: Scan Breadth HOSE
 on:
   schedule:
     # UTC+7 = ICT. Phiên chiều đóng cửa 15:00, ATC ~15:30.
-    # Chạy 1 LẦN/NGÀY lúc 15:45 ICT = 08:45 UTC, sau khi dữ liệu EOD đã chốt hẳn.
-    # Chạy thêm bản dự phòng lúc 16:15 ICT (08:45 UTC) đề phòng nguồn dữ liệu
-    # cập nhật chậm — script sẽ tự bỏ qua nếu đã quét trong vòng 180 phút gần nhất.
-    - cron: '45 8 * * 1-5'
-    - cron: '15 9 * * 1-5'
+    # LƯU Ý: thử nghiệm thực tế cho thấy chạy lúc 16:56 ICT vẫn CHƯA ĐỦ — các
+    # nguồn dữ liệu (vnstock/DNSE/FireAnt/Yahoo) đôi khi trễ vài tiếng mới có
+    # giá đóng cửa chính thức của phiên. Vì vậy đẩy lịch trễ hơn hẳn:
+    # - 17:30 ICT = 10:30 UTC (chạy chính)
+    # - 18:30 ICT = 11:30 UTC (dự phòng, nếu nguồn vẫn trễ ở lần chạy đầu)
+    - cron: '30 10 * * 1-5'
+    - cron: '30 11 * * 1-5'
   workflow_dispatch:
     inputs:
       force:
