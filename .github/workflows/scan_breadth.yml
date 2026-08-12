@@ -1,53 +1,45 @@
 name: Scan Breadth HOSE
-
 on:
   schedule:
-    # UTC+7 = ICT. Phiên sáng 9h-11h30, chiều 13h-15h40 ICT
-    # = 2h-4h30 UTC (sáng) + 6h-8h40 UTC (chiều)
-    # Chạy mỗi 15 phút, bao phủ toàn bộ 2 phiên:
-    - cron: '0,15,30,45 2,3,4,6,7,8 * * 1-5'
+    # UTC+7 = ICT. Phiên chiều đóng cửa 15:00, ATC ~15:30.
+    # Chạy 1 LẦN/NGÀY lúc 15:45 ICT = 08:45 UTC, sau khi dữ liệu EOD đã chốt hẳn.
+    # Chạy thêm bản dự phòng lúc 16:15 ICT (08:45 UTC) đề phòng nguồn dữ liệu
+    # cập nhật chậm — script sẽ tự bỏ qua nếu đã quét trong vòng 180 phút gần nhất.
+    - cron: '45 8 * * 1-5'
+    - cron: '15 9 * * 1-5'
   workflow_dispatch:
     inputs:
       force:
-        description: "true = quét cả ngoài giờ giao dịch (để test)"
+        description: "true = quét bất kể giờ giấc (để test)"
         required: false
         default: "false"
-
 concurrency:
   group: scan-breadth-hose
   cancel-in-progress: true
-
 permissions:
   contents: write
-
 jobs:
   scan:
-    name: Quét Sức Khỏe Thị Trường HOSE
+    name: Quét Sức Khỏe Thị Trường HOSE (EOD)
     runs-on: ubuntu-latest
     timeout-minutes: 35
-
     env:
       TZ: Asia/Ho_Chi_Minh
       VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
       FORCE_SCAN: ${{ github.event.inputs.force }}
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
-
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-
       - name: Install dependencies
         run: pip install -r requirements.txt
-
-      # Chỉ cảnh báo nếu thiếu API key, KHÔNG exit 1 — bot vẫn chạy với rate limit thấp hơn
       - name: Debug - Kiểm tra secret
         run: |
           echo "=========================================="
@@ -60,50 +52,22 @@ jobs:
             echo "✅ VNSTOCK_API_KEY đã truyền (dài ${#VNSTOCK_API_KEY} ký tự)"
           fi
           echo "=========================================="
-
-      - name: Kiểm tra giờ giao dịch (ICT)
-        id: check_time
-        run: |
-          HOUR=$(date +%H)
-          MIN=$(date +%M)
-          DOW=$(date +%u)
-          echo "🕒 ICT: ${HOUR}:${MIN}, Thứ: ${DOW}"
-
-          RUN=false
-          if [ "$DOW" -le 5 ]; then
-            if   { [ "$HOUR" -ge 9  ] && [ "$HOUR" -lt 11 ]; } \
-              || { [ "$HOUR" -eq 11 ] && [ "$MIN"  -le 30  ]; } \
-              || { [ "$HOUR" -ge 13 ] && [ "$HOUR" -lt 15  ]; } \
-              || { [ "$HOUR" -eq 15 ] && [ "$MIN"  -le 50  ]; }; then
-              RUN=true
-            fi
-          fi
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RUN=true
-          fi
-
-          echo "run=${RUN}" >> $GITHUB_OUTPUT
-
-      - name: Quét Market Breadth
-        if: steps.check_time.outputs.run == 'true'
+      # Không còn bước "Kiểm tra giờ giao dịch" phức tạp — logic quyết định
+      # có chạy hay không (đã qua giờ đóng cửa? đã quét gần đây chưa?) nằm
+      # trong chính breadth_scanner.py để dễ bảo trì và test bằng workflow_dispatch.
+      - name: Quét Market Breadth (EOD)
         run: python breadth_scanner.py
-
       - name: Commit breadth.json vào repo
-        if: steps.check_time.outputs.run == 'true'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
           git pull --rebase origin main
           git add breadth.json
-
           if git diff --staged --quiet; then
             echo "📝 breadth.json không đổi, bỏ qua commit"
             exit 0
           fi
-
-          git commit -m "🤖 Auto: cập nhật breadth.json $(date '+%Y-%m-%d %H:%M ICT')"
-
+          git commit -m "🤖 Auto: cập nhật breadth.json (EOD) $(date '+%Y-%m-%d %H:%M ICT')"
           for i in 1 2 3; do
             if git push origin main; then
               echo "✅ Push thành công (lần $i)"
