@@ -34,14 +34,12 @@ def render_sidebar():
 
 
 def render_market_tab(chart_df, df_today):
-    """Render biểu đồ volume intraday — P/E và 4 cột phân tích do main.py xử lý."""
-    # Header đồng bộ font với tab Sức Bật (dùng class sb-header từ main.py)
-    st.markdown("""
-    <div class="sb-header">
-        <div class="sb-title">💓 Nhịp Đập Thị Trường</div>
-        <div class="sb-sub">Thanh khoản intraday so sánh hôm nay vs hôm qua</div>
-    </div>
-    """, unsafe_allow_html=True)
+    """
+    Render biểu đồ volume intraday — P/E và 4 cột phân tích do main.py xử lý.
+    Header "💓 Nhịp đập thị trường" đã được main.py vẽ (qua sb_header()) ngay
+    trước khi gọi hàm này — KHÔNG vẽ lại header ở đây để tránh trùng lặp.
+    """
+    st.caption("Thanh khoản intraday so sánh hôm nay vs hôm qua")
 
     if chart_df is not None and not chart_df.empty:
         st.line_chart(chart_df, color=["#8b7fb5", "#34d399"], height=380)
