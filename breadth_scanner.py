@@ -120,7 +120,9 @@ def _fetch_vnstock(symbol: str) -> pd.DataFrame | None:
     try:
         _throttle_vnstock()
         from vnstock import Market
-        end_date   = datetime.now(VN_TZ).strftime("%Y-%m-%d")
+        # +1 ngày cho end_date để tránh trường hợp API coi biên "end" là exclusive
+        # (dùng UTC internally) và vô tình cắt mất đúng phiên hôm nay.
+        end_date   = (datetime.now(VN_TZ) + timedelta(days=1)).strftime("%Y-%m-%d")
         start_date = (datetime.now(VN_TZ) - timedelta(days=150)).strftime("%Y-%m-%d")
 
         market = Market()
@@ -181,7 +183,7 @@ def _fetch_dnse(symbol: str) -> pd.DataFrame | None:
 # ──────────────────────────────────────────────
 def _fetch_fireant(symbol: str) -> pd.DataFrame | None:
     try:
-        end_d   = date.today()
+        end_d   = date.today() + timedelta(days=1)
         start_d = (datetime.now(VN_TZ) - timedelta(days=150)).date()
         url = (
             f"https://api.fireant.vn/symbols/{symbol}/historical-quotes"
@@ -216,7 +218,7 @@ def _fetch_yahoo(symbol: str) -> pd.DataFrame | None:
     try:
         import yfinance as yf
         start = (datetime.now(VN_TZ) - timedelta(days=150)).strftime("%Y-%m-%d")
-        end   = datetime.now(VN_TZ).strftime("%Y-%m-%d")
+        end   = (datetime.now(VN_TZ) + timedelta(days=1)).strftime("%Y-%m-%d")
         df = yf.Ticker(f"{symbol}.VN").history(start=start, end=end, auto_adjust=True)
         if df is None or df.empty:
             return None
@@ -458,7 +460,37 @@ def _process_one(ticker: str) -> dict | None:
 # ──────────────────────────────────────────────
 # QUÉT TOÀN BỘ
 # ──────────────────────────────────────────────
+def _diagnose_sources(sample_ticker="VNM"):
+    """
+    Kiểm tra nhanh 1 mã thanh khoản cao qua từng nguồn TRƯỚC khi quét cả 400 mã,
+    log ra ngày mới nhất mỗi nguồn trả về. Giúp biết ngay nguồn nào đang trễ dữ
+    liệu EOD (thay vì phải đoán mò qua vài lượt hỏi-đáp như trước).
+    """
+    expected = _expected_latest_trading_date()
+    _log(f"🔬 Chẩn đoán nguồn dữ liệu với mã mẫu '{sample_ticker}' (kỳ vọng phiên >= {expected})...")
+
+    sources = {
+        "vnstock": _fetch_vnstock,
+        "DNSE":    _fetch_dnse,
+        "FireAnt": _fetch_fireant,
+        "Yahoo":   _fetch_yahoo,
+    }
+    for name, fn in sources.items():
+        try:
+            df = fn(sample_ticker)
+            if df is None or df.empty:
+                _log(f"   ⚠️ [{name}] không trả về dữ liệu")
+                continue
+            last_date = pd.to_datetime(df["time"].max()).date()
+            flag = "✅" if last_date >= expected else "❌ TRỄ"
+            _log(f"   {flag} [{name}] phiên mới nhất: {last_date}")
+        except Exception as e:
+            _log(f"   ⚠️ [{name}] lỗi khi chẩn đoán: {type(e).__name__}: {e}")
+
+
 def scan_breadth(max_tickers=None):
+    _diagnose_sources()
+
     tickers = get_hose_tickers()
     if not tickers:
         return None
