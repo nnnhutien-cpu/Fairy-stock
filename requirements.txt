@@ -1,6 +1,9 @@
 streamlit
-vnstock>=4.0.0
-yfinance
+requests>=2.31.0
+pandas>=2.0.0
+vnstock>=4.0.5,<5.0.0
+vnai>=2.0.0
+yfinance>=0.2.40
 pandas
 numpy
 plotly
