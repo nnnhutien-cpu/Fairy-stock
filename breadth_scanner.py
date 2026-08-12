@@ -1,18 +1,21 @@
 """
 breadth_scanner.py — Quét sức khỏe thị trường HOSE, ghi breadth.json
-Chạy qua GitHub Actions "Scan Breadth HOSE" mỗi 15 phút trong giờ giao dịch.
+Chạy qua GitHub Actions "Scan Breadth HOSE" — 1 LẦN/NGÀY sau khi đóng cửa phiên chiều.
 
-NGUỒN DỮ LIỆU (theo thứ tự ưu tiên, đua song song cho mỗi mã):
-  1. DNSE      — REST API công khai, không cần key, không qua vnstock
-  2. FireAnt   — REST API công khai, không cần key, không qua vnstock
-  3. Yahoo Finance (yfinance) — ticker.VN, không cần key
-  4. VCI (vnstock) — fallback cuối, chỉ dùng nếu 3 nguồn trên đều lỗi
+THAY ĐỔI QUAN TRỌNG (so với bản real-time cũ):
+  - Không còn quét mỗi 15 phút trong giờ giao dịch. Thay vào đó, script chỉ chạy
+    SAU KHI HOSE ĐÓNG CỬA (mặc định sau 15:40 ICT), lấy đúng dữ liệu giá đóng cửa
+    (EOD) của phiên đã kết thúc — ổn định hơn nhiều so với real-time.
+  - vnstock đã nâng cấp lên bản 4.x "Unified UI" (Reference/Market/Fundamental),
+    các hàm cũ (Vnstock().stock(), listing_companies...) đã bị loại bỏ hoàn toàn.
+    Script này đã cập nhật theo API mới và dùng vnstock làm NGUỒN CHÍNH (chính thức,
+    ổn định nhất). DNSE / FireAnt / Yahoo Finance chỉ còn là nguồn DỰ PHÒNG.
 
-Ưu điểm kiến trúc mới:
-  - Không còn phụ thuộc 100% vào vnstock/VCI → không bị rate limit 60 req/phút
-  - Mỗi mã đua song song 4 nguồn, lấy nguồn nào phản hồi sớm và hợp lệ nhất
-  - VCI chỉ được gọi sau khi 3 nguồn kia thất bại → giảm 70-80% số request tới VCI
-  - Danh sách mã HOSE: lấy từ DNSE trước (không qua vnstock), fallback vnstock
+NGUỒN DỮ LIỆU (theo thứ tự ưu tiên):
+  1. vnstock 4.x (Unified UI, nguồn KBS mặc định) — nguồn chính, chính thức
+  2. DNSE      — REST API công khai, không cần key
+  3. FireAnt   — REST API công khai, không cần key
+  4. Yahoo Finance (yfinance) — ticker.VN, không cần key
 """
 
 import os, sys, time, json, threading, traceback, requests
@@ -25,12 +28,15 @@ import pandas as pd
 # ──────────────────────────────────────────────
 # CẤU HÌNH
 # ──────────────────────────────────────────────
-MIN_LEN_FOR_MA      = 55
-MAX_WORKERS         = 6      # tăng lên vì mỗi mã chạy nhẹ hơn (không throttle DNSE/FA)
-DEFAULT_RATE_LIMIT  = 18     # chỉ áp dụng cho VCI (vnstock), không áp cho DNSE/FA/Yahoo
-VN_TZ               = timezone(timedelta(hours=7))
-MIN_REFRESH_MINUTES = 8
-DATA_START          = "2025-05-01"   # lấy ~3 tháng gần nhất là đủ tính MA50
+MIN_LEN_FOR_MA        = 55
+MAX_WORKERS           = 6
+DEFAULT_RATE_LIMIT    = 18     # áp dụng khi gọi vnstock (KBS) không có API key
+VN_TZ                 = timezone(timedelta(hours=7))
+MIN_REFRESH_MINUTES   = 180    # chống chạy trùng nếu lỡ trigger 2 lần trong ngày
+DATA_START            = "2025-05-01"
+
+# Giờ được coi là "đã đóng cửa" — chỉ quét SAU mốc này (ICT)
+MARKET_CLOSE_CUTOFF   = "15:40"
 
 # ──────────────────────────────────────────────
 # LOGGING
@@ -45,7 +51,7 @@ def _log_err(context, e):
     _log(f"⚠️ [{context}] {type(e).__name__}: {e}")
 
 # ──────────────────────────────────────────────
-# RATE LIMIT (chỉ dùng cho VCI/vnstock)
+# RATE LIMIT (dùng khi gọi vnstock)
 # ──────────────────────────────────────────────
 _rate_lim  = DEFAULT_RATE_LIMIT
 _rate_lock = threading.Lock()
@@ -55,8 +61,7 @@ def set_rate_limit(n: int):
     global _rate_lim
     _rate_lim = max(1, int(n))
 
-def _throttle_vci():
-    """Chỉ throttle khi gọi VCI (vnstock). DNSE/FireAnt/Yahoo không cần throttle."""
+def _throttle_vnstock():
     with _rate_lock:
         now = time.time()
         while _call_ts and now - _call_ts[0] > 60:
@@ -71,15 +76,14 @@ def _throttle_vci():
         _call_ts.append(now)
 
 # ──────────────────────────────────────────────
-# KIỂM TRA THỜI GIAN
+# KIỂM TRA THỜI GIAN — chỉ chạy SAU khi đóng cửa
 # ──────────────────────────────────────────────
-def _is_trading_window(now_vn: datetime) -> bool:
+def _is_after_market_close(now_vn: datetime) -> bool:
+    """True nếu đang trong ngày giao dịch (T2-T6) VÀ đã qua giờ đóng cửa."""
     if now_vn.weekday() >= 5:
         return False
-    t = now_vn.time()
-    morning   = datetime.strptime("09:00", "%H:%M").time() <= t <= datetime.strptime("11:30", "%H:%M").time()
-    afternoon = datetime.strptime("13:00", "%H:%M").time() <= t <= datetime.strptime("15:50", "%H:%M").time()
-    return morning or afternoon
+    cutoff = datetime.strptime(MARKET_CLOSE_CUTOFF, "%H:%M").time()
+    return now_vn.time() >= cutoff
 
 def _minutes_since_last_update(path="breadth.json"):
     try:
@@ -95,26 +99,57 @@ def _minutes_since_last_update(path="breadth.json"):
         return None
 
 def _expected_latest_trading_date():
+    """Ngày giao dịch mới nhất được kỳ vọng có dữ liệu EOD (bỏ qua T7/CN)."""
     now = datetime.now(VN_TZ)
     d = now.date()
-    if now.weekday() < 5 and now.time() < datetime.strptime("17:00", "%H:%M").time():
+    cutoff = datetime.strptime(MARKET_CLOSE_CUTOFF, "%H:%M").time()
+    if now.weekday() < 5 and now.time() < cutoff:
         d -= timedelta(days=1)
     while d.weekday() >= 5:
         d -= timedelta(days=1)
     return d
 
 # ──────────────────────────────────────────────
-# NGUỒN 1: DNSE (REST API công khai)
-# Docs: https://apidn.dnse.com.vn — không cần auth
+# NGUỒN CHÍNH: vnstock 4.x — Unified UI
+# API mới: from vnstock import Market, Reference
+#   Reference().equity.list_by_exchange()  -> danh sách mã theo sàn
+#   Market().equity.ohlcv(symbol=..., start=..., end=...) -> giá lịch sử (EOD)
+# ──────────────────────────────────────────────
+def _fetch_vnstock(symbol: str) -> pd.DataFrame | None:
+    """Lấy giá lịch sử (EOD) qua vnstock 4.x Unified UI. Có throttle."""
+    try:
+        _throttle_vnstock()
+        from vnstock import Market
+        end_date   = datetime.now(VN_TZ).strftime("%Y-%m-%d")
+        start_date = (datetime.now(VN_TZ) - timedelta(days=150)).strftime("%Y-%m-%d")
+
+        market = Market()
+        df = market.equity.ohlcv(symbol=symbol, start=start_date, end=end_date)
+
+        if df is None or (hasattr(df, "empty") and df.empty):
+            return None
+
+        df.columns = [str(c).lower().strip() for c in df.columns]
+        for col in ["time", "date", "tradingdate", "trading_date"]:
+            if col in df.columns:
+                df = df.rename(columns={col: "time"})
+                break
+        if "time" not in df.columns:
+            return None
+
+        df["close"] = pd.to_numeric(df.get("close", df.get("closeprice", None)), errors="coerce")
+        df = df.dropna(subset=["close"]).sort_values("time").reset_index(drop=True)
+        return df if len(df) >= 20 else None
+    except Exception:
+        return None
+
+
+# ──────────────────────────────────────────────
+# NGUỒN DỰ PHÒNG 1: DNSE (REST API công khai)
 # ──────────────────────────────────────────────
 def _fetch_dnse(symbol: str) -> pd.DataFrame | None:
-    """
-    DNSE cung cấp API lịch sử giá qua endpoint /charts/history.
-    Không cần API key, không qua vnstock → không bị rate limit VCI.
-    """
     try:
-        end_ts   = int(datetime.now(VN_TZ).timestamp())
-        # resolution=D = daily; countback=130 phiên là đủ tính MA50+MA20+buffer
+        end_ts = int(datetime.now(VN_TZ).timestamp())
         url = (
             f"https://services.entrade.com.vn/chart-api/v2/ohlcs/stock"
             f"?from={end_ts - 130*86400}&to={end_ts}"
@@ -142,7 +177,7 @@ def _fetch_dnse(symbol: str) -> pd.DataFrame | None:
 
 
 # ──────────────────────────────────────────────
-# NGUỒN 2: FireAnt (REST API công khai)
+# NGUỒN DỰ PHÒNG 2: FireAnt (REST API công khai)
 # ──────────────────────────────────────────────
 def _fetch_fireant(symbol: str) -> pd.DataFrame | None:
     try:
@@ -175,7 +210,7 @@ def _fetch_fireant(symbol: str) -> pd.DataFrame | None:
 
 
 # ──────────────────────────────────────────────
-# NGUỒN 3: Yahoo Finance (.VN suffix)
+# NGUỒN DỰ PHÒNG 3: Yahoo Finance (.VN suffix)
 # ──────────────────────────────────────────────
 def _fetch_yahoo(symbol: str) -> pd.DataFrame | None:
     try:
@@ -199,113 +234,114 @@ def _fetch_yahoo(symbol: str) -> pd.DataFrame | None:
         return None
 
 
-# ──────────────────────────────────────────────
-# NGUỒN 4: VCI qua vnstock (fallback cuối)
-# ──────────────────────────────────────────────
-def _fetch_vci(symbol: str) -> pd.DataFrame | None:
-    """Chỉ gọi sau khi DNSE + FireAnt + Yahoo đều thất bại. Có throttle."""
-    try:
-        _throttle_vci()
-        end_date   = datetime.now(VN_TZ).strftime("%Y-%m-%d")
-        start_date = (datetime.now(VN_TZ) - timedelta(days=150)).strftime("%Y-%m-%d")
+_FALLBACK_SOURCES = [_fetch_dnse, _fetch_fireant, _fetch_yahoo]
 
-        df = None
-        # Thử vnstock 4.x trước
-        try:
-            from vnstock import Vnstock
-            obj = Vnstock(source="VCI").stock(symbol=symbol, exchange="HOSE")
-            df  = obj.quote.history(start=start_date, end=end_date, interval="1D")
-        except Exception:
-            pass
-
-        # Fallback vnstock 3.x
-        if df is None or (hasattr(df, "empty") and df.empty):
-            try:
-                from vnstock import stock_historical_data
-                df = stock_historical_data(symbol, start_date, end_date, "1D", "stock", "VCI")
-            except Exception:
-                pass
-
-        if df is None or (hasattr(df, "empty") and df.empty):
-            return None
-
-        df.columns = [str(c).lower().strip() for c in df.columns]
-        for col in ["time", "date", "tradingdate", "trading_date"]:
-            if col in df.columns:
-                df = df.rename(columns={col: "time"})
-                break
-        if "time" not in df.columns:
-            return None
-        df["close"] = pd.to_numeric(df.get("close", df.get("closeprice", None)), errors="coerce")
-        df = df.dropna(subset=["close"]).sort_values("time").reset_index(drop=True)
-        return df if len(df) >= 20 else None
-    except Exception:
-        return None
-
-
-# ──────────────────────────────────────────────
-# RACE: đua song song 4 nguồn, lấy nguồn nào về đầu tiên
-# ──────────────────────────────────────────────
-_FAST_SOURCES = [_fetch_dnse, _fetch_fireant, _fetch_yahoo]   # 3 nguồn không cần throttle
-_SLOW_SOURCES = [_fetch_vci]                                    # chỉ gọi khi fast thất bại
 
 def get_price_history(symbol: str, race_timeout: float = 5.0) -> pd.DataFrame | None:
     """
-    Chiến lược lấy giá 2 tầng:
-    Tầng 1 — đua song song DNSE + FireAnt + Yahoo (timeout 5s).
-              Nếu bất kỳ nguồn nào trả về dữ liệu hợp lệ → dùng ngay, KHÔNG gọi VCI.
-    Tầng 2 — nếu tầng 1 thất bại hoàn toàn → thử VCI (có throttle).
-    → Trong thực tế 80-90% mã HOSE được phục vụ bởi tầng 1, VCI chỉ nhận ~10-20% request.
+    Chiến lược lấy giá EOD:
+    Tầng 1 — vnstock 4.x (nguồn chính thức). Nếu dữ liệu đủ mới (>= ngày giao dịch
+              kỳ vọng) → dùng luôn.
+    Tầng 2 — nếu vnstock lỗi hoặc dữ liệu cũ → đua song song DNSE + FireAnt + Yahoo.
     """
     expected = _expected_latest_trading_date()
 
-    # Tầng 1: đua 3 nguồn nhanh
+    best_df, best_date = None, None
+
+    df = _fetch_vnstock(symbol)
+    if df is not None and not df.empty:
+        last_date = pd.to_datetime(df["time"].max()).date()
+        if last_date >= expected:
+            return df
+        best_df, best_date = df, last_date
+
     with _cf.ThreadPoolExecutor(max_workers=3) as ex:
-        futures = {ex.submit(fn, symbol): fn.__name__ for fn in _FAST_SOURCES}
-        best_df, best_date = None, None
+        futures = {ex.submit(fn, symbol): fn.__name__ for fn in _FALLBACK_SOURCES}
         try:
             for fut in _cf.as_completed(futures, timeout=race_timeout):
                 try:
-                    df = fut.result()
+                    d = fut.result()
                 except Exception:
                     continue
-                if df is None or df.empty:
+                if d is None or d.empty:
                     continue
-                last_date = pd.to_datetime(df["time"].max()).date()
+                last_date = pd.to_datetime(d["time"].max()).date()
                 if last_date >= expected:
-                    # Đủ mới → cancel các future còn lại, trả luôn
                     ex.shutdown(wait=False, cancel_futures=True)
-                    return df
+                    return d
                 if best_date is None or last_date > best_date:
-                    best_df, best_date = df, last_date
+                    best_df, best_date = d, last_date
         except _cf.TimeoutError:
             pass
         ex.shutdown(wait=False, cancel_futures=True)
 
-    # Nếu tầng 1 có data nhưng hơi cũ (chưa cập nhật hôm nay) — chấp nhận
-    if best_df is not None:
-        return best_df
-
-    # Tầng 2: fallback VCI (có throttle, gọi tuần tự)
-    return _fetch_vci(symbol)
+    return best_df
 
 
 # ──────────────────────────────────────────────
 # LẤY DANH SÁCH MÃ HOSE
-# Ưu tiên: DNSE listing → vnstock vci/kbs/tcbs
+# Ưu tiên: vnstock 4.x (Reference) → DNSE → FireAnt
 # ──────────────────────────────────────────────
+def _get_hose_tickers_vnstock() -> list:
+    """
+    vnstock 4.x Unified UI:
+      from vnstock import Reference
+      ref = Reference()
+      ref.equity.list_by_exchange()   # danh sách mã theo sàn
+      ref.equity.list()               # toàn bộ mã (fallback nếu list_by_exchange lỗi)
+    """
+    try:
+        _throttle_vnstock()
+        from vnstock import Reference
+        ref = Reference()
+
+        df = None
+        try:
+            df = ref.equity.list_by_exchange()
+        except Exception as e:
+            _log_err("vnstock Reference.list_by_exchange", e)
+
+        if df is None or (hasattr(df, "empty") and df.empty):
+            try:
+                df = ref.equity.list()
+            except Exception as e:
+                _log_err("vnstock Reference.list", e)
+
+        if df is None or (hasattr(df, "empty") and df.empty):
+            return []
+
+        df.columns = [str(c).lower().strip() for c in df.columns]
+
+        exch_col = next((c for c in df.columns if "exchange" in c or "floor" in c or "board" in c), None)
+        if exch_col:
+            df = df[df[exch_col].astype(str).str.upper().isin(["HOSE", "HSX"])]
+
+        type_col = next((c for c in df.columns if "type" in c), None)
+        if type_col:
+            df = df[df[type_col].astype(str).str.upper().isin(
+                ["STOCK", "CP", "CỔ PHIẾU", "EQ", "EQUITY"]
+            )]
+
+        col = next((c for c in ["symbol", "ticker", "code"] if c in df.columns), None)
+        if not col:
+            return []
+
+        tickers = [str(t).strip().upper() for t in df[col].dropna() if str(t).strip()]
+        if tickers:
+            _log(f"✅ [vnstock Reference] {len(tickers)} mã HOSE")
+        return tickers
+    except Exception as e:
+        _log_err("_get_hose_tickers_vnstock", e)
+        return []
+
+
 def _get_hose_tickers_dnse() -> list:
-    """
-    DNSE cung cấp API listing mã chứng khoán theo sàn.
-    Endpoint public, không cần auth.
-    """
     try:
         url = "https://finfo-api.dnse.com.vn/v3/market-data/listing"
         r = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
         if r.status_code != 200:
             return []
         data = r.json()
-        # Tuỳ version API trả về list hoặc {"data": [...]}
         items = data if isinstance(data, list) else data.get("data", data.get("items", []))
         tickers = []
         for item in items:
@@ -329,7 +365,6 @@ def _get_hose_tickers_dnse() -> list:
 
 
 def _get_hose_tickers_fireant() -> list:
-    """FireAnt cũng có listing endpoint."""
     try:
         url = "https://api.fireant.vn/securities?type=1&exchange=HOSE&offset=0&limit=500"
         r = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
@@ -351,55 +386,13 @@ def _get_hose_tickers_fireant() -> list:
         return []
 
 
-def _get_hose_tickers_vnstock() -> list:
-    for src in ["vci", "kbs", "tcbs"]:
-        try:
-            _throttle_vci()
-            errors = []
-            df = None
-
-            try:
-                from vnstock import Vnstock
-                obj = Vnstock(source=src).stock(symbol="VNM", exchange="HOSE")
-                df = obj.listing.symbols_by_exchange()
-            except Exception as e:
-                errors.append(f"Vnstock(4.x): {e}")
-
-            if df is None or (hasattr(df, "empty") and df.empty):
-                try:
-                    from vnstock import listing_companies
-                    df = listing_companies()
-                except Exception as e:
-                    errors.append(f"listing_companies: {e}")
-
-            if df is None or (hasattr(df, "empty") and df.empty):
-                _log(f"⚠️ [vnstock listing|{src}]: {' | '.join(errors)}")
-                continue
-
-            df.columns = [str(c).lower().strip() for c in df.columns]
-            type_col = next((c for c in df.columns if "type" in c), None)
-            if type_col:
-                df = df[df[type_col].astype(str).str.upper().isin(
-                    ["STOCK", "CP", "CỔ PHIẾU", "EQ", "EQUITY"]
-                )]
-            if "exchange" in df.columns:
-                df = df[df["exchange"].astype(str).str.upper().isin(["HOSE", "HSX"])]
-
-            col = next((c for c in ["symbol", "ticker", "code"] if c in df.columns), None)
-            if col:
-                tickers = [str(t).strip().upper() for t in df[col].dropna() if str(t).strip()]
-                if tickers:
-                    _log(f"✅ [vnstock|{src}] {len(tickers)} mã HOSE")
-                    return tickers
-        except Exception as e:
-            _log_err(f"_get_hose_tickers_vnstock|{src}", e)
-
-    return []
-
-
 def get_hose_tickers() -> list:
-    """Lấy danh sách mã HOSE: thử DNSE → FireAnt → vnstock."""
-    # Đua DNSE + FireAnt song song
+    """Lấy danh sách mã HOSE: vnstock (chính) → DNSE → FireAnt (dự phòng)."""
+    tickers = _get_hose_tickers_vnstock()
+    if tickers:
+        return tickers
+
+    _log("⚠️ vnstock listing lỗi → thử DNSE/FireAnt")
     with _cf.ThreadPoolExecutor(max_workers=2) as ex:
         f_dnse = ex.submit(_get_hose_tickers_dnse)
         f_fa   = ex.submit(_get_hose_tickers_fireant)
@@ -410,11 +403,6 @@ def get_hose_tickers() -> list:
         return tickers_dnse
     if tickers_fa:
         return tickers_fa
-
-    _log("⚠️ DNSE + FireAnt đều không lấy được listing → fallback vnstock")
-    tickers_vci = _get_hose_tickers_vnstock()
-    if tickers_vci:
-        return tickers_vci
 
     _log("❌ Không lấy được danh sách mã HOSE từ bất kỳ nguồn nào!")
     return []
@@ -439,7 +427,6 @@ def compute_momentum_note(ad_pct, pct_above_ma20, pct_above_ma50, score):
 # XỬ LÝ 1 MÃ (dùng trong ThreadPool)
 # ──────────────────────────────────────────────
 def _process_one(ticker: str) -> dict | None:
-    """Lấy giá + tính MA cho 1 mã. Trả dict kết quả hoặc None nếu lỗi."""
     df = get_price_history(ticker)
     if df is None or len(df) < MIN_LEN_FOR_MA:
         return None
@@ -478,7 +465,7 @@ def scan_breadth(max_tickers=None):
     if max_tickers:
         tickers = tickers[:max_tickers]
 
-    _log(f"📊 Bắt đầu quét {len(tickers)} mã HOSE (song song {MAX_WORKERS} luồng)...")
+    _log(f"📊 Bắt đầu quét {len(tickers)} mã HOSE (dữ liệu EOD, song song {MAX_WORKERS} luồng)...")
 
     advance = decline = unchanged = above_ma20 = above_ma50 = n_valid = 0
     ad_change_sum = 0.0
@@ -492,7 +479,7 @@ def scan_breadth(max_tickers=None):
             done += 1
             try:
                 row = fut.result()
-            except Exception as e:
+            except Exception:
                 n_errors += 1
                 row = None
 
@@ -561,8 +548,8 @@ if __name__ == "__main__":
         force  = os.environ.get("FORCE_SCAN", "").strip().lower() in ("1", "true", "yes")
         now_vn = _vn_now()
 
-        if not force and not _is_trading_window(now_vn):
-            _log(f"⏭️  Ngoài giờ giao dịch ({now_vn:%H:%M}) — bỏ qua.")
+        if not force and not _is_after_market_close(now_vn):
+            _log(f"⏭️  Chưa qua giờ đóng cửa ({now_vn:%H:%M}, cần >= {MARKET_CLOSE_CUTOFF}) — bỏ qua.")
             sys.exit(0)
 
         if not force:
@@ -571,18 +558,17 @@ if __name__ == "__main__":
                 _log(f"⏭️  Đã quét {mins:.0f} phút trước (< {MIN_REFRESH_MINUTES} phút) — bỏ qua.")
                 sys.exit(0)
 
-        # API key vnstock — chỉ tăng rate limit cho VCI fallback, không bắt buộc
         api_key = os.environ.get("VNSTOCK_API_KEY", "").strip()
         if api_key:
             try:
                 import vnai
                 vnai.setup_api_key(api_key)
                 set_rate_limit(55)
-                _log("🔑 VNSTOCK_API_KEY truyền vào — VCI fallback rate limit 55/phút")
+                _log("🔑 VNSTOCK_API_KEY truyền vào — rate limit 55/phút")
             except Exception as e:
                 _log_err("setup vnai (bỏ qua)", e)
         else:
-            _log("ℹ️  Không có VNSTOCK_API_KEY — VCI fallback rate limit 18/phút (DNSE/FireAnt/Yahoo không cần key)")
+            _log("ℹ️  Không có VNSTOCK_API_KEY — dùng rate limit khách 18/phút")
 
         max_t  = os.environ.get("MAX_TICKERS")
         result = scan_breadth(max_tickers=int(max_t) if max_t else None)
