@@ -4,10 +4,10 @@ from datetime import datetime, timedelta, timezone
 VN_TZ = timezone(timedelta(hours=7))
 
 # Bot nền (breadth_scanner.py) giờ chỉ chạy 1 LẦN/NGÀY sau khi đóng cửa phiên
-# chiều — cron chính lúc 15:45 ICT, cron dự phòng lúc 16:15 ICT (đề phòng nguồn
-# dữ liệu cập nhật chậm). Mốc dưới đây cho bot đủ thời gian chạy xong cả 2 lần
-# trước khi bị coi là "lỗi".
-EXPECTED_RUN_CUTOFF = "16:30"
+# chiều — cron chính lúc 17:30 ICT, cron dự phòng lúc 18:30 ICT (nguồn dữ liệu
+# giá đôi khi trễ vài tiếng mới có giá đóng cửa chính thức). Mốc dưới đây cho
+# bot đủ thời gian chạy xong cả 2 lần (+ buffer xử lý) trước khi bị coi là "lỗi".
+EXPECTED_RUN_CUTOFF = "19:00"
 
 
 def _vn_now():
@@ -147,7 +147,7 @@ def render_breadth_panel(breadth: dict):
     if breadth is None:
         st.info(
             "⏳ Chưa có dữ liệu breadth. Hệ thống tự động quét 1 lần/ngày sau khi "
-            "đóng cửa phiên chiều (~15:45-16:15 ICT, T2-T6). Nếu đây là lần đầu chạy, "
+            "đóng cửa phiên chiều (~17:30-18:30 ICT, T2-T6). Nếu đây là lần đầu chạy, "
             "vào **GitHub → Actions → Scan Breadth HOSE → Run workflow** (force = true) "
             "để quét ngay."
         )
@@ -165,7 +165,7 @@ def render_breadth_panel(breadth: dict):
     d_date_str = fresh["data_date"].strftime("%d/%m/%Y") if fresh["data_date"] else "—"
     st.caption(
         f"🕒 Bot chạy lúc: **{b_updated}** · 📅 Dữ liệu giá phản ánh phiên: **{d_date_str}** "
-        f"— {b_total} mã hợp lệ · 🔁 Cập nhật 1 lần/ngày sau khi đóng cửa (~15:45-16:15 ICT)"
+        f"— {b_total} mã hợp lệ · 🔁 Cập nhật 1 lần/ngày sau khi đóng cửa (~17:30-18:30 ICT)"
     )
     if fresh["data_stale"]:
         st.warning(
