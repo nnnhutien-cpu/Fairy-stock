@@ -185,6 +185,27 @@ def _normalize(df):
 # ==========================================================
 # YAHOO FINANCE (fallback cho dữ liệu daily)
 # ==========================================================
+def _fetch_yahoo(symbol, start, end):
+    """Fallback cuối cùng: lấy dữ liệu daily từ Yahoo Finance (mã.VN)."""
+    try:
+        import yfinance as yf
+    except ImportError:
+        return pd.DataFrame()
+    try:
+        ticker = f"{symbol}.VN"
+        df = yf.Ticker(ticker).history(start=start, end=end)
+        if df is None or df.empty:
+            return pd.DataFrame()
+        df = df.reset_index()
+        df.columns = [str(c).lower().strip() for c in df.columns]
+        for col in list(df.columns):
+            if 'date' in col:
+                df.rename(columns={col: 'time'}, inplace=True)
+                break
+        return _normalize(df)
+    except Exception:
+        return pd.DataFrame()
+
 # Sửa hàm _fetch() — thêm DNSE vào trước Yahoo:
 def _fetch(symbol, start, end, interval):
     sources = ['VCI', 'MSN']
