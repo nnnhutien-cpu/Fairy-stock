@@ -553,55 +553,58 @@ with tab_market:
                 text=f"Cổ phiếu {stock_pct}%  ·  Tiền mặt {cash_pct}%"
             )
 
-            with st.expander("📋 Lý do khuyến nghị", expanded=True):
-                reasons = reco.get("reasons", [])
-                if reasons:
-                    for r in reasons:
-                        st.markdown(f"- {r}")
-                else:
-                    st.caption("Chưa có lý do chi tiết.")
+        # --- ẨN: khung "Lý do khuyến nghị" (bỏ comment để hiện lại) ---
+        # with st.expander("📋 Lý do khuyến nghị", expanded=False):
+        #     reasons = reco.get("reasons", [])
+        #     if reasons:
+        #         for r in reasons:
+        #             st.markdown(f"- {r}")
+        #     else:
+        #         st.caption("Chưa có lý do chi tiết.")
 
         st.caption("⚠️ Khuyến nghị dựa trên PTKT + định giá, không phải tư vấn đầu tư chính thức.")
 
-        with st.expander("📋 Bảng quy đổi Score → Tỷ trọng", expanded=False):
-            st.caption(
-                "Tổng Score = Breadth (–8→+8) + PTKT (–5→+5) + P/E (–2→+2) = khung –15 đến +15"
-            )
-            st.divider()
+        # --- ẨN: khung "Bảng quy đổi Score → Tỷ trọng" (bỏ comment để hiện lại) ---
+        # with st.expander("📋 Bảng quy đổi Score → Tỷ trọng", expanded=False):
+        #     st.caption(
+        #         "Tổng Score = Breadth (–8→+8) + PTKT (–5→+5) + P/E (–2→+2) = khung –15 đến +15"
+        #     )
+        #     st.divider()
+        #
+        #     score_table = [
+        #         (12,  85, "20%", "🔥 MUA CỰC MẠNH"),
+        #         (9,   75, "25%", "🚀 MUA MẠNH"),
+        #         (6,   65, "35%", "🟢 MUA TÍCH CỰC"),
+        #         (3,   58, "42%", "🟢 MUA / GIỮ"),
+        #         (1,   52, "48%", "🟢 GIỮ CAO"),
+        #         (-1,  50, "50%", "➖ CÂN BẰNG"),
+        #         (-3,  42, "58%", "🟠 GIẢM NHẸ"),
+        #         (-6,  30, "70%", "⚠️ GIẢM TỶ TRỌNG"),
+        #         (-9,  20, "80%", "🔴 PHÒNG THỦ"),
+        #         (-12, 10, "90%", "🛡️ PHÒNG THỦ MẠNH"),
+        #         (-99,  5, "95%", "💀 THOÁT KHỎI THỊ TRƯỜNG"),
+        #     ]
+        #
+        #     h = st.columns([1.2, 1, 1, 2.5, 1.2])
+        #     for col, lbl in zip(h, ["Score", "CP%", "Tiền%", "Hành động", ""]):
+        #         col.markdown(f"**{lbl}**")
+        #
+        #     matched = None
+        #     for i, (thr, cp, cash, act) in enumerate(score_table):
+        #         if cur_score >= thr:
+        #             matched = i
+        #             break
+        #
+        #     for i, (thr, cp, cash, act) in enumerate(score_table):
+        #         score_str = f"≥ {thr}" if thr > -99 else "< -12"
+        #         cols = st.columns([1.2, 1, 1, 2.5, 1.2])
+        #         cols[0].markdown(f"**{score_str}**")
+        #         cols[1].markdown(f"`{cp}%`")
+        #         cols[2].markdown(f"`{cash}`")
+        #         cols[3].markdown(act)
+        #         if i == matched:
+        #             cols[4].markdown("⬅️ **Hiện tại**")
 
-            score_table = [
-                (12,  85, "20%", "🔥 MUA CỰC MẠNH"),
-                (9,   75, "25%", "🚀 MUA MẠNH"),
-                (6,   65, "35%", "🟢 MUA TÍCH CỰC"),
-                (3,   58, "42%", "🟢 MUA / GIỮ"),
-                (1,   52, "48%", "🟢 GIỮ CAO"),
-                (-1,  50, "50%", "➖ CÂN BẰNG"),
-                (-3,  42, "58%", "🟠 GIẢM NHẸ"),
-                (-6,  30, "70%", "⚠️ GIẢM TỶ TRỌNG"),
-                (-9,  20, "80%", "🔴 PHÒNG THỦ"),
-                (-12, 10, "90%", "🛡️ PHÒNG THỦ MẠNH"),
-                (-99,  5, "95%", "💀 THOÁT KHỎI THỊ TRƯỜNG"),
-            ]
-
-            h = st.columns([1.2, 1, 1, 2.5, 1.2])
-            for col, lbl in zip(h, ["Score", "CP%", "Tiền%", "Hành động", ""]):
-                col.markdown(f"**{lbl}**")
-
-            matched = None
-            for i, (thr, cp, cash, act) in enumerate(score_table):
-                if cur_score >= thr:
-                    matched = i
-                    break
-
-            for i, (thr, cp, cash, act) in enumerate(score_table):
-                score_str = f"≥ {thr}" if thr > -99 else "< -12"
-                cols = st.columns([1.2, 1, 1, 2.5, 1.2])
-                cols[0].markdown(f"**{score_str}**")
-                cols[1].markdown(f"`{cp}%`")
-                cols[2].markdown(f"`{cash}`")
-                cols[3].markdown(act)
-                if i == matched:
-                    cols[4].markdown("⬅️ **Hiện tại**")
 
 # ==========================================
 # TAB 2: BỘ LỌC CỔ PHIẾU
