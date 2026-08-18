@@ -156,6 +156,55 @@ st.markdown("""
     .src-vci     { background:#1a2a3a; color:#5b9bd5; }
     .src-fireant { background:#1a2e1a; color:#4caf50; }
     .src-yahoo   { background:#1a1a3a; color:#8b7fb5; }
+
+    /* ══════════ Đồng bộ font cho NỘI DUNG mọi tab (giống hệ chữ tab 🚀 Sức Bật) ══════════ */
+    h4, h5, h6 { color: #a394d4 !important; font-weight: 700 !important; letter-spacing: .2px; }
+
+    /* Đoạn văn / danh sách thường trong st.markdown, st.write */
+    .stMarkdown p, .stMarkdown li, .stMarkdown div,
+    [data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] li {
+        font-size: 13px !important; color: #ccc !important; line-height: 1.6 !important;
+    }
+
+    /* st.caption — đồng bộ với .sb-sub / .lk-company */
+    [data-testid="stCaptionContainer"], .stCaption, small {
+        font-size: 12px !important; color: #888 !important;
+    }
+
+    /* Bảng dữ liệu st.dataframe / st.table — đồng bộ với .sr-table (13px) */
+    [data-testid="stDataFrame"], [data-testid="stDataFrame"] * ,
+    [data-testid="stTable"], [data-testid="stTable"] * {
+        font-family: 'Sora', sans-serif !important;
+        font-size: 13px !important;
+    }
+
+    /* Expander — tiêu đề đồng bộ với .lk-section (11px uppercase tím) */
+    [data-testid="stExpander"] summary,
+    .streamlit-expanderHeader, details > summary {
+        font-size: 13px !important; font-weight: 700 !important; color: #a394d4 !important;
+    }
+    [data-testid="stExpander"] [data-testid="stMarkdownContainer"] p {
+        font-size: 13px !important;
+    }
+
+    /* Label của radio / checkbox / selectbox / text_input / slider — đồng bộ .lk-label */
+    .stRadio label, .stCheckbox label, .stSelectbox label,
+    .stTextInput label, .stSlider label, .stNumberInput label,
+    [data-testid="stWidgetLabel"] p {
+        font-size: 12px !important; color: #a99fcf !important; font-weight: 600 !important;
+    }
+    .stRadio [data-testid="stMarkdownContainer"] p,
+    .stCheckbox [data-testid="stMarkdownContainer"] p {
+        font-size: 13px !important; color: #dcd6ec !important;
+    }
+
+    /* st.info / st.warning / st.success / st.error — nội dung đồng bộ 13px */
+    [data-testid="stAlert"] p, [data-testid="stAlert"] div {
+        font-size: 13px !important;
+    }
+
+    /* Tab label (tên các tab trên cùng) — giữ đậm, đồng bộ cỡ chữ */
+    .stTabs [data-baseweb="tab"] p { font-size: .9rem !important; font-weight: 600 !important; }
 </style>
 """, unsafe_allow_html=True)
 
