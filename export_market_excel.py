@@ -3,15 +3,18 @@ import gspread
 import json
 import os
 from google.oauth2.service_account import Credentials
-from vnstock import Vnstock                          # ✅ v4
+from vnstock import Vnstock
 from datetime import datetime, timedelta
 import time
+import requests
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
+import yfinance as yf
 
 OUTPUT_FILE = "market_data.xlsx"
 EXCHANGES = ["HOSE", "HNX", "UPCOM"]
+YF_SUFFIX = {"HOSE": ".VN", "HNX": ".HN", "UPCOM": ".VN"}
 
 # ─────────────────────────────────────────────────────────
 # GOOGLE SHEET
@@ -56,7 +59,6 @@ def push_to_gsheet(all_data: dict):
         ws.format(f"A1:{get_column_letter(len(df.columns))}1", HEADER_FMT)
         print(f"  ✅ Sheet '{exchange}': {len(df)} dòng")
 
-    # Sheet Tổng Hợp
     try:
         ws_all = wb.worksheet("Tổng Hợp")
         ws_all.clear()
@@ -80,7 +82,7 @@ def push_to_gsheet(all_data: dict):
 # ─────────────────────────────────────────────────────────
 # EXCEL (.xlsx)
 # ─────────────────────────────────────────────────────────
-COL_WIDTHS = [10, 14, 14, 14, 14, 14, 16, 14]
+COL_WIDTHS = [10, 14, 14, 14, 14, 14, 16, 14, 10]
 
 def style_sheet(ws, nrows, ncols):
     header_fill = PatternFill("solid", fgColor="1F4E79")
@@ -99,7 +101,7 @@ def style_sheet(ws, nrows, ncols):
                 cell.fill = fill_even
         ws.cell(row=row_idx, column=1).alignment = Alignment(horizontal="center")
 
-        pct_cell = ws.cell(row=row_idx, column=ncols)
+        pct_cell = ws.cell(row=row_idx, column=8)
         try:
             val = float(pct_cell.value)
             pct_cell.font = Font(
@@ -118,7 +120,6 @@ def export_xlsx(all_data: dict):
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
 
-    # Sheet Tổng Hợp đầu tiên
     frames = []
     for exchange, df in all_data.items():
         if not df.empty:
@@ -134,7 +135,6 @@ def export_xlsx(all_data: dict):
             ws_all.append(r.tolist())
         style_sheet(ws_all, len(df_total), len(df_total.columns))
 
-    # Sheet từng sàn
     for exchange, df in all_data.items():
         ws = wb.create_sheet(exchange)
         if df.empty:
@@ -149,62 +149,180 @@ def export_xlsx(all_data: dict):
     print(f"  ✅ Đã lưu {OUTPUT_FILE}")
 
 # ─────────────────────────────────────────────────────────
-# LẤY DỮ LIỆU
+# LẤY DANH SÁCH MÃ
 # ─────────────────────────────────────────────────────────
 def get_tickers_by_exchange():
-    stock = Vnstock().stock(symbol='ACB', source='VCI')
-    result = {}
-    for ex in EXCHANGES:
-        try:
-            df = stock.listing.symbols_by_exchange(exchange=ex)
-            if isinstance(df, list):
-                tickers = df
-            else:
-                df.columns = [c.lower().strip() for c in df.columns]
-                col = next((c for c in ['ticker', 'symbol', 'code'] if c in df.columns), None)
-                tickers = df[col].tolist() if col else []
-            result[ex] = tickers
-            print(f"  {ex}: {len(tickers)} mã")
-        except Exception as e:
-            print(f"  ⚠️ {ex}: lỗi — {e}")
-            result[ex] = []
+    result = {ex: [] for ex in EXCHANGES}
+    try:
+        stock = Vnstock().stock(symbol='ACB', source='VCI')
+        df_all = stock.listing.all_symbols()
+        df_all.columns = [c.lower().strip() for c in df_all.columns]
+
+        ex_col     = next((c for c in ['exchange', 'comgroupcode', 'organ_type', 'group_code']
+                           if c in df_all.columns), None)
+        ticker_col = next((c for c in ['ticker', 'symbol', 'code']
+                           if c in df_all.columns), None)
+
+        if ex_col and ticker_col:
+            for ex in EXCHANGES:
+                mask = df_all[ex_col].str.upper().str.contains(ex)
+                result[ex] = df_all[mask][ticker_col].tolist()
+                print(f"  {ex}: {len(result[ex])} mã (VCI)")
+        elif ticker_col:
+            result["HOSE"] = df_all[ticker_col].tolist()
+            print(f"  HOSE (tất cả): {len(result['HOSE'])} mã")
+    except Exception as e:
+        print(f"  ⚠️ VCI listing lỗi: {e}")
+
     return result
 
-def fetch_latest_price(ticker, start_date, end_date):
-    try:
-        stock = Vnstock().stock(symbol=ticker, source='VCI')
-        df = stock.quote.history(start=start_date, end=end_date, interval='1D')
-        if df is None or df.empty:
-            return None
+# ─────────────────────────────────────────────────────────
+# FALLBACK CHAIN: VCI → KB → DNSE → yfinance
+# ─────────────────────────────────────────────────────────
+def fetch_via_vci(ticker, start_date, end_date):
+    stock = Vnstock().stock(symbol=ticker, source='VCI')
+    df = stock.quote.history(start=start_date, end=end_date, interval='1D')
+    if df is None or df.empty:
+        return None
+    df.columns = [str(c).lower().strip() for c in df.columns]
+    df['_source'] = 'VCI'
+    return df
 
-        df.columns = [str(c).lower().strip() for c in df.columns]
-        row = df.iloc[-1]
+def fetch_via_kb(ticker, start_date, end_date):
+    """KB Securities REST API"""
+    url = "https://api.kbsec.com/stock/historyprice"
+    params = {
+        "symbol"   : ticker,
+        "fromDate" : start_date.replace("-", ""),   # YYYYMMDD
+        "toDate"   : end_date.replace("-", ""),
+        "period"   : "D"
+    }
+    headers = {"User-Agent": "Mozilla/5.0"}
+    r = requests.get(url, params=params, headers=headers, timeout=10)
+    r.raise_for_status()
+    data = r.json()
 
-        close = row['close']
-        open_ = row.get('open', close)
-        high  = row.get('high', close)
-        low   = row.get('low',  close)
-
-        if close < 1000:
-            close *= 1000; open_ *= 1000; high *= 1000; low *= 1000
-
-        pct = round((close - open_) / open_ * 100, 2) if open_ else 0
-
-        return {
-            "Mã CK"      : ticker,
-            "Ngày"       : str(row.get('time', row.get('date', ''))),
-            "Mở Cửa"     : int(open_),
-            "Cao Nhất"   : int(high),
-            "Thấp Nhất"  : int(low),
-            "Đóng Cửa"   : int(close),
-            "Khối Lượng" : int(row['volume']),
-            "% Thay Đổi" : pct,
-        }
-    except Exception:
+    # KB trả về list dict hoặc {"data": [...]}
+    rows = data if isinstance(data, list) else data.get("data", [])
+    if not rows:
         return None
 
+    df = pd.DataFrame(rows)
+    df.columns = [c.lower().strip() for c in df.columns]
+
+    # Chuẩn hóa tên cột KB → chuẩn
+    rename = {
+        "tradingdate": "time", "date": "time",
+        "openprice": "open",   "highprice": "high",
+        "lowprice": "low",     "closeprice": "close",
+        "totalvolume": "volume"
+    }
+    df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
+    df['_source'] = 'KB'
+    return df
+
+def fetch_via_dnse(ticker, start_date, end_date):
+    """DNSE Entrade API"""
+    url = f"https://services.entrade.com.vn/chart-api/v2/ohlcs/stock"
+    params = {
+        "symbol"  : ticker,
+        "from"    : start_date,
+        "to"      : end_date,
+        "resolution": "D"
+    }
+    headers = {"User-Agent": "Mozilla/5.0"}
+    r = requests.get(url, params=params, headers=headers, timeout=10)
+    r.raise_for_status()
+    data = r.json()
+
+    # DNSE trả về {"t":[], "o":[], "h":[], "l":[], "c":[], "v":[]}
+    if not data.get("t"):
+        return None
+
+    df = pd.DataFrame({
+        "time"  : pd.to_datetime(data["t"], unit="s").strftime("%Y-%m-%d"),
+        "open"  : data["o"],
+        "high"  : data["h"],
+        "low"   : data["l"],
+        "close" : data["c"],
+        "volume": data["v"],
+    })
+    df['_source'] = 'DNSE'
+    return df
+
+def fetch_via_yfinance(ticker, exchange, start_date, end_date):
+    suffix = YF_SUFFIX.get(exchange, ".VN")
+    df = yf.download(f"{ticker}{suffix}", start=start_date, end=end_date,
+                     progress=False, auto_adjust=True)
+    if df is None or df.empty:
+        return None
+    df = df.reset_index()
+    df.columns = [str(c).lower().strip() for c in df.columns]
+    df = df.rename(columns={"date": "time", "adj close": "close"})
+    df['_source'] = 'yfinance'
+    return df
+
+def parse_row(df, ticker):
+    row = df.iloc[-1]
+    close = float(row['close'])
+    open_ = float(row.get('open', close))
+    high  = float(row.get('high', close))
+    low   = float(row.get('low',  close))
+
+    if close < 1000:
+        close *= 1000; open_ *= 1000; high *= 1000; low *= 1000
+
+    pct = round((close - open_) / open_ * 100, 2) if open_ else 0
+
+    return {
+        "Mã CK"      : ticker,
+        "Ngày"       : str(row.get('time', '')),
+        "Mở Cửa"     : int(open_),
+        "Cao Nhất"   : int(high),
+        "Thấp Nhất"  : int(low),
+        "Đóng Cửa"   : int(close),
+        "Khối Lượng" : int(float(row.get('volume', 0))),
+        "% Thay Đổi" : pct,
+        "Nguồn"      : str(row.get('_source', '')),
+    }
+
+def fetch_latest_price(ticker, exchange, start_date, end_date):
+    # 1. VCI
+    try:
+        df = fetch_via_vci(ticker, start_date, end_date)
+        if df is not None:
+            return parse_row(df, ticker)
+    except Exception:
+        pass
+
+    # 2. KB
+    try:
+        df = fetch_via_kb(ticker, start_date, end_date)
+        if df is not None:
+            return parse_row(df, ticker)
+    except Exception:
+        pass
+
+    # 3. DNSE
+    try:
+        df = fetch_via_dnse(ticker, start_date, end_date)
+        if df is not None:
+            return parse_row(df, ticker)
+    except Exception:
+        pass
+
+    # 4. yfinance
+    try:
+        df = fetch_via_yfinance(ticker, exchange, start_date, end_date)
+        if df is not None:
+            return parse_row(df, ticker)
+    except Exception:
+        pass
+
+    return None
+
 # ─────────────────────────────────────────────────────────
-# MAIN                                                    # ✅ đã thêm lại
+# MAIN
 # ─────────────────────────────────────────────────────────
 def main():
     today = datetime.now().strftime('%Y-%m-%d')
@@ -219,12 +337,16 @@ def main():
         print(f"\n🔄 {exchange} ({len(tickers)} mã)...")
         rows = []
         for ticker in tickers:
-            result = fetch_latest_price(ticker, start, today)
+            result = fetch_latest_price(ticker, exchange, start, today)
             if result:
                 rows.append(result)
             time.sleep(0.3)
         all_data[exchange] = pd.DataFrame(rows) if rows else pd.DataFrame()
-        print(f"  ✅ {len(rows)} mã có dữ liệu")
+
+        # Thống kê nguồn dữ liệu
+        if rows:
+            df_src = all_data[exchange]['Nguồn'].value_counts()
+            print(f"  ✅ {len(rows)} mã — {df_src.to_dict()}")
 
     print("\n📁 Xuất file Excel...")
     export_xlsx(all_data)
