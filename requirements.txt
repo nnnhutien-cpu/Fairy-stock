@@ -13,3 +13,4 @@ requests
 gspread
 google-auth
 tqdm
+openpyxl>=3.1.0
