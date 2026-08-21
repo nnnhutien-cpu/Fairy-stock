@@ -149,10 +149,45 @@ def export_xlsx(all_data: dict):
     print(f"  ✅ Đã lưu {OUTPUT_FILE}")
 
 # ─────────────────────────────────────────────────────────
-# LẤY DANH SÁCH MÃ
+# CONFIG
+# ─────────────────────────────────────────────────────────
+DELAY_BETWEEN_TICKERS = 1.5   # giây giữa mỗi mã
+DNSE_BATCH_SIZE       = 30    # sau mỗi 30 mã nghỉ thêm
+DNSE_BATCH_PAUSE      = 10    # giây nghỉ giữa batch
+
+# ─────────────────────────────────────────────────────────
+# LẤY DANH SÁCH MÃ — không dùng VCI (rate limit)
+# dùng DNSE listing thay thế
 # ─────────────────────────────────────────────────────────
 def get_tickers_by_exchange():
     result = {ex: [] for ex in EXCHANGES}
+
+    # Nguồn 1: DNSE listing (không bị rate limit)
+    try:
+        url = "https://services.entrade.com.vn/dnse-order-service/securities"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        r = requests.get(url, headers=headers, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+
+        # DNSE trả về {"securities": [...]}
+        items = data if isinstance(data, list) else data.get("securities", data.get("data", []))
+        df = pd.DataFrame(items)
+        df.columns = [c.lower().strip() for c in df.columns]
+
+        ex_col     = next((c for c in ['exchange', 'market', 'floor'] if c in df.columns), None)
+        ticker_col = next((c for c in ['symbol', 'ticker', 'code']    if c in df.columns), None)
+
+        if ex_col and ticker_col:
+            for ex in EXCHANGES:
+                mask = df[ex_col].str.upper().str.contains(ex, na=False)
+                result[ex] = df[mask][ticker_col].tolist()
+                print(f"  {ex}: {len(result[ex])} mã (DNSE listing)")
+            return result
+    except Exception as e:
+        print(f"  ⚠️ DNSE listing lỗi: {e}")
+
+    # Nguồn 2: VCI listing — chỉ gọi 1 lần, không loop
     try:
         stock = Vnstock().stock(symbol='ACB', source='VCI')
         df_all = stock.listing.all_symbols()
@@ -165,80 +200,33 @@ def get_tickers_by_exchange():
 
         if ex_col and ticker_col:
             for ex in EXCHANGES:
-                mask = df_all[ex_col].str.upper().str.contains(ex)
+                mask = df_all[ex_col].str.upper().str.contains(ex, na=False)
                 result[ex] = df_all[mask][ticker_col].tolist()
-                print(f"  {ex}: {len(result[ex])} mã (VCI)")
+                print(f"  {ex}: {len(result[ex])} mã (VCI listing)")
         elif ticker_col:
             result["HOSE"] = df_all[ticker_col].tolist()
-            print(f"  HOSE (tất cả): {len(result['HOSE'])} mã")
     except Exception as e:
         print(f"  ⚠️ VCI listing lỗi: {e}")
 
     return result
 
 # ─────────────────────────────────────────────────────────
-# FALLBACK CHAIN: VCI → KB → DNSE → yfinance
+# FETCH GIÁ — DNSE → KB → yfinance (bỏ VCI)
 # ─────────────────────────────────────────────────────────
-def fetch_via_vci(ticker, start_date, end_date):
-    stock = Vnstock().stock(symbol=ticker, source='VCI')
-    df = stock.quote.history(start=start_date, end=end_date, interval='1D')
-    if df is None or df.empty:
-        return None
-    df.columns = [str(c).lower().strip() for c in df.columns]
-    df['_source'] = 'VCI'
-    return df
-
-def fetch_via_kb(ticker, start_date, end_date):
-    """KB Securities REST API"""
-    url = "https://api.kbsec.com/stock/historyprice"
-    params = {
-        "symbol"   : ticker,
-        "fromDate" : start_date.replace("-", ""),   # YYYYMMDD
-        "toDate"   : end_date.replace("-", ""),
-        "period"   : "D"
-    }
-    headers = {"User-Agent": "Mozilla/5.0"}
-    r = requests.get(url, params=params, headers=headers, timeout=10)
-    r.raise_for_status()
-    data = r.json()
-
-    # KB trả về list dict hoặc {"data": [...]}
-    rows = data if isinstance(data, list) else data.get("data", [])
-    if not rows:
-        return None
-
-    df = pd.DataFrame(rows)
-    df.columns = [c.lower().strip() for c in df.columns]
-
-    # Chuẩn hóa tên cột KB → chuẩn
-    rename = {
-        "tradingdate": "time", "date": "time",
-        "openprice": "open",   "highprice": "high",
-        "lowprice": "low",     "closeprice": "close",
-        "totalvolume": "volume"
-    }
-    df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
-    df['_source'] = 'KB'
-    return df
-
 def fetch_via_dnse(ticker, start_date, end_date):
-    """DNSE Entrade API"""
-    url = f"https://services.entrade.com.vn/chart-api/v2/ohlcs/stock"
+    url = "https://services.entrade.com.vn/chart-api/v2/ohlcs/stock"
     params = {
-        "symbol"  : ticker,
-        "from"    : start_date,
-        "to"      : end_date,
+        "symbol"    : ticker,
+        "from"      : start_date,
+        "to"        : end_date,
         "resolution": "D"
     }
     headers = {"User-Agent": "Mozilla/5.0"}
     r = requests.get(url, params=params, headers=headers, timeout=10)
     r.raise_for_status()
     data = r.json()
-
-    # DNSE trả về {"t":[], "o":[], "h":[], "l":[], "c":[], "v":[]}
     if not data.get("t"):
         return None
-
     df = pd.DataFrame({
         "time"  : pd.to_datetime(data["t"], unit="s").strftime("%Y-%m-%d"),
         "open"  : data["o"],
@@ -250,6 +238,33 @@ def fetch_via_dnse(ticker, start_date, end_date):
     df['_source'] = 'DNSE'
     return df
 
+def fetch_via_kb(ticker, start_date, end_date):
+    url = "https://api.kbsec.com/stock/historyprice"
+    params = {
+        "symbol" : ticker,
+        "fromDate": start_date.replace("-", ""),
+        "toDate"  : end_date.replace("-", ""),
+        "period"  : "D"
+    }
+    headers = {"User-Agent": "Mozilla/5.0"}
+    r = requests.get(url, params=params, headers=headers, timeout=10)
+    r.raise_for_status()
+    data = r.json()
+    rows = data if isinstance(data, list) else data.get("data", [])
+    if not rows:
+        return None
+    df = pd.DataFrame(rows)
+    df.columns = [c.lower().strip() for c in df.columns]
+    rename = {
+        "tradingdate": "time", "date": "time",
+        "openprice"  : "open", "highprice": "high",
+        "lowprice"   : "low",  "closeprice": "close",
+        "totalvolume": "volume"
+    }
+    df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
+    df['_source'] = 'KB'
+    return df
+
 def fetch_via_yfinance(ticker, exchange, start_date, end_date):
     suffix = YF_SUFFIX.get(exchange, ".VN")
     df = yf.download(f"{ticker}{suffix}", start=start_date, end=end_date,
@@ -257,39 +272,16 @@ def fetch_via_yfinance(ticker, exchange, start_date, end_date):
     if df is None or df.empty:
         return None
     df = df.reset_index()
-    df.columns = [str(c).lower().strip() for c in df.columns]
+    df.columns = [str(c[0]).lower().strip() if isinstance(c, tuple) else str(c).lower().strip()
+                  for c in df.columns]
     df = df.rename(columns={"date": "time", "adj close": "close"})
     df['_source'] = 'yfinance'
     return df
 
-def parse_row(df, ticker):
-    row = df.iloc[-1]
-    close = float(row['close'])
-    open_ = float(row.get('open', close))
-    high  = float(row.get('high', close))
-    low   = float(row.get('low',  close))
-
-    if close < 1000:
-        close *= 1000; open_ *= 1000; high *= 1000; low *= 1000
-
-    pct = round((close - open_) / open_ * 100, 2) if open_ else 0
-
-    return {
-        "Mã CK"      : ticker,
-        "Ngày"       : str(row.get('time', '')),
-        "Mở Cửa"     : int(open_),
-        "Cao Nhất"   : int(high),
-        "Thấp Nhất"  : int(low),
-        "Đóng Cửa"   : int(close),
-        "Khối Lượng" : int(float(row.get('volume', 0))),
-        "% Thay Đổi" : pct,
-        "Nguồn"      : str(row.get('_source', '')),
-    }
-
 def fetch_latest_price(ticker, exchange, start_date, end_date):
-    # 1. VCI
+    # 1. DNSE
     try:
-        df = fetch_via_vci(ticker, start_date, end_date)
+        df = fetch_via_dnse(ticker, start_date, end_date)
         if df is not None:
             return parse_row(df, ticker)
     except Exception:
@@ -303,15 +295,7 @@ def fetch_latest_price(ticker, exchange, start_date, end_date):
     except Exception:
         pass
 
-    # 3. DNSE
-    try:
-        df = fetch_via_dnse(ticker, start_date, end_date)
-        if df is not None:
-            return parse_row(df, ticker)
-    except Exception:
-        pass
-
-    # 4. yfinance
+    # 3. yfinance
     try:
         df = fetch_via_yfinance(ticker, exchange, start_date, end_date)
         if df is not None:
@@ -322,7 +306,7 @@ def fetch_latest_price(ticker, exchange, start_date, end_date):
     return None
 
 # ─────────────────────────────────────────────────────────
-# MAIN
+# MAIN — thêm batch pause
 # ─────────────────────────────────────────────────────────
 def main():
     today = datetime.now().strftime('%Y-%m-%d')
@@ -336,17 +320,24 @@ def main():
     for exchange, tickers in exchange_map.items():
         print(f"\n🔄 {exchange} ({len(tickers)} mã)...")
         rows = []
-        for ticker in tickers:
+        for i, ticker in enumerate(tickers):
             result = fetch_latest_price(ticker, exchange, start, today)
             if result:
                 rows.append(result)
-            time.sleep(0.3)
+
+            # Delay giữa mỗi mã
+            time.sleep(DELAY_BETWEEN_TICKERS)
+
+            # Nghỉ dài sau mỗi batch để tránh bị block
+            if (i + 1) % DNSE_BATCH_SIZE == 0:
+                print(f"    ⏸ Nghỉ {DNSE_BATCH_PAUSE}s sau {i+1} mã...")
+                time.sleep(DNSE_BATCH_PAUSE)
+
         all_data[exchange] = pd.DataFrame(rows) if rows else pd.DataFrame()
 
-        # Thống kê nguồn dữ liệu
         if rows:
-            df_src = all_data[exchange]['Nguồn'].value_counts()
-            print(f"  ✅ {len(rows)} mã — {df_src.to_dict()}")
+            src_count = all_data[exchange]['Nguồn'].value_counts().to_dict()
+            print(f"  ✅ {len(rows)} mã — nguồn: {src_count}")
 
     print("\n📁 Xuất file Excel...")
     export_xlsx(all_data)
