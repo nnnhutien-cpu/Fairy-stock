@@ -3,7 +3,7 @@ import gspread
 import json
 import os
 from google.oauth2.service_account import Credentials
-from vnstock import listing_companies, stock_historical_data
+from vnstock import Vnstock                          # ✅ v4
 from datetime import datetime, timedelta
 import time
 import openpyxl
@@ -24,7 +24,7 @@ def get_gsheet_client():
         "https://www.googleapis.com/auth/drive"
     ]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-    return gspread.Client(auth=creds)          # ✅ không dùng authorize()
+    return gspread.Client(auth=creds)
 
 def push_to_gsheet(all_data: dict):
     client = get_gsheet_client()
@@ -40,7 +40,6 @@ def push_to_gsheet(all_data: dict):
         "horizontalAlignment": "CENTER"
     }
 
-    # Ghi từng sàn vào sheet riêng
     for exchange, df in all_data.items():
         try:
             ws = wb.worksheet(exchange)
@@ -86,7 +85,6 @@ COL_WIDTHS = [10, 14, 14, 14, 14, 14, 16, 14]
 def style_sheet(ws, nrows, ncols):
     header_fill = PatternFill("solid", fgColor="1F4E79")
     header_font = Font(bold=True, color="FFFFFF", name="Arial", size=11)
-
     for cell in ws[1]:
         cell.fill = header_fill
         cell.font = header_font
@@ -101,7 +99,6 @@ def style_sheet(ws, nrows, ncols):
                 cell.fill = fill_even
         ws.cell(row=row_idx, column=1).alignment = Alignment(horizontal="center")
 
-        # Màu % thay đổi
         pct_cell = ws.cell(row=row_idx, column=ncols)
         try:
             val = float(pct_cell.value)
@@ -114,7 +111,6 @@ def style_sheet(ws, nrows, ncols):
 
     for i, w in enumerate(COL_WIDTHS[:ncols], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
-
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = ws.dimensions
 
@@ -122,7 +118,7 @@ def export_xlsx(all_data: dict):
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
 
-    # Sheet tổng hợp trước (index 0)
+    # Sheet Tổng Hợp đầu tiên
     frames = []
     for exchange, df in all_data.items():
         if not df.empty:
@@ -156,30 +152,31 @@ def export_xlsx(all_data: dict):
 # LẤY DỮ LIỆU
 # ─────────────────────────────────────────────────────────
 def get_tickers_by_exchange():
-    df = listing_companies()
-    if df is None or df.empty:
-        return {}
-    df.columns = [c.lower().strip() for c in df.columns]
+    stock = Vnstock().stock(symbol='ACB', source='VCI')
     result = {}
     for ex in EXCHANGES:
-        col = next((c for c in ['exchange', 'comgroupcode', 'group_code']
-                    if c in df.columns), None)
-        if col:
-            subset = df[df[col].str.upper() == ex]['ticker'].tolist()
-        else:
-            subset = df['ticker'].tolist()
-        result[ex] = subset
-        print(f"  {ex}: {len(subset)} mã")
+        try:
+            df = stock.listing.symbols_by_exchange(exchange=ex)
+            if isinstance(df, list):
+                tickers = df
+            else:
+                df.columns = [c.lower().strip() for c in df.columns]
+                col = next((c for c in ['ticker', 'symbol', 'code'] if c in df.columns), None)
+                tickers = df[col].tolist() if col else []
+            result[ex] = tickers
+            print(f"  {ex}: {len(tickers)} mã")
+        except Exception as e:
+            print(f"  ⚠️ {ex}: lỗi — {e}")
+            result[ex] = []
     return result
 
 def fetch_latest_price(ticker, start_date, end_date):
     try:
-        df = stock_historical_data(
-            ticker=ticker, start_date=start_date,
-            end_date=end_date, resolution='1D', type='stock'
-        )
+        stock = Vnstock().stock(symbol=ticker, source='VCI')
+        df = stock.quote.history(start=start_date, end=end_date, interval='1D')
         if df is None or df.empty:
             return None
+
         df.columns = [str(c).lower().strip() for c in df.columns]
         row = df.iloc[-1]
 
@@ -195,7 +192,7 @@ def fetch_latest_price(ticker, start_date, end_date):
 
         return {
             "Mã CK"      : ticker,
-            "Ngày"       : str(row['time']),
+            "Ngày"       : str(row.get('time', row.get('date', ''))),
             "Mở Cửa"     : int(open_),
             "Cao Nhất"   : int(high),
             "Thấp Nhất"  : int(low),
@@ -207,7 +204,7 @@ def fetch_latest_price(ticker, start_date, end_date):
         return None
 
 # ─────────────────────────────────────────────────────────
-# MAIN
+# MAIN                                                    # ✅ đã thêm lại
 # ─────────────────────────────────────────────────────────
 def main():
     today = datetime.now().strftime('%Y-%m-%d')
@@ -221,16 +218,16 @@ def main():
     for exchange, tickers in exchange_map.items():
         print(f"\n🔄 {exchange} ({len(tickers)} mã)...")
         rows = []
-        for ticker in tickers:            # xóa [:50] để cào hết
+        for ticker in tickers:
             result = fetch_latest_price(ticker, start, today)
             if result:
                 rows.append(result)
-            time.sleep(0.3)               # ✅ tách ra loop riêng
+            time.sleep(0.3)
         all_data[exchange] = pd.DataFrame(rows) if rows else pd.DataFrame()
         print(f"  ✅ {len(rows)} mã có dữ liệu")
 
     print("\n📁 Xuất file Excel...")
-    export_xlsx(all_data)                 # ✅ có code thực tế
+    export_xlsx(all_data)
 
     print("\n📤 Đẩy lên Google Sheet...")
     push_to_gsheet(all_data)
