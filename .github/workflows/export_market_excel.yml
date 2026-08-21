@@ -1,0 +1,40 @@
+name: Export Market Excel
+
+on:
+  schedule:
+    - cron: '30 8 * * 1-5'   # 15:30 ICT, thứ 2 - thứ 6
+  workflow_dispatch:           # cho phép chạy tay
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run export
+        run: python export_market_excel.py
+
+      - name: Commit & push Excel file
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add market_data.xlsx
+          git commit -m "📊 Auto export $(date +'%Y-%m-%d')" || echo "No changes"
+          git push
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: market-data-${{ github.run_id }}
+          path: market_data.xlsx
+          retention-days: 30
