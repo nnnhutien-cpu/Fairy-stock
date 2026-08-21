@@ -8,11 +8,14 @@ from datetime import datetime, timedelta
 import time
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
 
 OUTPUT_FILE = "market_data.xlsx"
 EXCHANGES = ["HOSE", "HNX", "UPCOM"]
 
-# ── Google Sheet ──────────────────────────────────────────
+# ─────────────────────────────────────────────────────────
+# GOOGLE SHEET
+# ─────────────────────────────────────────────────────────
 def get_gsheet_client():
     creds_json = os.environ.get("GOOGLE_CREDENTIALS")
     creds_dict = json.loads(creds_json)
@@ -21,16 +24,24 @@ def get_gsheet_client():
         "https://www.googleapis.com/auth/drive"
     ]
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-    return gspread.authorize(creds)
+    return gspread.Client(auth=creds)          # ✅ không dùng authorize()
 
 def push_to_gsheet(all_data: dict):
-    """all_data = {"HOSE": df, "HNX": df, "UPCOM": df}"""
     client = get_gsheet_client()
     spreadsheet_id = os.environ.get("SPREADSHEET_ID")
     wb = client.open_by_key(spreadsheet_id)
 
+    HEADER_FMT = {
+        "backgroundColor": {"red": 0.12, "green": 0.31, "blue": 0.47},
+        "textFormat": {
+            "bold": True,
+            "foregroundColor": {"red": 1, "green": 1, "blue": 1}
+        },
+        "horizontalAlignment": "CENTER"
+    }
+
+    # Ghi từng sàn vào sheet riêng
     for exchange, df in all_data.items():
-        # Tạo sheet nếu chưa có, dùng lại nếu đã có
         try:
             ws = wb.worksheet(exchange)
             ws.clear()
@@ -38,18 +49,13 @@ def push_to_gsheet(all_data: dict):
             ws = wb.add_worksheet(title=exchange, rows=2000, cols=10)
 
         if df.empty:
+            print(f"  ⚠️ {exchange}: không có dữ liệu")
             continue
 
-        # Ghi header + data
-        ws.update([df.columns.tolist()] + df.values.tolist())
-
-        # Format header (bold, nền xanh đậm)
-        ws.format("A1:I1", {
-            "backgroundColor": {"red": 0.12, "green": 0.31, "blue": 0.47},
-            "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}},
-            "horizontalAlignment": "CENTER"
-        })
-        print(f"  ✅ Đã đẩy {len(df)} dòng lên sheet '{exchange}'")
+        data = [df.columns.tolist()] + df.values.tolist()
+        ws.update(data, value_input_option="RAW")
+        ws.format(f"A1:{get_column_letter(len(df.columns))}1", HEADER_FMT)
+        print(f"  ✅ Sheet '{exchange}': {len(df)} dòng")
 
     # Sheet Tổng Hợp
     try:
@@ -67,15 +73,88 @@ def push_to_gsheet(all_data: dict):
 
     if frames:
         df_total = pd.concat(frames, ignore_index=True)
-        ws_all.update([df_total.columns.tolist()] + df_total.values.tolist())
-        ws_all.format("A1:J1", {
-            "backgroundColor": {"red": 0.12, "green": 0.31, "blue": 0.47},
-            "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}},
-            "horizontalAlignment": "CENTER"
-        })
-        print(f"  ✅ Sheet Tổng Hợp: {len(df_total)} dòng")
+        data_all = [df_total.columns.tolist()] + df_total.values.tolist()
+        ws_all.update(data_all, value_input_option="RAW")
+        ws_all.format(f"A1:{get_column_letter(len(df_total.columns))}1", HEADER_FMT)
+        print(f"  ✅ Sheet 'Tổng Hợp': {len(df_total)} dòng")
 
-# ── Logic chính (giữ nguyên từ bước trước) ───────────────
+# ─────────────────────────────────────────────────────────
+# EXCEL (.xlsx)
+# ─────────────────────────────────────────────────────────
+COL_WIDTHS = [10, 14, 14, 14, 14, 14, 16, 14]
+
+def style_sheet(ws, nrows, ncols):
+    header_fill = PatternFill("solid", fgColor="1F4E79")
+    header_font = Font(bold=True, color="FFFFFF", name="Arial", size=11)
+
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    fill_even = PatternFill("solid", fgColor="DEEAF1")
+    for row_idx in range(2, nrows + 2):
+        for cell in ws[row_idx]:
+            cell.font = Font(name="Arial", size=10)
+            cell.alignment = Alignment(horizontal="right")
+            if row_idx % 2 == 0:
+                cell.fill = fill_even
+        ws.cell(row=row_idx, column=1).alignment = Alignment(horizontal="center")
+
+        # Màu % thay đổi
+        pct_cell = ws.cell(row=row_idx, column=ncols)
+        try:
+            val = float(pct_cell.value)
+            pct_cell.font = Font(
+                name="Arial", size=10, bold=True,
+                color="00B050" if val >= 0 else "FF0000"
+            )
+        except (TypeError, ValueError):
+            pass
+
+    for i, w in enumerate(COL_WIDTHS[:ncols], 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+
+def export_xlsx(all_data: dict):
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+
+    # Sheet tổng hợp trước (index 0)
+    frames = []
+    for exchange, df in all_data.items():
+        if not df.empty:
+            df_copy = df.copy()
+            df_copy.insert(0, "Sàn", exchange)
+            frames.append(df_copy)
+
+    if frames:
+        df_total = pd.concat(frames, ignore_index=True)
+        ws_all = wb.create_sheet("Tổng Hợp", 0)
+        ws_all.append(df_total.columns.tolist())
+        for _, r in df_total.iterrows():
+            ws_all.append(r.tolist())
+        style_sheet(ws_all, len(df_total), len(df_total.columns))
+
+    # Sheet từng sàn
+    for exchange, df in all_data.items():
+        ws = wb.create_sheet(exchange)
+        if df.empty:
+            ws.append(["Không có dữ liệu"])
+            continue
+        ws.append(df.columns.tolist())
+        for _, r in df.iterrows():
+            ws.append(r.tolist())
+        style_sheet(ws, len(df), len(df.columns))
+
+    wb.save(OUTPUT_FILE)
+    print(f"  ✅ Đã lưu {OUTPUT_FILE}")
+
+# ─────────────────────────────────────────────────────────
+# LẤY DỮ LIỆU
+# ─────────────────────────────────────────────────────────
 def get_tickers_by_exchange():
     df = listing_companies()
     if df is None or df.empty:
@@ -83,57 +162,80 @@ def get_tickers_by_exchange():
     df.columns = [c.lower().strip() for c in df.columns]
     result = {}
     for ex in EXCHANGES:
-        col = next((c for c in ['exchange','comgroupcode','group_code'] if c in df.columns), None)
-        subset = df[df[col].str.upper() == ex]['ticker'].tolist() if col else df['ticker'].tolist()
+        col = next((c for c in ['exchange', 'comgroupcode', 'group_code']
+                    if c in df.columns), None)
+        if col:
+            subset = df[df[col].str.upper() == ex]['ticker'].tolist()
+        else:
+            subset = df['ticker'].tolist()
         result[ex] = subset
         print(f"  {ex}: {len(subset)} mã")
     return result
 
 def fetch_latest_price(ticker, start_date, end_date):
     try:
-        df = stock_historical_data(ticker=ticker, start_date=start_date,
-                                   end_date=end_date, resolution='1D', type='stock')
+        df = stock_historical_data(
+            ticker=ticker, start_date=start_date,
+            end_date=end_date, resolution='1D', type='stock'
+        )
         if df is None or df.empty:
             return None
         df.columns = [str(c).lower().strip() for c in df.columns]
         row = df.iloc[-1]
+
         close = row['close']
         open_ = row.get('open', close)
         high  = row.get('high', close)
         low   = row.get('low',  close)
+
         if close < 1000:
             close *= 1000; open_ *= 1000; high *= 1000; low *= 1000
+
         pct = round((close - open_) / open_ * 100, 2) if open_ else 0
-        return {"Mã CK": ticker, "Ngày": str(row['time']),
-                "Mở Cửa": int(open_), "Cao Nhất": int(high),
-                "Thấp Nhất": int(low), "Đóng Cửa": int(close),
-                "Khối Lượng": int(row['volume']), "% Thay Đổi": pct}
+
+        return {
+            "Mã CK"      : ticker,
+            "Ngày"       : str(row['time']),
+            "Mở Cửa"     : int(open_),
+            "Cao Nhất"   : int(high),
+            "Thấp Nhất"  : int(low),
+            "Đóng Cửa"   : int(close),
+            "Khối Lượng" : int(row['volume']),
+            "% Thay Đổi" : pct,
+        }
     except Exception:
         return None
 
+# ─────────────────────────────────────────────────────────
+# MAIN
+# ─────────────────────────────────────────────────────────
 def main():
     today = datetime.now().strftime('%Y-%m-%d')
     start = (datetime.now() - timedelta(days=10)).strftime('%Y-%m-%d')
-    print(f"📅 Export ngày: {today}")
+    print(f"📅 Export ngày: {today}\n")
 
+    print("📋 Lấy danh sách mã theo sàn...")
     exchange_map = get_tickers_by_exchange()
-    all_data = {}
 
+    all_data = {}
     for exchange, tickers in exchange_map.items():
         print(f"\n🔄 {exchange} ({len(tickers)} mã)...")
-        rows = [fetch_latest_price(t, start, today) for t in tickers
-                if (time.sleep(0.3) or True)]
-        rows = [r for r in rows if r]
+        rows = []
+        for ticker in tickers:            # xóa [:50] để cào hết
+            result = fetch_latest_price(ticker, start, today)
+            if result:
+                rows.append(result)
+            time.sleep(0.3)               # ✅ tách ra loop riêng
         all_data[exchange] = pd.DataFrame(rows) if rows else pd.DataFrame()
-        print(f"  ✅ {len(rows)} mã")
+        print(f"  ✅ {len(rows)} mã có dữ liệu")
 
-    # Export xlsx
-    # ... (giữ nguyên phần openpyxl bên trên)
+    print("\n📁 Xuất file Excel...")
+    export_xlsx(all_data)                 # ✅ có code thực tế
 
-    # Push lên Google Sheet
     print("\n📤 Đẩy lên Google Sheet...")
     push_to_gsheet(all_data)
-    print("🎉 Hoàn thành!")
+
+    print("\n🎉 Hoàn thành!")
 
 if __name__ == "__main__":
     main()
