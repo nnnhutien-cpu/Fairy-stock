@@ -1,14 +1,14 @@
 {
-  "updated_at": "2026-08-21 18:04:21",
-  "data_date": "2026-08-21",
-  "n_total": 397,
-  "advance": 267,
-  "decline": 67,
-  "unchanged": 63,
-  "ad_pct": 67.25,
-  "pct_above_ma20": 60.45,
-  "pct_above_ma50": 33.75,
-  "breadth_score": 0,
+  "updated_at": "2026-08-24 19:24:40",
+  "data_date": "2026-08-24",
+  "n_total": 399,
+  "advance": 209,
+  "decline": 116,
+  "unchanged": 74,
+  "ad_pct": 52.38,
+  "pct_above_ma20": 64.16,
+  "pct_above_ma50": 37.59,
+  "breadth_score": -1,
   "momentum_note": "🟡 Thị trường phân hoá / đi ngang, chưa có xu hướng rõ ràng trên diện rộng.",
-  "ad_change": 1.309
+  "ad_change": 0.503
 }
