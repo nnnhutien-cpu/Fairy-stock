@@ -270,14 +270,15 @@ setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 
-# --- 4. TẠO 8 TAB (THÊM TAB QUẢN LÝ GIAO DỊCH) ---
+# --- 4. TẠO 6 TAB (ĐÃ GỘP "KẾT QUẢ QUÉT" + "TÍN HIỆU & CẢNH BÁO") ---
 # Đã bỏ tab "📑 Báo Cáo" (gọi reports.json qua mạng mỗi lần render, làm chậm
 # tải trang) để web load nhanh hơn — các tab còn lại không phụ thuộc vào nó.
-tab_market, tab_screener, tab_results, tab_signals, tab_recommendation, tab_suc_bat, tab_portfolio = st.tabs([
+# Đã gộp tab "📊 Kết Quả Quét" và "📡 Tín Hiệu & Cảnh Báo" thành 1 tab
+# (dùng sub-tab bên trong), vì cả hai đều dùng chung df_display_cached.
+tab_market, tab_screener, tab_results, tab_recommendation, tab_suc_bat, tab_portfolio = st.tabs([
     "🌟 Thị Trường",
     "🔍 Bộ Lọc",
-    "📊 Kết Quả Quét",
-    "📡 Tín Hiệu & Cảnh Báo",
+    "📊 Kết Quả & Tín Hiệu",
     "💡 Khuyến Nghị",
     "🚀 Sức Bật",
     "💼 Danh mục",
@@ -602,57 +603,7 @@ with tab_market:
                 text=f"Cổ phiếu {stock_pct}%  ·  Tiền mặt {cash_pct}%"
             )
 
-        # --- ẨN: khung "Lý do khuyến nghị" (bỏ comment để hiện lại) ---
-        # with st.expander("📋 Lý do khuyến nghị", expanded=False):
-        #     reasons = reco.get("reasons", [])
-        #     if reasons:
-        #         for r in reasons:
-        #             st.markdown(f"- {r}")
-        #     else:
-        #         st.caption("Chưa có lý do chi tiết.")
-
         st.caption("⚠️ Khuyến nghị dựa trên PTKT + định giá, không phải tư vấn đầu tư chính thức.")
-
-        # --- ẨN: khung "Bảng quy đổi Score → Tỷ trọng" (bỏ comment để hiện lại) ---
-        # with st.expander("📋 Bảng quy đổi Score → Tỷ trọng", expanded=False):
-        #     st.caption(
-        #         "Tổng Score = Breadth (–8→+8) + PTKT (–5→+5) + P/E (–2→+2) = khung –15 đến +15"
-        #     )
-        #     st.divider()
-        #
-        #     score_table = [
-        #         (12,  85, "20%", "🔥 MUA CỰC MẠNH"),
-        #         (9,   75, "25%", "🚀 MUA MẠNH"),
-        #         (6,   65, "35%", "🟢 MUA TÍCH CỰC"),
-        #         (3,   58, "42%", "🟢 MUA / GIỮ"),
-        #         (1,   52, "48%", "🟢 GIỮ CAO"),
-        #         (-1,  50, "50%", "➖ CÂN BẰNG"),
-        #         (-3,  42, "58%", "🟠 GIẢM NHẸ"),
-        #         (-6,  30, "70%", "⚠️ GIẢM TỶ TRỌNG"),
-        #         (-9,  20, "80%", "🔴 PHÒNG THỦ"),
-        #         (-12, 10, "90%", "🛡️ PHÒNG THỦ MẠNH"),
-        #         (-99,  5, "95%", "💀 THOÁT KHỎI THỊ TRƯỜNG"),
-        #     ]
-        #
-        #     h = st.columns([1.2, 1, 1, 2.5, 1.2])
-        #     for col, lbl in zip(h, ["Score", "CP%", "Tiền%", "Hành động", ""]):
-        #         col.markdown(f"**{lbl}**")
-        #
-        #     matched = None
-        #     for i, (thr, cp, cash, act) in enumerate(score_table):
-        #         if cur_score >= thr:
-        #             matched = i
-        #             break
-        #
-        #     for i, (thr, cp, cash, act) in enumerate(score_table):
-        #         score_str = f"≥ {thr}" if thr > -99 else "< -12"
-        #         cols = st.columns([1.2, 1, 1, 2.5, 1.2])
-        #         cols[0].markdown(f"**{score_str}**")
-        #         cols[1].markdown(f"`{cp}%`")
-        #         cols[2].markdown(f"`{cash}`")
-        #         cols[3].markdown(act)
-        #         if i == matched:
-        #             cols[4].markdown("⬅️ **Hiện tại**")
 
 
 # ==========================================
@@ -781,7 +732,7 @@ def render_screener_fragment():
                                 with live_results_box.container():
                                     st.caption(
                                         f"📊 Kết quả LIVE (đang cập nhật): {len(preview_df_live)} mã — "
-                                        "bảng đầy đủ sẽ có ở tab 📊 Kết Quả Quét sau khi quét xong."
+                                        "bảng đầy đủ sẽ có ở tab 📊 Kết Quả & Tín Hiệu sau khi quét xong."
                                     )
                                     st.dataframe(preview_df_live, use_container_width=True, hide_index=True)
                     except concurrent.futures.TimeoutError:
@@ -821,57 +772,54 @@ def render_screener_fragment():
         st.markdown(
             '<div class="sb-note">Hãy cấu hình thông số ở Sidebar trái và bấm '
             '<b>🚀 KÍCH HOẠT QUÉT TOÀN DIỆN</b> để bắt đầu. '
-            'Kết quả sau khi quét xong sẽ hiển thị ở tab <b>📊 Kết Quả Quét</b>.</div>',
+            'Kết quả sau khi quét xong sẽ hiển thị ở tab <b>📊 Kết Quả & Tín Hiệu</b>.</div>',
             unsafe_allow_html=True,
         )
     else:
         n_found = len(st.session_state['scan_results'])
         st.success(f"✅ Đã có {n_found} mã trong kết quả quét gần nhất. "
-                   "👉 Chuyển sang tab **📊 Kết Quả Quét** ở trên để xem bảng chi tiết.")
+                   "👉 Chuyển sang tab **📊 Kết Quả & Tín Hiệu** ở trên để xem bảng chi tiết.")
 
 
 with tab_screener:
     render_screener_fragment()
 
 # ==========================================
-# TAB 3: KẾT QUẢ QUÉT
+# TAB 3: KẾT QUẢ QUÉT + TÍN HIỆU & CẢNH BÁO (ĐÃ GỘP)
 # ==========================================
 with tab_results:
-    sb_header("📊 Kết quả quét")
+    sb_header("📊 Kết quả quét & Tín hiệu")
+
     if st.session_state.get('scan_results', []):
         raw_df = pd.DataFrame(st.session_state['scan_results'])
         df_display = render_search_and_export(raw_df)
         st.session_state['df_display_cached'] = df_display
-        render_screener_results(df_display, signal_filter)
+
+        sub_kq, sub_th = st.tabs(["📊 Kết Quả Quét", "📡 Tín Hiệu & Cảnh Báo"])
+
+        with sub_kq:
+            render_screener_results(df_display, signal_filter)
+
+        with sub_th:
+            render_screener_signals(df_display, signal_filter)
     else:
         st.info("Chưa có dữ liệu quét. Sang tab **🔍 Bộ Lọc** để bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' trước.")
 
 # ==========================================
-# TAB 4: TÍN HIỆU & CẢNH BÁO
-# ==========================================
-with tab_signals:
-    sb_header("📡 Tín hiệu & cảnh báo")
-    df_display_cached = st.session_state.get('df_display_cached')
-    if isinstance(df_display_cached, pd.DataFrame) and not df_display_cached.empty:
-        render_screener_signals(df_display_cached, signal_filter)
-    else:
-        st.info("Chưa có dữ liệu quét. Sang tab **🔍 Bộ Lọc** để quét, rồi ghé tab **📊 Kết Quả Quét** trước.")
-
-# ==========================================
-# TAB 5: KHUYẾN NGHỊ
+# TAB 4: KHUYẾN NGHỊ
 # ==========================================
 
 with tab_recommendation:
     render_recommendation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift) 
 
 # ========================================== 
-# TAB 6: SCREENER SỨC BẬT 
+# TAB 5: SCREENER SỨC BẬT 
 # ========================================== 
 with tab_suc_bat: 
     render_suc_bat_tab()
 
 # ==========================================
-# TAB 7: QUẢN LÝ GIAO DỊCH (PORTFOLIO MANAGER)
+# TAB 6: QUẢN LÝ GIAO DỊCH (PORTFOLIO MANAGER)
 # ==========================================
 with tab_portfolio:
     render_portfolio_v2_tab(PRIORITY_TICKERS)
