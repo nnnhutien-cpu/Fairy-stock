@@ -6,3 +6,5 @@ gspread
 google-auth
 yfinance
 requests
+plotly
+streamlit
