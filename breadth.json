@@ -1,14 +1,14 @@
 {
-  "updated_at": "2026-08-24 19:24:40",
-  "data_date": "2026-08-24",
+  "updated_at": "2026-08-25 18:06:19",
+  "data_date": "2026-08-25",
   "n_total": 399,
-  "advance": 209,
-  "decline": 116,
-  "unchanged": 74,
-  "ad_pct": 52.38,
-  "pct_above_ma20": 64.16,
-  "pct_above_ma50": 37.59,
-  "breadth_score": -1,
-  "momentum_note": "🟡 Thị trường phân hoá / đi ngang, chưa có xu hướng rõ ràng trên diện rộng.",
-  "ad_change": 0.503
+  "advance": 97,
+  "decline": 229,
+  "unchanged": 73,
+  "ad_pct": 24.31,
+  "pct_above_ma20": 53.63,
+  "pct_above_ma50": 35.34,
+  "breadth_score": -3,
+  "momentum_note": "🟠 Thị trường suy yếu, số mã giảm giá đang chiếm ưu thế.",
+  "ad_change": -0.391
 }
