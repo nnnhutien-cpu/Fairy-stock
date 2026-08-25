@@ -2,8 +2,6 @@ import streamlit as st
 import pandas as pd
 import concurrent.futures
 import time
-import streamlit as st
-import pandas as pd
 import numpy as np
 import streamlit.components.v1 as components
 from supabase import create_client
@@ -30,8 +28,6 @@ from tab_portfolio_v2 import render_portfolio_v2_tab
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
 # --- 1b. GIAO DIỆN: TÍM ĐẬM SANG TRỌNG + FONT + HÒA HEADER ---
-# Bộ class dùng chung (sb-header, lk-card, badge-*, ...) — cùng bộ token màu
-# với tab "Sức Bật" / "Danh mục" để mọi tab trong app đồng bộ 1 ngôn ngữ đồ hoạ.
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');
@@ -157,28 +153,24 @@ st.markdown("""
     .src-fireant { background:#1a2e1a; color:#4caf50; }
     .src-yahoo   { background:#1a1a3a; color:#8b7fb5; }
 
-    /* ══════════ Đồng bộ font cho NỘI DUNG mọi tab (giống hệ chữ tab 🚀 Sức Bật) ══════════ */
+    /* ══════════ Đồng bộ font cho NỘI DUNG mọi tab ══════════ */
     h4, h5, h6 { color: #a394d4 !important; font-weight: 700 !important; letter-spacing: .2px; }
 
-    /* Đoạn văn / danh sách thường trong st.markdown, st.write */
     .stMarkdown p, .stMarkdown li, .stMarkdown div,
     [data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] li {
         font-size: 13px !important; color: #ccc !important; line-height: 1.6 !important;
     }
 
-    /* st.caption — đồng bộ với .sb-sub / .lk-company */
     [data-testid="stCaptionContainer"], .stCaption, small {
         font-size: 12px !important; color: #888 !important;
     }
 
-    /* Bảng dữ liệu st.dataframe / st.table — đồng bộ với .sr-table (13px) */
     [data-testid="stDataFrame"], [data-testid="stDataFrame"] * ,
     [data-testid="stTable"], [data-testid="stTable"] * {
         font-family: 'Sora', sans-serif !important;
         font-size: 13px !important;
     }
 
-    /* Expander — tiêu đề đồng bộ với .lk-section (11px uppercase tím) */
     [data-testid="stExpander"] summary,
     .streamlit-expanderHeader, details > summary {
         font-size: 13px !important; font-weight: 700 !important; color: #a394d4 !important;
@@ -187,7 +179,6 @@ st.markdown("""
         font-size: 13px !important;
     }
 
-    /* Label của radio / checkbox / selectbox / text_input / slider — đồng bộ .lk-label */
     .stRadio label, .stCheckbox label, .stSelectbox label,
     .stTextInput label, .stSlider label, .stNumberInput label,
     [data-testid="stWidgetLabel"] p {
@@ -198,12 +189,10 @@ st.markdown("""
         font-size: 13px !important; color: #dcd6ec !important;
     }
 
-    /* st.info / st.warning / st.success / st.error — nội dung đồng bộ 13px */
     [data-testid="stAlert"] p, [data-testid="stAlert"] div {
         font-size: 13px !important;
     }
 
-    /* Tab label (tên các tab trên cùng) — giữ đậm, đồng bộ cỡ chữ */
     .stTabs [data-baseweb="tab"] p { font-size: .9rem !important; font-weight: 600 !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -246,6 +235,8 @@ PRIORITY_TICKERS = [
 # --- 3. KHỞI TẠO BIẾN ---
 if 'scan_results' not in st.session_state:
     st.session_state['scan_results'] = []
+if 'scan_mode' not in st.session_state:
+    st.session_state['scan_mode'] = None
 
 exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift, vnstock_api_key, fast_mode = render_sidebar()
 
@@ -270,24 +261,160 @@ setup_cache_clear_button()
 
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 
-# --- 4. TẠO 6 TAB (ĐÃ GỘP "KẾT QUẢ QUÉT" + "TÍN HIỆU & CẢNH BÁO") ---
-# Đã bỏ tab "📑 Báo Cáo" (gọi reports.json qua mạng mỗi lần render, làm chậm
-# tải trang) để web load nhanh hơn — các tab còn lại không phụ thuộc vào nó.
-# Đã gộp tab "📊 Kết Quả Quét" và "📡 Tín Hiệu & Cảnh Báo" thành 1 tab
-# (dùng sub-tab bên trong), vì cả hai đều dùng chung df_display_cached.
-tab_market, tab_screener, tab_results, tab_recommendation, tab_suc_bat, tab_portfolio = st.tabs([
+# --- 4. TẠO TABS (ĐÃ CHIA RÕ LỌC CUỐI NGÀY & TÍN HIỆU TRONG PHIÊN) ---
+tab_market, tab_screener, tab_signals, tab_recommendation, tab_suc_bat, tab_portfolio = st.tabs([
     "🌟 Thị Trường",
-    "🔍 Bộ Lọc",
-    "📊 Kết Quả & Tín Hiệu",
+    "🔍 Lọc Cuối Ngày",
+    "📡 Tín Hiệu (Realtime)",
     "💡 Khuyến Nghị",
     "🚀 Sức Bật",
     "💼 Danh mục",
 ])
 
 # ==========================================
-# TAB 1: THỊ TRƯỜNG CHUNG
+# HÀM QUÉT CHUNG (XỬ LÝ LOGIC QUÉT)
 # ==========================================
+def execute_scan(force_full=False):
+    ex_code = 'all' if exchange_choice == "Tất cả 3 sàn" else exchange_choice
+    tickers = get_all_tickers(ex_code)
 
+    if not tickers:
+        st.error("⚠️ Lỗi từ data_loader.py: Hàm `get_all_tickers` trả về danh sách rỗng!")
+        return []
+
+    ticker_set = set(tickers)
+    priority_present = [t for t in PRIORITY_TICKERS if t in ticker_set]
+    rest = [t for t in tickers if t not in set(priority_present)]
+
+    if force_full:
+        # CHẾ ĐỘ CUỐI NGÀY: Bỏ qua Fast Mode, quét full danh sách
+        tickers_ordered = priority_present + rest
+        effective_max_scan = len(tickers_ordered)
+        st.caption(f"🌙 Đang chạy chế độ **Quét Cuối Ngày**: sẽ quét toàn bộ **{effective_max_scan}** mã (không giới hạn Fast Mode).")
+    else:
+        # CHẾ ĐỘ TRONG PHIÊN: Tôn trọng Fast Mode
+        if fast_mode:
+            tickers_ordered = priority_present if priority_present else tickers
+            effective_max_scan = max_scan
+            st.caption(f"⚡ Đang chạy chế độ **Trong Phiên (NHANH)**: ưu tiên {len(tickers_ordered)} mã vốn hoá lớn/thanh khoản cao.")
+        else:
+            tickers_ordered = priority_present + rest
+            effective_max_scan = max_scan
+            st.caption(f"⚡ Đang chạy chế độ **Trong Phiên (Thường)**: giới hạn quét **{effective_max_scan}** mã theo thanh trượt.")
+
+    tickers_to_scan = tickers_ordered[:effective_max_scan]
+    rate_per_min = 60 if active_api_key else 20
+    eta_min = len(tickers_to_scan) / rate_per_min
+    st.caption(f"⏱️ Ước tính thời gian quét: khoảng **{eta_min:.1f} phút** (giới hạn {rate_per_min} request/phút).")
+
+    scan_start_time = time.time()
+    hard_timeout = max(240, min(1200, eta_min * 60 * 3))
+    
+    live_results_box = st.empty()
+    results = []
+    error_logs = []
+
+    with st.status(f"Đang quét {len(tickers_to_scan)} mã... (ước tính ~{eta_min:.1f} phút)", expanded=True) as status:
+        progress_bar = st.progress(0)
+        total = len(tickers_to_scan)
+        processed = 0
+        timed_out = False
+
+        def process_ticker(ticker):
+            if ticker in BLACKLIST:
+                return {"status": "skip"}
+            try:
+                df = get_stock_data(ticker, days_back=300)
+                if df is None or df.empty:
+                    return {"status": "error", "msg": f"{ticker}: get_stock_data trả về None/Empty."}
+                try:
+                    res = calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
+                    if res is None:
+                        return {"status": "error", "msg": f"{ticker}: calculate_technical_signals trả về None."}
+                    return {"status": "success", "data": res}
+                except Exception as e:
+                    return {"status": "error", "msg": f"{ticker}: Lỗi indicators.py -> {str(e)}"}
+            except Exception as e:
+                return {"status": "error", "msg": f"{ticker}: Lỗi data_loader.py -> {str(e)}"}
+
+        max_workers = 4
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
+
+            try:
+                pending = set(future_to_ticker.keys())
+                while pending:
+                    remaining_time = hard_timeout - (time.time() - scan_start_time)
+                    if remaining_time <= 0:
+                        raise concurrent.futures.TimeoutError()
+
+                    done_now, pending = concurrent.futures.wait(
+                        pending, timeout=min(3, remaining_time),
+                        return_when=concurrent.futures.FIRST_COMPLETED
+                    )
+
+                    for future in done_now:
+                        processed += 1
+                        try:
+                            outcome = future.result()
+                            if outcome["status"] == "success":
+                                results.append(outcome["data"])
+                            elif outcome["status"] == "error":
+                                error_logs.append(outcome["msg"])
+                        except Exception as e:
+                            error_logs.append(f"Lỗi luồng ThreadPool: {str(e)}")
+
+                    elapsed = time.time() - scan_start_time
+                    status.update(label=(
+                        f"Đang quét... {processed}/{total} mã | "
+                        f"✅ {len(results)} hợp lệ | ⏱️ {elapsed:.0f}s trôi qua"
+                    ))
+                    progress_bar.progress(min(processed / total, 1.0))
+
+                    if done_now and results:
+                        preview_df = pd.DataFrame(results)
+                        if signal_filter != "Tất cả" and 'Trạng thái' in preview_df.columns:
+                            preview_df_show = preview_df[preview_df['Trạng thái'] == signal_filter]
+                        else:
+                            preview_df_show = preview_df
+                        live_cols = [c for c in [
+                            "Mã CP", "Giá", "GTGD (Tỷ)", "Vol x TB20",
+                            "Dòng Tiền", "Xu Hướng", "Định Giá (129)", "Trạng thái",
+                        ] if c in preview_df_show.columns]
+                        preview_df_live = preview_df_show[live_cols] if live_cols else preview_df_show
+                        with live_results_box.container():
+                            st.caption(f"📊 Kết quả LIVE (đang cập nhật): {len(preview_df_live)} mã")
+                            st.dataframe(preview_df_live, use_container_width=True, hide_index=True)
+            except concurrent.futures.TimeoutError:
+                timed_out = True
+                executor.shutdown(wait=False, cancel_futures=True)
+
+        if timed_out:
+            status.update(
+                label=f"⏳ Đã dừng do quá thời gian ({hard_timeout/60:.0f} phút) — hiển thị {len(results)} mã ({processed}/{total}).",
+                state="complete", expanded=False
+            )
+        elif len(results) > 0:
+            status.update(label=f"✅ Quét xong {len(results)} mã hợp lệ!", state="complete", expanded=False)
+        else:
+            status.update(label=f"❌ Quét thất bại toàn bộ!", state="error", expanded=True)
+
+    live_results_box.empty()
+    if timed_out:
+        st.warning(f"⏳ Đã dừng quét sau {hard_timeout/60:.0f} phút.")
+    if len(error_logs) > 0 and len(results) == 0:
+        st.error("🚨 APP BỊ KẸT VÌ CÁC LỖI DƯỚI ĐÂY:")
+        with st.expander("MỞ RỘNG ĐỂ XEM CHI TIẾT LỖI NGẦM", expanded=True):
+            for err in error_logs[:10]:
+                st.code(err)
+            if len(error_logs) > 10:
+                st.write(f"... và {len(error_logs) - 10} mã khác bị lỗi y hệt.")
+
+    return results
+
+# ==========================================
+# TAB 1: THỊ TRƯỜNG CHUNG (Giữ Nguyên)
+# ==========================================
 with tab_market:
     col_title, col_btn, col_interval = st.columns([3, 1, 1])
     with col_title:
@@ -334,7 +461,6 @@ with tab_market:
         st.caption(f"🔁 Tự động làm mới mỗi **{refresh_interval}s**")
 
     st.divider()
-
     snap = {}
     snap_error = None
     pe_stats_data = None
@@ -414,7 +540,6 @@ with tab_market:
                 current_index   = df_today['close'].iloc[-1]
                 current_vol     = df_today['Vol_Hôm_Nay'].iloc[-1]
                 max_time_actual = df_today['hour_min'].max()
-
                 vol_change = current_vol - prev_vol
 
                 m1, m2, m3 = st.columns(3)
@@ -456,13 +581,11 @@ with tab_market:
     render_market_tab(chart_df, df_today)
 
     sb_header("🧠 Phân tích xu hướng")
-
     row1_l, row1_r = st.columns(2)
 
     with row1_l:
         with st.container(border=True):
             st.markdown("#### 📈 Xu hướng giá")
-
             trend_txt = snap.get("trend_text") or "—"
             ma20_txt  = snap.get("ma20_text")  or ""
             support   = snap.get("support")    or 0
@@ -481,11 +604,7 @@ with tab_market:
             ma_c3.metric("MA200", f"{snap.get('ma200'):.1f}" if snap.get('ma200') else "—")
 
             if support or resist:
-                st.markdown(
-                    f"**🟢 Hỗ trợ:** `{support:.1f}` "
-                    f"&nbsp;•&nbsp; "
-                    f"**🔴 Kháng cự:** `{resist:.1f}`"
-                )
+                st.markdown(f"**🟢 Hỗ trợ:** `{support:.1f}` &nbsp;•&nbsp; **🔴 Kháng cự:** `{resist:.1f}`")
 
     with row1_r:
         with st.container(border=True):
@@ -525,11 +644,9 @@ with tab_market:
                     pass
 
     row2_l, row2_r = st.columns(2)
-
     with row2_l:
         with st.container(border=True):
             st.markdown("#### 📊 Chỉ báo kỹ thuật")
-
             rsi_val    = snap.get('rsi') or 50
             rsi_txt    = snap.get('rsi_text') or "—"
             macd_val   = snap.get('macd') or 0
@@ -553,7 +670,6 @@ with tab_market:
     with row2_r:
         with st.container(border=True):
             st.markdown("#### 🔊 Dòng tiền (Volume)")
-
             vol_today = snap.get('vol_today') or 0
             vol_avg   = snap.get('vol_avg')   or 0
             vol_ratio = snap.get('vol_ratio') or 0
@@ -578,7 +694,6 @@ with tab_market:
     render_breadth_panel(breadth)
 
     sb_header("💡 Khuyến nghị hành động")
-
     if reco is None:
         st.warning("⚠️ Chưa tính được khuyến nghị — thiếu dữ liệu kỹ thuật.")
     else:
@@ -605,210 +720,75 @@ with tab_market:
 
         st.caption("⚠️ Khuyến nghị dựa trên PTKT + định giá, không phải tư vấn đầu tư chính thức.")
 
-
 # ==========================================
-# TAB 2: BỘ LỌC CỔ PHIẾU
+# TAB 2: BỘ LỌC CỔ PHIẾU (CHỈ DÀNH CHO CUỐI NGÀY)
 # ==========================================
 @st.fragment
-def render_screener_fragment():
-    sb_header(f"🔍 Danh sách quét sàn {exchange_choice}")
-    scan_button = st.button("🚀 KÍCH HOẠT QUÉT TOÀN DIỆN", use_container_width=True, type="primary")
+def render_tab_eod():
+    with tab_screener:
+        sb_header("🔍 Lọc Cổ Phiếu Cuối Ngày", "Quét toàn bộ danh sách mã, bỏ qua giới hạn Fast Mode. Nên chạy sau 15:00")
+        
+        eod_scan_button = st.button("🌙 KÍCH HOẠT QUÉT CUỐI NGÀY (Quét toàn bộ)", use_container_width=True, type="primary")
 
-    if scan_button:
-        ex_code = 'all' if exchange_choice == "Tất cả 3 sàn" else exchange_choice
-
-        tickers = get_all_tickers(ex_code)
-
-        if tickers is None or len(tickers) == 0:
-            st.error("⚠️ Lỗi từ data_loader.py: Hàm `get_all_tickers` trả về danh sách rỗng!")
-        else:
-            ref_range = {
-                "HOSE": "~400-430 mã", "HNX": "~300 mã", "UPCOM": "~900 mã", "Tất cả 3 sàn": "~1500-1600 mã",
-            }.get(exchange_choice, "")
-            st.info(f"📊 Hệ thống đã lấy thành công danh sách **{len(tickers)}** mã từ API "
-                    f"(sàn **{exchange_choice}**, chuẩn thực tế khoảng {ref_range}).")
-
-            ticker_set = set(tickers)
-            priority_present = [t for t in PRIORITY_TICKERS if t in ticker_set]
-            rest = [t for t in tickers if t not in set(priority_present)]
-
-            if fast_mode:
-                tickers_ordered = priority_present if priority_present else tickers
-                st.caption(f"⚡ Chế độ NHANH đang bật: chỉ quét {len(tickers_ordered)} mã vốn hoá lớn/thanh khoản cao.")
-            else:
-                tickers_ordered = priority_present + rest
-                extra_scanned = max(0, max_scan - len(priority_present))
-                if extra_scanned < len(rest) * 0.3:
-                    st.warning(
-                        f"⚠️ Chế độ NHANH đã tắt, nhưng \"Số lượng mã quét tối đa\" đang chỉ để **{max_scan}** "
-                        f"-> chỉ quét thêm được **{extra_scanned} mã** ngoài {len(priority_present)} mã ưu tiên. "
-                        "**Hãy kéo thanh trượt \"Số lượng mã quét tối đa\" ở sidebar lên vài trăm — 1500+**."
-                    )
-
-            tickers_to_scan = tickers_ordered[:max_scan]
-
-            rate_per_min = 60 if active_api_key else 20
-            eta_min = len(tickers_to_scan) / rate_per_min
-            st.caption(
-                f"⏱️ Ước tính thời gian quét: khoảng **{eta_min:.1f} phút** "
-                f"(giới hạn {rate_per_min} request/phút{' - đã dùng API key' if active_api_key else ' - tài khoản khách'})."
-            )
-
-            scan_start_time = time.time()
-            hard_timeout = max(240, min(1200, eta_min * 60 * 3))
-
-            live_results_box = st.empty()
-
-            with st.status(f"Đang quét {len(tickers_to_scan)} mã... (ước tính ~{eta_min:.1f} phút)", expanded=True) as status:
-                progress_bar = st.progress(0)
-                results = []
-                error_logs = []
-                total = len(tickers_to_scan)
-                processed = 0
-                timed_out = False
-
-                def process_ticker(ticker):
-                    if ticker in BLACKLIST:
-                        return {"status": "skip"}
-                    try:
-                        df = get_stock_data(ticker, days_back=300)
-                        if df is None or df.empty:
-                            return {"status": "error", "msg": f"{ticker}: get_stock_data trả về None/Empty."}
-                        try:
-                            res = calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
-                            if res is None:
-                                return {"status": "error", "msg": f"{ticker}: calculate_technical_signals trả về None."}
-                            return {"status": "success", "data": res}
-                        except Exception as e:
-                            return {"status": "error", "msg": f"{ticker}: Lỗi indicators.py -> {str(e)}"}
-                    except Exception as e:
-                        return {"status": "error", "msg": f"{ticker}: Lỗi data_loader.py -> {str(e)}"}
-
-                max_workers = 4
-                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
-
-                    try:
-                        pending = set(future_to_ticker.keys())
-                        while pending:
-                            remaining_time = hard_timeout - (time.time() - scan_start_time)
-                            if remaining_time <= 0:
-                                raise concurrent.futures.TimeoutError()
-
-                            done_now, pending = concurrent.futures.wait(
-                                pending, timeout=min(3, remaining_time),
-                                return_when=concurrent.futures.FIRST_COMPLETED
-                            )
-
-                            for future in done_now:
-                                processed += 1
-                                try:
-                                    outcome = future.result()
-                                    if outcome["status"] == "success":
-                                        results.append(outcome["data"])
-                                    elif outcome["status"] == "error":
-                                        error_logs.append(outcome["msg"])
-                                except Exception as e:
-                                    error_logs.append(f"Lỗi luồng ThreadPool: {str(e)}")
-
-                            elapsed = time.time() - scan_start_time
-                            status.update(label=(
-                                f"Đang quét... {processed}/{total} mã | "
-                                f"✅ {len(results)} hợp lệ | ⏱️ {elapsed:.0f}s trôi qua"
-                            ))
-                            progress_bar.progress(min(processed / total, 1.0))
-
-                            if done_now and results:
-                                preview_df = pd.DataFrame(results)
-                                if signal_filter != "Tất cả" and 'Trạng thái' in preview_df.columns:
-                                    preview_df_show = preview_df[preview_df['Trạng thái'] == signal_filter]
-                                else:
-                                    preview_df_show = preview_df
-                                live_cols = [c for c in [
-                                    "Mã CP", "Giá", "GTGD (Tỷ)", "Vol x TB20",
-                                    "Dòng Tiền", "Xu Hướng", "Định Giá (129)", "Trạng thái",
-                                ] if c in preview_df_show.columns]
-                                preview_df_live = preview_df_show[live_cols] if live_cols else preview_df_show
-                                with live_results_box.container():
-                                    st.caption(
-                                        f"📊 Kết quả LIVE (đang cập nhật): {len(preview_df_live)} mã — "
-                                        "bảng đầy đủ sẽ có ở tab 📊 Kết Quả & Tín Hiệu sau khi quét xong."
-                                    )
-                                    st.dataframe(preview_df_live, use_container_width=True, hide_index=True)
-                    except concurrent.futures.TimeoutError:
-                        timed_out = True
-                        executor.shutdown(wait=False, cancel_futures=True)
-
-                if timed_out:
-                    status.update(
-                        label=f"⏳ Đã dừng do quá thời gian ({hard_timeout/60:.0f} phút) — hiển thị {len(results)} mã ({processed}/{total}).",
-                        state="complete", expanded=False
-                    )
-                elif len(results) > 0:
-                    status.update(label=f"✅ Quét xong {len(results)} mã hợp lệ!", state="complete", expanded=False)
-                else:
-                    status.update(label=f"❌ Quét thất bại toàn bộ!", state="error", expanded=True)
-
-            live_results_box.empty()
-
-            if timed_out:
-                st.warning(
-                    f"⏳ Đã dừng quét sau {hard_timeout/60:.0f} phút (mới xử lý {processed}/{total} mã). "
-                    "Muốn quét hết, hãy giảm 'Số lượng mã quét tối đa' hoặc thêm API key vnstock."
-                )
-
-            if len(error_logs) > 0 and len(results) == 0:
-                st.error("🚨 APP BỊ KẸT VÌ CÁC LỖI DƯỚI ĐÂY:")
-                with st.expander("MỞ RỘNG ĐỂ XEM CHI TIẾT LỖI NGẦM", expanded=True):
-                    for err in error_logs[:10]:
-                        st.code(err)
-                    if len(error_logs) > 10:
-                        st.write(f"... và {len(error_logs) - 10} mã khác bị lỗi y hệt.")
-
+        if eod_scan_button:
+            results = execute_scan(force_full=True)
             st.session_state['scan_results'] = results
+            st.session_state['scan_mode'] = 'EOD'
             st.rerun()
 
-    if not st.session_state.get('scan_results', []):
-        st.markdown(
-            '<div class="sb-note">Hãy cấu hình thông số ở Sidebar trái và bấm '
-            '<b>🚀 KÍCH HOẠT QUÉT TOÀN DIỆN</b> để bắt đầu. '
-            'Kết quả sau khi quét xong sẽ hiển thị ở tab <b>📊 Kết Quả & Tín Hiệu</b>.</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        n_found = len(st.session_state['scan_results'])
-        st.success(f"✅ Đã có {n_found} mã trong kết quả quét gần nhất. "
-                   "👉 Chuyển sang tab **📊 Kết Quả & Tín Hiệu** ở trên để xem bảng chi tiết.")
-
-
-with tab_screener:
-    render_screener_fragment()
-
-# ==========================================
-# TAB 3: KẾT QUẢ QUÉT + TÍN HIỆU & CẢNH BÁO (ĐÃ GỘP)
-# ==========================================
-with tab_results:
-    sb_header("📊 Kết quả quét & Tín hiệu")
-
-    if st.session_state.get('scan_results', []):
-        raw_df = pd.DataFrame(st.session_state['scan_results'])
-        df_display = render_search_and_export(raw_df)
-        st.session_state['df_display_cached'] = df_display
-
-        sub_kq, sub_th = st.tabs(["📊 Kết Quả Quét", "📡 Tín Hiệu & Cảnh Báo"])
-
-        with sub_kq:
+        if st.session_state.get('scan_mode') == 'EOD' and st.session_state.get('scan_results'):
+            st.success(f"✅ Bảng kết quả Quét Cuối Ngày ({len(st.session_state['scan_results'])} mã hợp lệ):")
+            raw_df = pd.DataFrame(st.session_state['scan_results'])
+            df_display = render_search_and_export(raw_df)
+            st.session_state['df_display_cached'] = df_display
             render_screener_results(df_display, signal_filter)
+            
+        elif st.session_state.get('scan_mode') == 'INTRADAY':
+            st.info("⚠️ Bộ nhớ đang lưu kết quả **Quét Trong Phiên**. Hãy chuyển sang tab **Tín Hiệu Trong Phiên** để xem, hoặc bấm Quét Cuối Ngày để lấy lại dữ liệu toàn thị trường.")
+        else:
+            st.markdown(
+                '<div class="sb-note">Hãy bấm <b>🌙 KÍCH HOẠT QUÉT CUỐI NGÀY</b> để bắt đầu lọc dữ liệu toàn bộ thị trường.</div>',
+                unsafe_allow_html=True,
+            )
 
-        with sub_th:
+render_tab_eod()
+
+# ==========================================
+# TAB 3: TÍN HIỆU TRONG PHIÊN (DÙNG FAST MODE - ICHIMOKU/VOLUME)
+# ==========================================
+@st.fragment
+def render_tab_intraday():
+    with tab_signals:
+        sb_header("📡 Tín Hiệu & Cảnh Báo (Trong Phiên)", "Quét nhanh các mã thanh khoản/VN30 (Fast Mode) để theo dõi Volume và Ichimoku realtime")
+        
+        intraday_scan_button = st.button("⚡ QUÉT TÍN HIỆU TRONG PHIÊN (Chế độ Nhanh)", use_container_width=True, type="primary")
+
+        if intraday_scan_button:
+            results = execute_scan(force_full=False)
+            st.session_state['scan_results'] = results
+            st.session_state['scan_mode'] = 'INTRADAY'
+            st.rerun()
+
+        if st.session_state.get('scan_mode') == 'INTRADAY' and st.session_state.get('scan_results'):
+            st.success(f"✅ Bảng Tín Hiệu Trong Phiên ({len(st.session_state['scan_results'])} mã ưu tiên):")
+            raw_df = pd.DataFrame(st.session_state['scan_results'])
+            df_display = render_search_and_export(raw_df)
+            st.session_state['df_display_cached'] = df_display
             render_screener_signals(df_display, signal_filter)
-    else:
-        st.info("Chưa có dữ liệu quét. Sang tab **🔍 Bộ Lọc** để bấm 'KÍCH HOẠT QUÉT TOÀN DIỆN' trước.")
+            
+        elif st.session_state.get('scan_mode') == 'EOD':
+            st.info("⚠️ Bộ nhớ đang lưu kết quả **Quét Cuối Ngày**. Hãy bấm 'Quét Tín Hiệu Trong Phiên' để lấy dữ liệu realtime mới nhất.")
+        else:
+            st.markdown(
+                '<div class="sb-note">Bấm <b>⚡ QUÉT TÍN HIỆU TRONG PHIÊN</b> để cập nhật biến động Volume, dòng tiền và Ichimoku ngay bây giờ.</div>',
+                unsafe_allow_html=True,
+            )
+
+render_tab_intraday()
 
 # ==========================================
 # TAB 4: KHUYẾN NGHỊ
 # ==========================================
-
 with tab_recommendation:
     render_recommendation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift) 
 
