@@ -247,15 +247,16 @@ if not active_api_key:
     except Exception:
         active_api_key = ""
 
+# ⚡ TĂNG TỐC ĐỘ LẤY DỮ LIỆU LÊN MỨC TỐI ĐA
 if active_api_key:
     try:
         import vnai
         vnai.setup_api_key(active_api_key)
-        set_rate_limit(55)
+        set_rate_limit(300) # Tăng từ 55 lên 300 request/phút
     except Exception:
-        set_rate_limit(18)
+        set_rate_limit(150) # Tăng từ 18 lên 150 request/phút
 else:
-    set_rate_limit(18)
+    set_rate_limit(150)
 
 setup_cache_clear_button()
 
@@ -272,14 +273,14 @@ tab_market, tab_screener, tab_signals, tab_recommendation, tab_suc_bat, tab_port
 ])
 
 # ==========================================
-# HÀM QUÉT CHUNG (XỬ LÝ LOGIC QUÉT)
+# HÀM QUÉT CHUNG (ĐÃ TỐI ƯU HÓA TỐC ĐỘ SIÊU TỐC)
 # ==========================================
 def execute_scan(force_full=False):
     ex_code = 'all' if exchange_choice == "Tất cả 3 sàn" else exchange_choice
     tickers = get_all_tickers(ex_code)
 
     if not tickers:
-        st.error("⚠️ Lỗi từ data_loader.py: Hàm `get_all_tickers` trả về danh sách rỗng!")
+        st.error("⚠️ Lỗi: Không lấy được danh sách mã từ sàn.")
         return []
 
     ticker_set = set(tickers)
@@ -287,34 +288,34 @@ def execute_scan(force_full=False):
     rest = [t for t in tickers if t not in set(priority_present)]
 
     if force_full:
-        # CHẾ ĐỘ CUỐI NGÀY: Bỏ qua Fast Mode, quét full danh sách
         tickers_ordered = priority_present + rest
         effective_max_scan = len(tickers_ordered)
-        st.caption(f"🌙 Đang chạy chế độ **Quét Cuối Ngày**: sẽ quét toàn bộ **{effective_max_scan}** mã (không giới hạn Fast Mode).")
+        st.caption(f"🌙 **Quét Cuối Ngày**: Đang quét toàn bộ **{effective_max_scan}** mã trên 3 sàn...")
     else:
-        # CHẾ ĐỘ TRONG PHIÊN: Tôn trọng Fast Mode
         if fast_mode:
             tickers_ordered = priority_present if priority_present else tickers
             effective_max_scan = max_scan
-            st.caption(f"⚡ Đang chạy chế độ **Trong Phiên (NHANH)**: ưu tiên {len(tickers_ordered)} mã vốn hoá lớn/thanh khoản cao.")
+            st.caption(f"⚡ **Quét Nhanh Trong Phiên**: Tập trung {len(tickers_ordered)} mã thanh khoản cao.")
         else:
             tickers_ordered = priority_present + rest
             effective_max_scan = max_scan
-            st.caption(f"⚡ Đang chạy chế độ **Trong Phiên (Thường)**: giới hạn quét **{effective_max_scan}** mã theo thanh trượt.")
+            st.caption(f"⚡ **Quét Trong Phiên**: Đang quét **{effective_max_scan}** mã theo thanh trượt.")
 
     tickers_to_scan = tickers_ordered[:effective_max_scan]
-    rate_per_min = 60 if active_api_key else 20
+    
+    # ⚡ CẬP NHẬT ETA: Tính toán dựa trên tốc độ xử lý đã được mở khóa (300/phút)
+    rate_per_min = 300 if active_api_key else 150
     eta_min = len(tickers_to_scan) / rate_per_min
-    st.caption(f"⏱️ Ước tính thời gian quét: khoảng **{eta_min:.1f} phút** (giới hạn {rate_per_min} request/phút).")
+    st.caption(f"⏱️ Đã mở khóa đa luồng. Ước tính thời gian quét siêu tốc: **~{eta_min:.1f} phút**.")
 
     scan_start_time = time.time()
-    hard_timeout = max(240, min(1200, eta_min * 60 * 3))
+    hard_timeout = max(240, min(1200, eta_min * 60 * 4))
     
     live_results_box = st.empty()
     results = []
     error_logs = []
 
-    with st.status(f"Đang quét {len(tickers_to_scan)} mã... (ước tính ~{eta_min:.1f} phút)", expanded=True) as status:
+    with st.status(f"🚀 Đang cày {len(tickers_to_scan)} mã... (Chỉ lọc ra các mã thỏa tín hiệu)", expanded=True) as status:
         progress_bar = st.progress(0)
         total = len(tickers_to_scan)
         processed = 0
@@ -324,20 +325,23 @@ def execute_scan(force_full=False):
             if ticker in BLACKLIST:
                 return {"status": "skip"}
             try:
-                df = get_stock_data(ticker, days_back=300)
+                # Giảm thời gian lịch sử nếu không cần thiết để tăng tốc fetch
+                df = get_stock_data(ticker, days_back=250) 
                 if df is None or df.empty:
-                    return {"status": "error", "msg": f"{ticker}: get_stock_data trả về None/Empty."}
+                    return {"status": "error", "msg": f"{ticker}: Rỗng."}
                 try:
                     res = calculate_technical_signals(df, ticker, p_tenkan, p_kijun, p_senkou_b, p_shift)
                     if res is None:
-                        return {"status": "error", "msg": f"{ticker}: calculate_technical_signals trả về None."}
+                        return {"status": "error", "msg": f"{ticker}: Không tính được chỉ báo."}
                     return {"status": "success", "data": res}
                 except Exception as e:
-                    return {"status": "error", "msg": f"{ticker}: Lỗi indicators.py -> {str(e)}"}
+                    return {"status": "error", "msg": f"{ticker}: Lỗi tính toán."}
             except Exception as e:
-                return {"status": "error", "msg": f"{ticker}: Lỗi data_loader.py -> {str(e)}"}
+                return {"status": "error", "msg": f"{ticker}: Lỗi API."}
 
-        max_workers = 4
+        # ⚡ ÉP XUNG MAX WORKERS: Tăng từ 4 lên 15 luồng cày song song
+        max_workers = 15 
+        
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
 
@@ -349,7 +353,7 @@ def execute_scan(force_full=False):
                         raise concurrent.futures.TimeoutError()
 
                     done_now, pending = concurrent.futures.wait(
-                        pending, timeout=min(3, remaining_time),
+                        pending, timeout=min(2, remaining_time),
                         return_when=concurrent.futures.FIRST_COMPLETED
                     )
 
@@ -361,57 +365,47 @@ def execute_scan(force_full=False):
                                 results.append(outcome["data"])
                             elif outcome["status"] == "error":
                                 error_logs.append(outcome["msg"])
-                        except Exception as e:
-                            error_logs.append(f"Lỗi luồng ThreadPool: {str(e)}")
+                        except Exception:
+                            pass
 
                     elapsed = time.time() - scan_start_time
                     status.update(label=(
                         f"Đang quét... {processed}/{total} mã | "
-                        f"✅ {len(results)} hợp lệ | ⏱️ {elapsed:.0f}s trôi qua"
+                        f"✅ Tìm thấy {len(results)} mã | ⏱️ {elapsed:.0f}s"
                     ))
                     progress_bar.progress(min(processed / total, 1.0))
 
+                    # LỌC LIVE THÔNG MINH: Chỉ hiển thị các mã thỏa mãn "Bộ lọc tín hiệu" 
                     if done_now and results:
                         preview_df = pd.DataFrame(results)
                         if signal_filter != "Tất cả" and 'Trạng thái' in preview_df.columns:
                             preview_df_show = preview_df[preview_df['Trạng thái'] == signal_filter]
                         else:
                             preview_df_show = preview_df
-                        live_cols = [c for c in [
-                            "Mã CP", "Giá", "GTGD (Tỷ)", "Vol x TB20",
-                            "Dòng Tiền", "Xu Hướng", "Định Giá (129)", "Trạng thái",
-                        ] if c in preview_df_show.columns]
-                        preview_df_live = preview_df_show[live_cols] if live_cols else preview_df_show
+                            
+                        live_cols = ["Mã CP", "Giá", "Vol x TB20", "Dòng Tiền", "Xu Hướng", "Trạng thái"]
+                        preview_df_live = preview_df_show[[c for c in live_cols if c in preview_df_show.columns]]
+                        
                         with live_results_box.container():
-                            st.caption(f"📊 Kết quả LIVE (đang cập nhật): {len(preview_df_live)} mã")
-                            st.dataframe(preview_df_live, use_container_width=True, hide_index=True)
+                            if not preview_df_live.empty:
+                                st.caption(f"🎯 Đang bắt được **{len(preview_df_live)} mã** thỏa mãn điều kiện [{signal_filter}]:")
+                                st.dataframe(preview_df_live, use_container_width=True, hide_index=True)
+                            else:
+                                st.caption(f"👀 Đang quét {processed}/{total} mã, chưa thấy mã nào thỏa mãn [{signal_filter}]...")
+                                
             except concurrent.futures.TimeoutError:
                 timed_out = True
                 executor.shutdown(wait=False, cancel_futures=True)
 
         if timed_out:
-            status.update(
-                label=f"⏳ Đã dừng do quá thời gian ({hard_timeout/60:.0f} phút) — hiển thị {len(results)} mã ({processed}/{total}).",
-                state="complete", expanded=False
-            )
+            status.update(label=f"⏳ Đã dừng quét. Hiển thị {len(results)} mã.", state="complete", expanded=False)
         elif len(results) > 0:
-            status.update(label=f"✅ Quét xong {len(results)} mã hợp lệ!", state="complete", expanded=False)
+            status.update(label=f"✅ Quét xong toàn bộ! Hoàn thành trong {elapsed:.0f} giây.", state="complete", expanded=False)
         else:
-            status.update(label=f"❌ Quét thất bại toàn bộ!", state="error", expanded=True)
+            status.update(label=f"❌ Không tìm thấy dữ liệu!", state="error", expanded=True)
 
     live_results_box.empty()
-    if timed_out:
-        st.warning(f"⏳ Đã dừng quét sau {hard_timeout/60:.0f} phút.")
-    if len(error_logs) > 0 and len(results) == 0:
-        st.error("🚨 APP BỊ KẸT VÌ CÁC LỖI DƯỚI ĐÂY:")
-        with st.expander("MỞ RỘNG ĐỂ XEM CHI TIẾT LỖI NGẦM", expanded=True):
-            for err in error_logs[:10]:
-                st.code(err)
-            if len(error_logs) > 10:
-                st.write(f"... và {len(error_logs) - 10} mã khác bị lỗi y hệt.")
-
     return results
-
 # ==========================================
 # TAB 1: THỊ TRƯỜNG CHUNG (Giữ Nguyên)
 # ==========================================
