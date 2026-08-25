@@ -5,7 +5,9 @@ from datetime import datetime, timedelta
 from data_loader import get_vnindex_data, get_stock_data
 
 # ==================================================================================
-# HỆ THỐNG "CÔ TIÊN" — 3 ĐƯỜNG ĐỊNH GIÁ Kijun17 / Knife1(65) / Knife2(129)
+# HỆ THỐNG "CÔ TIÊN" — 2 ĐƯỜNG ĐỊNH GIÁ Knife1(65) / Knife2(129)
+# (đã bỏ Kijun17 — không dùng để xác nhận xu hướng nữa, vì ít ý nghĩa
+# và làm điều kiện xác nhận trend bị chặt hơn mức cần thiết)
 # ==================================================================================
 
 
@@ -172,7 +174,7 @@ def safe_market_snapshot(symbol="VNINDEX", days=250):
 def calculate_technical_signals(
     df, ticker,
     p_tenkan=9, p_kijun=26, p_senkou_b=52, p_shift=26,
-    k17=17, k65=65, k129=129,
+    k65=65, k129=129,
     vol_spike_mult=2.5,
     hop_bich_threshold=0.0014,
 ):
@@ -209,12 +211,10 @@ def calculate_technical_signals(
     df['cloud_top'] = df[['senkou_a', 'senkou_b']].max(axis=1)
     df['cloud_bot'] = df[['senkou_a', 'senkou_b']].min(axis=1)
 
-    # 5. BA ĐƯỜNG ĐỊNH GIÁ "CÔ TIÊN"
-    df['kijun17']  = (df['high'].rolling(k17).max()  + df['low'].rolling(k17).min())  / 2
+    # 5. HAI ĐƯỜNG ĐỊNH GIÁ "CÔ TIÊN"
     df['knife65']  = (df['high'].rolling(k65).max()  + df['low'].rolling(k65).min())  / 2
     df['knife129'] = (df['high'].rolling(k129).max() + df['low'].rolling(k129).min()) / 2
 
-    df['kijun17_up']  = df['kijun17']  > df['kijun17'].shift(5)
     df['knife65_up']  = df['knife65']  > df['knife65'].shift(5)
     df['knife129_up'] = df['knife129'] > df['knife129'].shift(5)
 
@@ -245,23 +245,21 @@ def calculate_technical_signals(
     knife_core_up   = latest['knife65'] > latest['knife129'] and latest['knife65_up'] and latest['knife129_up']
     knife_core_down = latest['knife65'] < latest['knife129'] and not latest['knife65_up'] and not latest['knife129_up']
 
-    all3_up = (
+    trend_up = (
         knife_core_up
-        and latest['kijun17'] > latest['fmay_top'] and latest['kijun17_up']
         and close > latest['fmay_top']
     )
-    all3_down = (
+    trend_down = (
         knife_core_down
-        and latest['kijun17'] < latest['fmay_bot'] and not latest['kijun17_up']
         and close < latest['fmay_bot']
     )
 
     end_uptrend   = close <= latest['knife129']
     end_downtrend = close >= latest['knife129']
 
-    if all3_up and not end_uptrend:
+    if trend_up and not end_uptrend:
         xu_huong = "🟢 Tăng"
-    elif all3_down and not end_downtrend:
+    elif trend_down and not end_downtrend:
         xu_huong = "🔴 Giảm"
     else:
         xu_huong = "🟡 Sideway"
@@ -320,7 +318,6 @@ def calculate_technical_signals(
         "Dòng Tiền"                : flow,
         "Xu Hướng"                 : xu_huong,
         "Ichimoku_Cloud"           : cloud_status,
-        "Kijun17"                  : round(latest['kijun17'], 2),
         "Knife65"                  : round(latest['knife65'], 2),
         "Knife129"                 : round(latest['knife129'], 2),
         "Cách Knife129 (%)"        : round(pct_vs_129, 2),
