@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import time
 import threading
+import concurrent.futures
 import requests as _requests
 from datetime import datetime, timedelta
 
@@ -133,18 +134,28 @@ def set_rate_limit(requests_per_minute: int):
     _rate_limit_per_min = max(1, int(requests_per_minute))
 
 def _throttle():
-    with _rate_lock:
-        now = time.time()
-        while _call_timestamps and now - _call_timestamps[0] > 60:
-            _call_timestamps.pop(0)
-        if len(_call_timestamps) >= _rate_limit_per_min:
-            wait = 60 - (now - _call_timestamps[0]) + 0.1
-            if wait > 0:
-                time.sleep(wait)
+    """
+    ĐÃ SỬA: KHÔNG còn time.sleep() bên trong `with _rate_lock`.
+    Trước đây, hễ 1 trong N luồng chạm rate limit là nó ngủ (tới ~60s)
+    trong khi vẫn giữ lock -> toàn bộ các luồng khác (đang chờ acquire
+    lock để tự kiểm tra quota của MÌNH) bị đứng khựng theo, biến
+    ThreadPoolExecutor(15 luồng) thành chạy gần như tuần tự với các
+    khoảng nghỉ dài. Đây là nguyên nhân chính khiến quét ~58 mã mất
+    10-20 phút thay vì vài chục giây.
+    Giờ mỗi luồng chỉ giữ lock trong lúc đọc/cập nhật danh sách
+    timestamp (rất nhanh), rồi NGỦ Ở NGOÀI lock -> các luồng khác vẫn
+    tự do kiểm tra & tiến hành ngay khi còn quota.
+    """
+    while True:
+        with _rate_lock:
             now = time.time()
             while _call_timestamps and now - _call_timestamps[0] > 60:
                 _call_timestamps.pop(0)
-        _call_timestamps.append(now)
+            if len(_call_timestamps) < _rate_limit_per_min:
+                _call_timestamps.append(now)
+                return
+            wait = 60 - (now - _call_timestamps[0]) + 0.05
+        time.sleep(max(wait, 0.05))
 
 FALLBACK_TICKERS = ["HPG", "SSI", "VND", "FPT", "TCB", "MBB", "MWG", "VIC", "VHM", "VNM"]
 
@@ -206,32 +217,36 @@ def _fetch_yahoo(symbol, start, end):
     except Exception:
         return pd.DataFrame()
 
-# Sửa hàm _fetch() — thêm DNSE vào trước Yahoo:
-def _fetch(symbol, start, end, interval):
-    sources = ['VCI', 'MSN']
-    for src in sources:
+# ==========================================================
+# CHẠY 1 LỆNH GỌI API VỚI TIMEOUT CỨNG
+# ==========================================================
+def _run_with_timeout(fn, timeout=8):
+    """
+    Bọc 1 lệnh gọi mạng (vd Quote(...).history(...)) với giới hạn thời
+    gian cứng. Trước đây nếu VCI/MSN bị treo (mạng chậm/API không phản
+    hồi), luồng xử lý mã đó có thể "đứng hình" rất lâu (không có timeout
+    nào chặn), chiếm mất 1 trong số luồng worker và kéo dài tổng thời
+    gian quét. Giờ tối đa `timeout` giây là buộc phải trả về None để
+    rơi xuống nguồn dự phòng tiếp theo (MSN -> DNSE -> Yahoo).
+    """
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        fut = ex.submit(fn)
         try:
-            _throttle()
-            df = Quote(symbol=symbol, source=src).history(
-                start=start, end=end, interval=interval)
-            if df is not None and not df.empty:
-                return _normalize(df)
+            return fut.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            return None
         except Exception:
-            continue
-    
-    # ← MỚI: DNSE trước Yahoo (chỉ cho daily, data VN tốt hơn Yahoo)
-    if interval == '1D':
-        days = (datetime.strptime(end, '%Y-%m-%d') - 
-                datetime.strptime(start, '%Y-%m-%d')).days + 10
-        df = _fetch_dnse(symbol, days_back=days)
-        if not df.empty:
-            return df
-        return _fetch_yahoo(symbol, start, end)
-    
-    return pd.DataFrame()
+            raise
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
 
 # ==========================================================
 # FETCH DAILY (dùng cho lịch sử dài hạn)
+# ĐÃ SỬA: gộp lại thành 1 hàm duy nhất (trước đây có 2 hàm _fetch()
+# trùng tên, hàm thứ 2 đè hàm thứ nhất khiến nhánh fallback DNSE
+# không bao giờ được chạy). Thứ tự nguồn: VCI -> MSN -> DNSE -> Yahoo,
+# mỗi lệnh gọi vnstock đều có timeout cứng để tránh treo luồng.
 # ==========================================================
 def _fetch(symbol, start, end, interval):
     if not _VNSTOCK_OK:
@@ -254,8 +269,11 @@ def _fetch(symbol, start, end, interval):
         key = f"{symbol}|{interval}|{src}"
         try:
             _throttle()
-            df = Quote(symbol=symbol, source=src).history(
-                start=start, end=end, interval=interval
+            df = _run_with_timeout(
+                lambda src=src: Quote(symbol=symbol, source=src).history(
+                    start=start, end=end, interval=interval
+                ),
+                timeout=8,
             )
             if df is not None and not df.empty:
                 LAST_ERRORS.pop(key, None)
@@ -267,12 +285,24 @@ def _fetch(symbol, start, end, interval):
                     best_df, best_last_date = df, ld
                 LAST_ERRORS[key] = f"{src} chỉ có dữ liệu tới {ld} (kỳ vọng {expected_date}) — đang thử nguồn khác."
             else:
-                LAST_ERRORS[key] = "API trả về DataFrame rỗng."
+                LAST_ERRORS[key] = "API trả về DataFrame rỗng hoặc quá thời gian chờ (timeout)."
         except Exception as e:
             LAST_ERRORS[key] = f"{type(e).__name__}: {e}"
             continue
 
     if interval == '1D':
+        # DNSE: nguồn công khai, không cần auth, thường nhanh & ổn định
+        # hơn Yahoo cho mã Việt Nam -> thử TRƯỚC Yahoo.
+        days = (datetime.strptime(end, '%Y-%m-%d') -
+                datetime.strptime(start, '%Y-%m-%d')).days + 10
+        df_dnse = _fetch_dnse(symbol, days_back=days)
+        if not df_dnse.empty:
+            ld = _last_date(df_dnse)
+            if expected_date is None or (ld is not None and ld >= expected_date):
+                return df_dnse
+            if best_last_date is None or (ld is not None and ld > best_last_date):
+                best_df, best_last_date = df_dnse, ld
+
         df_yahoo = _fetch_yahoo(symbol, start, end)
         if not df_yahoo.empty:
             ld = _last_date(df_yahoo)
@@ -471,13 +501,16 @@ def _fetch_intraday_vnstock(symbol: str, day_str: str) -> pd.DataFrame:
         key = f"{symbol}|1m|{src}|{day_str}"
         try:
             _throttle()
-            df = Quote(symbol=symbol, source=src).history(
-                start=day_str, end=day_str, interval='1m'
+            df = _run_with_timeout(
+                lambda src=src: Quote(symbol=symbol, source=src).history(
+                    start=day_str, end=day_str, interval='1m'
+                ),
+                timeout=8,
             )
             if df is not None and not df.empty:
                 LAST_ERRORS.pop(key, None)
                 return _normalize(df)
-            LAST_ERRORS[key] = "vnstock trả về rỗng."
+            LAST_ERRORS[key] = "vnstock trả về rỗng hoặc quá thời gian chờ (timeout)."
         except Exception as e:
             LAST_ERRORS[key] = f"{type(e).__name__}: {e}"
             continue
