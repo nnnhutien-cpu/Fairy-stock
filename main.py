@@ -339,8 +339,13 @@ def execute_scan(force_full=False):
             except Exception as e:
                 return {"status": "error", "msg": f"{ticker}: Lỗi API."}
 
-        # ⚡ ÉP XUNG MAX WORKERS: Tăng từ 4 lên 15 luồng cày song song
-        max_workers = 15 
+        # ⚡ ÉP XUNG MAX WORKERS: 24 luồng cày song song.
+        # ĐÃ SỬA: trước đây 15 luồng dùng chung 1 rate-limit lock có
+        # time.sleep() bên trong -> tăng luồng cũng vô nghĩa vì bị khoá
+        # dây chuyền. Giờ data_loader.py đã sửa lock + mỗi lệnh gọi
+        # mạng đều có timeout cứng (không còn rủi ro 1 mã "treo" chiếm
+        # luồng vô thời hạn) nên tăng lên 24 luồng an toàn và nhanh hơn.
+        max_workers = 24
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_ticker = {executor.submit(process_ticker, t): t for t in tickers_to_scan}
