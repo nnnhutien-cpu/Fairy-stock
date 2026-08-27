@@ -241,12 +241,55 @@ def _run_with_timeout(fn, timeout=8):
     finally:
         ex.shutdown(wait=False, cancel_futures=True)
 
+def _race(tasks: dict, timeout: float = 6):
+    """
+    ĐUA nhiều nguồn dữ liệu (vd VCI, MSN, DNSE) CÙNG LÚC thay vì thử
+    tuần tự từng nguồn một. Trước đây: VCI timeout 8s -> rồi mới thử
+    MSN timeout 8s -> rồi mới thử DNSE... cộng dồn có thể trên 15-20s
+    CHO 1 MÃ. Giờ cả 3 nguồn được bắn đi đồng thời, hàm trả về ngay khi
+    có nguồn xong (theo thứ tự hoàn thành), tổng cộng không quá
+    `timeout` giây thay vì cộng dồn timeout từng nguồn.
+
+    tasks: {"TÊN_NGUỒN": hàm_không_tham_số}
+    Trả về: list [(tên_nguồn, kết_quả_hoặc_Exception), ...] theo thứ tự
+    hoàn thành trước; nguồn nào chưa xong khi hết giờ sẽ bị bỏ qua luôn
+    (không chờ thêm).
+    """
+    if not tasks:
+        return []
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=len(tasks))
+    out = []
+    try:
+        future_map = {ex.submit(fn): name for name, fn in tasks.items()}
+        pending = set(future_map.keys())
+        deadline = time.time() + timeout
+        while pending:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            done, pending = concurrent.futures.wait(
+                pending, timeout=remaining,
+                return_when=concurrent.futures.FIRST_COMPLETED,
+            )
+            for fut in done:
+                name = future_map[fut]
+                try:
+                    out.append((name, fut.result()))
+                except Exception as e:
+                    out.append((name, e))
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
+    return out
+
 # ==========================================================
 # FETCH DAILY (dùng cho lịch sử dài hạn)
-# ĐÃ SỬA: gộp lại thành 1 hàm duy nhất (trước đây có 2 hàm _fetch()
-# trùng tên, hàm thứ 2 đè hàm thứ nhất khiến nhánh fallback DNSE
-# không bao giờ được chạy). Thứ tự nguồn: VCI -> MSN -> DNSE -> Yahoo,
-# mỗi lệnh gọi vnstock đều có timeout cứng để tránh treo luồng.
+# ĐÃ SỬA (v2 - đua song song): trước đây thử tuần tự VCI -> MSN ->
+# DNSE -> Yahoo, mỗi nguồn timeout riêng cộng dồn lại có thể trên
+# 15-20s CHO 1 MÃ nếu nguồn đầu không phản hồi nhanh. Giờ VCI, MSN,
+# DNSE được bắn đi ĐỒNG THỜI (xem hàm _race), dùng kết quả hợp lệ về
+# sớm nhất; chỉ khi CẢ 3 đều thất bại mới thử Yahoo (nguồn chậm/kém
+# ổn định nhất, để cuối). Tổng thời gian chờ tối đa cho 1 mã giảm từ
+# ~16-20s xuống còn ~6-11s.
 # ==========================================================
 def _fetch(symbol, start, end, interval):
     if not _VNSTOCK_OK:
@@ -264,52 +307,48 @@ def _fetch(symbol, start, end, interval):
         v = pd.to_datetime(d['time'].max())
         return v.date() if pd.notna(v) else None
 
-    sources = ['VCI', 'MSN']
-    for src in sources:
-        key = f"{symbol}|{interval}|{src}"
-        try:
-            _throttle()
-            df = _run_with_timeout(
-                lambda src=src: Quote(symbol=symbol, source=src).history(
-                    start=start, end=end, interval=interval
-                ),
-                timeout=8,
-            )
-            if df is not None and not df.empty:
-                LAST_ERRORS.pop(key, None)
-                df = _normalize(df)
-                ld = _last_date(df)
-                if interval != '1D' or expected_date is None or (ld is not None and ld >= expected_date):
-                    return df
-                if best_last_date is None or (ld is not None and ld > best_last_date):
-                    best_df, best_last_date = df, ld
-                LAST_ERRORS[key] = f"{src} chỉ có dữ liệu tới {ld} (kỳ vọng {expected_date}) — đang thử nguồn khác."
-            else:
-                LAST_ERRORS[key] = "API trả về DataFrame rỗng hoặc quá thời gian chờ (timeout)."
-        except Exception as e:
-            LAST_ERRORS[key] = f"{type(e).__name__}: {e}"
-            continue
+    def _call_vci():
+        _throttle()
+        return Quote(symbol=symbol, source='VCI').history(start=start, end=end, interval=interval)
 
+    def _call_msn():
+        _throttle()
+        return Quote(symbol=symbol, source='MSN').history(start=start, end=end, interval=interval)
+
+    tasks = {'VCI': _call_vci, 'MSN': _call_msn}
     if interval == '1D':
-        # DNSE: nguồn công khai, không cần auth, thường nhanh & ổn định
-        # hơn Yahoo cho mã Việt Nam -> thử TRƯỚC Yahoo.
         days = (datetime.strptime(end, '%Y-%m-%d') -
                 datetime.strptime(start, '%Y-%m-%d')).days + 10
-        df_dnse = _fetch_dnse(symbol, days_back=days)
-        if not df_dnse.empty:
-            ld = _last_date(df_dnse)
-            if expected_date is None or (ld is not None and ld >= expected_date):
-                return df_dnse
-            if best_last_date is None or (ld is not None and ld > best_last_date):
-                best_df, best_last_date = df_dnse, ld
+        tasks['DNSE'] = lambda: _fetch_dnse(symbol, days_back=days)
 
-        df_yahoo = _fetch_yahoo(symbol, start, end)
-        if not df_yahoo.empty:
-            ld = _last_date(df_yahoo)
-            if expected_date is None or (ld is not None and ld >= expected_date):
-                return df_yahoo
-            if best_last_date is None or (ld is not None and ld > best_last_date):
-                best_df, best_last_date = df_yahoo, ld
+    for src, result in _race(tasks, timeout=6):
+        key = f"{symbol}|{interval}|{src}"
+        if isinstance(result, Exception):
+            LAST_ERRORS[key] = f"{type(result).__name__}: {result}"
+            continue
+        df = result
+        if df is None or df.empty:
+            LAST_ERRORS[key] = "API trả về DataFrame rỗng."
+            continue
+        LAST_ERRORS.pop(key, None)
+        df = _normalize(df)
+        ld = _last_date(df)
+        if interval != '1D' or expected_date is None or (ld is not None and ld >= expected_date):
+            return df
+        if best_last_date is None or (ld is not None and ld > best_last_date):
+            best_df, best_last_date = df, ld
+        LAST_ERRORS[key] = f"{src} chỉ có dữ liệu tới {ld} (kỳ vọng {expected_date})."
+
+    if not best_df.empty:
+        return best_df
+
+    if interval == '1D':
+        # Yahoo là nguồn dự phòng cuối cùng — kém ổn định nhất với mã VN
+        # nên chỉ thử KHI cả VCI/MSN/DNSE đều thất bại, và vẫn có timeout
+        # cứng để không treo luồng.
+        df_yahoo = _run_with_timeout(lambda: _fetch_yahoo(symbol, start, end), timeout=5)
+        if df_yahoo is not None and not df_yahoo.empty:
+            return _normalize(df_yahoo)
 
     return best_df
 
@@ -494,26 +533,28 @@ def _fetch_intraday_vndirect(day_str: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 def _fetch_intraday_vnstock(symbol: str, day_str: str) -> pd.DataFrame:
-    """vnstock VCI/MSN — fallback cuối, dễ bị rate limit."""
+    """vnstock VCI/MSN — fallback cuối, dễ bị rate limit. Đua song song 2 nguồn."""
     if not _VNSTOCK_OK:
         return pd.DataFrame()
-    for src in ['VCI', 'MSN']:
-        key = f"{symbol}|1m|{src}|{day_str}"
-        try:
+
+    def _call(src):
+        def _fn():
             _throttle()
-            df = _run_with_timeout(
-                lambda src=src: Quote(symbol=symbol, source=src).history(
-                    start=day_str, end=day_str, interval='1m'
-                ),
-                timeout=8,
+            return Quote(symbol=symbol, source=src).history(
+                start=day_str, end=day_str, interval='1m'
             )
-            if df is not None and not df.empty:
-                LAST_ERRORS.pop(key, None)
-                return _normalize(df)
-            LAST_ERRORS[key] = "vnstock trả về rỗng hoặc quá thời gian chờ (timeout)."
-        except Exception as e:
-            LAST_ERRORS[key] = f"{type(e).__name__}: {e}"
+        return _fn
+
+    tasks = {'VCI': _call('VCI'), 'MSN': _call('MSN')}
+    for src, result in _race(tasks, timeout=6):
+        key = f"{symbol}|1m|{src}|{day_str}"
+        if isinstance(result, Exception):
+            LAST_ERRORS[key] = f"{type(result).__name__}: {result}"
             continue
+        if result is not None and not result.empty:
+            LAST_ERRORS.pop(key, None)
+            return _normalize(result)
+        LAST_ERRORS[key] = "vnstock trả về rỗng."
     return pd.DataFrame()
 
 def _fetch_intraday_day(symbol: str, day_str: str, require_fresh: bool = False) -> pd.DataFrame:
