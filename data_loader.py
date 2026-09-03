@@ -697,3 +697,31 @@ def get_intraday_vnindex(_cache_bust: int = 0):
     result = pd.concat(frames, ignore_index=True)
     result = result.dropna(subset=['time']).sort_values('time').reset_index(drop=True)
     return result
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_intraday_stock(ticker: str, days: int = 3, _cache_bust: int = 0):
+    """
+    Bản tổng quát của get_intraday_vnindex() — lấy dữ liệu 1 phút cho MỘT MÃ
+    CỔ PHIẾU bất kỳ (không chỉ VNINDEX), gộp nhiều phiên gần nhất lại để đủ
+    số nến cho các chỉ báo cần lookback dài (vd Ichimoku Senkou B = 52 nến).
+
+    days: số phiên (ngày giao dịch) tối thiểu muốn gộp. Với khung 5 phút,
+    mỗi phiên có ~54 nến, nên days=3 cho ~160 nến 5' -> đủ cho Kijun(26)/
+    SenkouB(52) + dịch mây 26 nến.
+    """
+    frames = []
+    for offset in range(15):
+        day = (datetime.now() - timedelta(days=offset)).strftime('%Y-%m-%d')
+        df_day = _fetch_intraday_day(ticker, day, require_fresh=(offset == 0))
+        if not df_day.empty:
+            frames.append(df_day)
+        if len(frames) >= days:
+            break
+
+    if not frames:
+        return pd.DataFrame()
+
+    result = pd.concat(frames, ignore_index=True)
+    result = result.dropna(subset=['time']).sort_values('time').reset_index(drop=True)
+    return result
