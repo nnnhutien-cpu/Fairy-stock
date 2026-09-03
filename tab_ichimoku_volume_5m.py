@@ -38,6 +38,7 @@ from data_loader import get_intraday_stock
 
 SESSION_KEY_RESULT  = "ichimoku_vol_5m_result"
 SESSION_KEY_ELAPSED = "ichimoku_vol_5m_elapsed"
+SESSION_KEY_DIAG     = "ichimoku_vol_5m_diag"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -124,21 +125,29 @@ def compute_ichimoku_volume_signal(
 #    main.py dùng trong execute_scan())
 # ─────────────────────────────────────────────────────────────
 def _scan_one(ticker: str, params: dict):
+    """
+    Trả về (status, res):
+      status = "no_data"    -> get_intraday_stock() rỗng (nguồn dữ liệu lỗi/rate-limit)
+      status = "not_enough" -> có dữ liệu nhưng chưa đủ số nến 5' tối thiểu để tính Ichimoku
+      status = "ok"         -> tính được tín hiệu (res luôn có key 'buy_signal')
+      status = "error"      -> exception bất ngờ khi fetch/tính
+    """
     try:
         df_1m = get_intraday_stock(ticker)
         if df_1m is None or df_1m.empty:
-            return None
+            return "no_data", None
         res = compute_ichimoku_volume_signal(df_1m, **params)
         if res is None:
-            return None
+            return "not_enough", None
         res["ticker"] = ticker
-        return res
+        return "ok", res
     except Exception:
-        return None
+        return "error", None
 
 
 def scan_tickers(tickers: list, params: dict, max_workers: int = 12) -> pd.DataFrame:
     results = []
+    diag = {"no_data": 0, "not_enough": 0, "error": 0, "ok": 0}
     progress_bar = st.progress(0)
     status_txt = st.empty()
     total = max(len(tickers), 1)
@@ -148,14 +157,20 @@ def scan_tickers(tickers: list, params: dict, max_workers: int = 12) -> pd.DataF
         futures = {executor.submit(_scan_one, t, params): t for t in tickers}
         for future in _cf.as_completed(futures):
             done += 1
-            res = future.result()
-            if res is not None and res["buy_signal"]:
+            status, res = future.result()
+            diag[status] = diag.get(status, 0) + 1
+            if status == "ok" and res is not None and res["buy_signal"]:
                 results.append(res)
             progress_bar.progress(min(done / total, 1.0))
             status_txt.caption(f"Đang quét {done}/{total} mã... tìm thấy {len(results)} tín hiệu")
 
     progress_bar.empty()
     status_txt.empty()
+
+    # Lưu chẩn đoán vào session_state để render_ichimoku_volume_tab() hiển thị,
+    # giúp phân biệt "0 mã vì thiếu dữ liệu" và "0 mã vì đúng là chưa có tín hiệu".
+    st.session_state[SESSION_KEY_DIAG] = diag
+
     if not results:
         return pd.DataFrame()
     return pd.DataFrame(results).sort_values("vol_ratio", ascending=False)
@@ -208,8 +223,35 @@ def render_ichimoku_volume_tab(tickers: list):
         return
 
     elapsed = st.session_state.get(SESSION_KEY_ELAPSED, 0)
+    diag = st.session_state.get(SESSION_KEY_DIAG, {})
+
     if df_result.empty:
         st.info(f"⏳ Không tìm thấy mã nào đang thoả tín hiệu MUA lúc này. (quét xong trong {elapsed:.1f}s)")
+        if diag:
+            no_data    = diag.get("no_data", 0)
+            not_enough = diag.get("not_enough", 0)
+            errored    = diag.get("error", 0)
+            ok         = diag.get("ok", 0)
+            with st.expander("🔍 Chi tiết vì sao 0 mã (bấm để xem)", expanded=(no_data + not_enough + errored > 0)):
+                d1, d2, d3, d4 = st.columns(4)
+                d1.metric("❌ Không lấy được dữ liệu", no_data)
+                d2.metric("⚠️ Chưa đủ nến 5'", not_enough)
+                d3.metric("💥 Lỗi khi tính", errored)
+                d4.metric("✅ Đủ dữ liệu, đã tính", ok)
+                if no_data > 0 or not_enough > 0:
+                    st.caption(
+                        "👉 Nếu số **'Không lấy được dữ liệu'** hoặc **'Chưa đủ nến 5''** cao, "
+                        "nghĩa là nguồn dữ liệu intraday cho các mã cổ phiếu (vnstock VCI/MSN) "
+                        "đang bị rate-limit hoặc trả về không đủ số phiên gần nhất — đây là "
+                        "**vấn đề nguồn dữ liệu**, không phải do không có mã nào đạt tín hiệu. "
+                        "Thử quét lại sau ít phút, hoặc giảm số luồng song song (mục ⚙️ Tham số)."
+                    )
+                else:
+                    st.caption(
+                        "👉 Dữ liệu đầy đủ cho tất cả các mã — chỉ đơn giản là tại thời điểm "
+                        "quét chưa có mã nào thoả cùng lúc cả 3 điều kiện (Tenkan cắt Kijun + "
+                        "trên mây + Volume đột biến). Đây là hoạt động bình thường, không phải lỗi."
+                    )
         return
 
     st.success(f"✅ Tìm thấy **{len(df_result)} mã** đang có tín hiệu MUA (5') — quét xong trong {elapsed:.1f}s")
