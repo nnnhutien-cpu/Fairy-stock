@@ -582,15 +582,20 @@ with tab_market:
                 else:
                     # Không có dữ liệu hôm qua -> vẫn phải tạo cột 'Vol_Hôm_Qua'
                     # (toàn NaN) để chart_df luôn có đủ 2 cột, khớp với 2 màu
-                    # truyền vào st.line_chart trong render_market_tab(). Nếu
-                    # thiếu bước này, st.line_chart sẽ ném StreamlitAPIException
-                    # do color list (2 phần tử) không khớp số cột (1 cột).
-                    chart_df['Vol_Hôm_Qua'] = pd.NA
+                    # truyền vào st.line_chart trong render_market_tab(). Dùng
+                    # float('nan') (không phải pd.NA) để cột có dtype float64
+                    # ngay từ đầu — pd.NA tạo cột dtype "object", và khi
+                    # Streamlit melt 2 cột khác dtype (object + float64) để
+                    # vẽ line_chart, nó ném StreamlitAPIException
+                    # ("mixed types" / chart-mixed-type-columns).
+                    chart_df['Vol_Hôm_Qua'] = float('nan')
 
                 # Ép thứ tự cột cố định ['Vol_Hôm_Qua', 'Vol_Hôm_Nay'] để khớp
                 # đúng thứ tự màu color=["#8b7fb5" (tím), "#34d399" (xanh)]
-                # dùng trong ui_layout.render_market_tab().
-                chart_df = chart_df[['Vol_Hôm_Qua', 'Vol_Hôm_Nay']]
+                # dùng trong ui_layout.render_market_tab(). Đồng thời ép cả
+                # hai cột về float64 để đảm bảo không bao giờ bị lẫn dtype
+                # "object" (vd. do ffill/join tạo ra) trước khi vẽ biểu đồ.
+                chart_df = chart_df[['Vol_Hôm_Qua', 'Vol_Hôm_Nay']].astype('float64')
 
     sb_header("💓 Nhịp đập thị trường")
     render_market_tab(chart_df, df_today)
