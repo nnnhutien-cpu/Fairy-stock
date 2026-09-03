@@ -22,7 +22,10 @@ from tab_khuyen_nghi import render_recommendation_tab
 from screener_suc_bat import render_suc_bat_tab
 
 # ✅ THÊM IMPORT MỚI - DANH MỤC
-from tab_portfolio_v2 import render_portfolio_v2_tab 
+from tab_portfolio_v2 import render_portfolio_v2_tab
+
+# ✅ THÊM IMPORT MỚI - TÍN HIỆU MUA THEO MA VOLUME + ICHIMOKU (KHUNG 5 PHÚT)
+from tab_ichimoku_volume_5m import render_ichimoku_volume_tab
 
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
@@ -263,13 +266,14 @@ setup_cache_clear_button()
 st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
 
 # --- 4. TẠO TABS (ĐÃ CHIA RÕ LỌC CUỐI NGÀY & TÍN HIỆU TRONG PHIÊN) ---
-tab_market, tab_screener, tab_signals, tab_recommendation, tab_suc_bat, tab_portfolio = st.tabs([
+tab_market, tab_screener, tab_signals, tab_recommendation, tab_suc_bat, tab_portfolio, tab_ichimoku_vol = st.tabs([
     "🌟 Thị Trường",
     "🔍 Lọc Cuối Ngày",
     "📡 Tín Hiệu (Realtime)",
     "💡 Khuyến Nghị",
     "🚀 Sức Bật",
     "💼 Danh mục",
+    "🕯️ Tín Hiệu 5 Phút",
 ])
 
 # ==========================================
@@ -814,3 +818,9 @@ with tab_suc_bat:
 # ==========================================
 with tab_portfolio:
     render_portfolio_v2_tab(PRIORITY_TICKERS)
+
+# ==========================================
+# TAB 7: TÍN HIỆU MUA THEO MA VOLUME + ICHIMOKU (KHUNG 5 PHÚT)
+# ==========================================
+with tab_ichimoku_vol:
+    render_ichimoku_volume_tab(PRIORITY_TICKERS)
