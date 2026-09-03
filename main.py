@@ -575,6 +575,18 @@ with tab_market:
                     yday_agg['Vol_Hôm_Qua'] = yday_agg['Vol_Hôm_Qua'].ffill()
                     yday_agg = yday_agg.set_index('hour_min')
                     chart_df = chart_df.join(yday_agg, how='left')
+                else:
+                    # Không có dữ liệu hôm qua -> vẫn phải tạo cột 'Vol_Hôm_Qua'
+                    # (toàn NaN) để chart_df luôn có đủ 2 cột, khớp với 2 màu
+                    # truyền vào st.line_chart trong render_market_tab(). Nếu
+                    # thiếu bước này, st.line_chart sẽ ném StreamlitAPIException
+                    # do color list (2 phần tử) không khớp số cột (1 cột).
+                    chart_df['Vol_Hôm_Qua'] = pd.NA
+
+                # Ép thứ tự cột cố định ['Vol_Hôm_Qua', 'Vol_Hôm_Nay'] để khớp
+                # đúng thứ tự màu color=["#8b7fb5" (tím), "#34d399" (xanh)]
+                # dùng trong ui_layout.render_market_tab().
+                chart_df = chart_df[['Vol_Hôm_Qua', 'Vol_Hôm_Nay']]
 
     sb_header("💓 Nhịp đập thị trường")
     render_market_tab(chart_df, df_today)
