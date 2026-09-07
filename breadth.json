@@ -1,14 +1,14 @@
 {
-  "updated_at": "2026-09-04 21:35:35",
-  "data_date": "2026-09-04",
+  "updated_at": "2026-09-07 23:04:48",
+  "data_date": "2026-09-07",
   "n_total": 399,
-  "advance": 134,
-  "decline": 181,
-  "unchanged": 84,
-  "ad_pct": 33.58,
-  "pct_above_ma20": 42.11,
-  "pct_above_ma50": 39.6,
-  "breadth_score": -2,
+  "advance": 91,
+  "decline": 238,
+  "unchanged": 70,
+  "ad_pct": 22.81,
+  "pct_above_ma20": 32.33,
+  "pct_above_ma50": 33.58,
+  "breadth_score": -3,
   "momentum_note": "🟠 Thị trường suy yếu, số mã giảm giá đang chiếm ưu thế.",
-  "ad_change": 0.024
+  "ad_change": -0.576
 }
