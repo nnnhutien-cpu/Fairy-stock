@@ -144,17 +144,34 @@ def get_trend_signal(df: pd.DataFrame, p_tenkan=9, p_kijun=26, p_senkou_b=52, p_
 
 
 # ==========================================
-# CÁCH GỌI TỪ main.py (trong tab_market, dùng data_loader.get_vnindex_data
-# đã có sẵn trong repo — days_back tăng lên 730 để đủ lịch sử cho Ichimoku):
+# HƯỚNG DẪN GỠ BỎ market_recommendation() (trend_engine.py) KHỎI main.py
+# VÀ THAY BẰNG render_trend_signal() Ở ĐÂY:
 #
-#   from data_loader import get_vnindex_data
-#   from market_trend_signal import render_trend_signal
-#   ...
-#   with tab_market:
-#       ...
-#       df_vnindex_daily = get_vnindex_data(days_back=730)
-#       render_market_tab(chart_df, df_today)
-#       render_trend_signal(df_vnindex_daily, "VNINDEX")
+# 1) Ở phần import đầu main.py, XÓA dòng:
+#        from trend_engine import market_recommendation
+#    và THÊM:
+#        from market_trend_signal import render_trend_signal
+#
+# 2) Trong khối try/except tính reco (đầu tab_market):
+#        try:
+#            reco = market_recommendation(snap, pe_stats=pe_stats_data)
+#        except Exception:
+#            pass
+#    -> XÓA HẲN khối try/except này (không cần reco nữa).
+#
+# 3) Ở CUỐI tab_market, XÓA TOÀN BỘ khối:
+#        sb_header("💡 Khuyến nghị hành động")
+#        if reco is None:
+#            ...
+#        else:
+#            ...
+#        st.caption("⚠️ Khuyến nghị dựa trên PTKT + định giá...")
+#    THAY BẰNG:
+#        sb_header("💡 Tín hiệu xu hướng (Ichimoku)")
+#        df_vnindex_daily = get_vnindex_data(days_back=730)
+#        render_trend_signal(df_vnindex_daily, "VNINDEX")
+#
+#    (get_vnindex_data đã được import sẵn ở đầu main.py, không cần thêm)
 # ==========================================
 
 
