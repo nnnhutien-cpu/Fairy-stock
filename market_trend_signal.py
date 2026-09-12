@@ -143,6 +143,21 @@ def get_trend_signal(df: pd.DataFrame, p_tenkan=9, p_kijun=26, p_senkou_b=52, p_
     )
 
 
+# ==========================================
+# CÁCH GỌI TỪ main.py (trong tab_market, dùng data_loader.get_vnindex_data
+# đã có sẵn trong repo — days_back tăng lên 730 để đủ lịch sử cho Ichimoku):
+#
+#   from data_loader import get_vnindex_data
+#   from market_trend_signal import render_trend_signal
+#   ...
+#   with tab_market:
+#       ...
+#       df_vnindex_daily = get_vnindex_data(days_back=730)
+#       render_market_tab(chart_df, df_today)
+#       render_trend_signal(df_vnindex_daily, "VNINDEX")
+# ==========================================
+
+
 def render_trend_signal(df: pd.DataFrame, index_name: str = "VNINDEX",
                          p_tenkan=9, p_kijun=26, p_senkou_b=52, p_shift=26):
     """
