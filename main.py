@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import concurrent.futures
 import time
+import os
 import numpy as np
 import streamlit.components.v1 as components
 from supabase import create_client
@@ -21,10 +22,10 @@ from market_breadth import get_market_breadth, render_breadth_panel
 from tab_khuyen_nghi import render_recommendation_tab
 from screener_suc_bat import render_suc_bat_tab
 
-# ✅ THÊM IMPORT MỚI - DANH MỤC
+# THÊM IMPORT MỚI - DANH MỤC
 from tab_portfolio_v2 import render_portfolio_v2_tab
 
-# ✅ THÊM IMPORT MỚI - TÍN HIỆU MUA THEO MA VOLUME + ICHIMOKU (KHUNG 5 PHÚT)
+# THÊM IMPORT MỚI - TÍN HIỆU MUA THEO MA VOLUME + ICHIMOKU (KHUNG 5 PHÚT)
 from tab_ichimoku_volume_5m import render_ichimoku_volume_tab
 
 # --- 1. CẤU HÌNH TRANG ---
@@ -224,6 +225,9 @@ def init_connection():
 
 supabase = init_connection()
 
+# --- CACHE EXCEL CHO TAB "LỌC CUỐI NGÀY" (bot nền GitHub Actions ghi đè file này mỗi ngày) ---
+SCREENER_CACHE_FILE = "screener_cache.xlsx"
+
 BLACKLIST = {"BCG", "HBC", "HNG", "POM", "HAG", "ITA", "TGG", "TTB"}
 
 PRIORITY_TICKERS = [
@@ -250,7 +254,7 @@ if not active_api_key:
     except Exception:
         active_api_key = ""
 
-# ⚡ TĂNG TỐC ĐỘ LẤY DỮ LIỆU LÊN MỨC TỐI ĐA
+# TĂNG TỐC ĐỘ LẤY DỮ LIỆU LÊN MỨC TỐI ĐA
 if active_api_key:
     try:
         import vnai
@@ -275,6 +279,25 @@ tab_market, tab_screener, tab_signals, tab_recommendation, tab_suc_bat, tab_port
     "💼 Danh mục",
     "🕯️ Tín Hiệu 5 Phút",
 ])
+
+# ==========================================
+# HÀM ĐỌC CACHE EXCEL (bot nền ghi đè screener_cache.xlsx mỗi ngày)
+# ==========================================
+def load_screener_cache():
+    """Đọc kết quả quét EOD gần nhất từ file Excel do bulk_scan_screener.py tạo.
+    Trả về (list_records, scanned_at) hoặc (None, None) nếu chưa có cache / lỗi."""
+    if not os.path.exists(SCREENER_CACHE_FILE):
+        return None, None
+    try:
+        cached_df = pd.read_excel(SCREENER_CACHE_FILE, sheet_name="scan")
+        scanned_at = (
+            cached_df['_scanned_at'].iloc[0]
+            if '_scanned_at' in cached_df.columns and len(cached_df) else "?"
+        )
+        records = cached_df.drop(columns=['_scanned_at'], errors='ignore').to_dict('records')
+        return records, scanned_at
+    except Exception:
+        return None, None
 
 # ==========================================
 # HÀM QUÉT CHUNG (ĐÃ TỐI ƯU HÓA TỐC ĐỘ SIÊU TỐC)
@@ -307,7 +330,7 @@ def execute_scan(force_full=False):
 
     tickers_to_scan = tickers_ordered[:effective_max_scan]
     
-    # ⚡ CẬP NHẬT ETA: Tính toán dựa trên tốc độ xử lý đã được mở khóa (300/phút)
+    # CẬP NHẬT ETA: Tính toán dựa trên tốc độ xử lý đã được mở khóa (300/phút)
     rate_per_min = 300 if active_api_key else 150
     eta_min = len(tickers_to_scan) / rate_per_min
     st.caption(f"⏱️ Đã mở khóa đa luồng. Ước tính thời gian quét siêu tốc: **~{eta_min:.1f} phút**.")
@@ -343,12 +366,7 @@ def execute_scan(force_full=False):
             except Exception as e:
                 return {"status": "error", "msg": f"{ticker}: Lỗi API."}
 
-        # ⚡ ÉP XUNG MAX WORKERS: 24 luồng cày song song.
-        # ĐÃ SỬA: trước đây 15 luồng dùng chung 1 rate-limit lock có
-        # time.sleep() bên trong -> tăng luồng cũng vô nghĩa vì bị khoá
-        # dây chuyền. Giờ data_loader.py đã sửa lock + mỗi lệnh gọi
-        # mạng đều có timeout cứng (không còn rủi ro 1 mã "treo" chiếm
-        # luồng vô thời hạn) nên tăng lên 24 luồng an toàn và nhanh hơn.
+        # ÉP XUNG MAX WORKERS: 24 luồng cày song song.
         max_workers = 24
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -580,21 +598,8 @@ with tab_market:
                     yday_agg = yday_agg.set_index('hour_min')
                     chart_df = chart_df.join(yday_agg, how='left')
                 else:
-                    # Không có dữ liệu hôm qua -> vẫn phải tạo cột 'Vol_Hôm_Qua'
-                    # (toàn NaN) để chart_df luôn có đủ 2 cột, khớp với 2 màu
-                    # truyền vào st.line_chart trong render_market_tab(). Dùng
-                    # float('nan') (không phải pd.NA) để cột có dtype float64
-                    # ngay từ đầu — pd.NA tạo cột dtype "object", và khi
-                    # Streamlit melt 2 cột khác dtype (object + float64) để
-                    # vẽ line_chart, nó ném StreamlitAPIException
-                    # ("mixed types" / chart-mixed-type-columns).
                     chart_df['Vol_Hôm_Qua'] = float('nan')
 
-                # Ép thứ tự cột cố định ['Vol_Hôm_Qua', 'Vol_Hôm_Nay'] để khớp
-                # đúng thứ tự màu color=["#8b7fb5" (tím), "#34d399" (xanh)]
-                # dùng trong ui_layout.render_market_tab(). Đồng thời ép cả
-                # hai cột về float64 để đảm bảo không bao giờ bị lẫn dtype
-                # "object" (vd. do ffill/join tạo ra) trước khi vẽ biểu đồ.
                 chart_df = chart_df[['Vol_Hôm_Qua', 'Vol_Hôm_Nay']].astype('float64')
 
     sb_header("💓 Nhịp đập thị trường")
@@ -747,14 +752,33 @@ with tab_market:
 def render_tab_eod():
     with tab_screener:
         sb_header("🔍 Lọc Cổ Phiếu Cuối Ngày", "Quét toàn bộ danh sách mã, bỏ qua giới hạn Fast Mode. Nên chạy sau 15:00")
-        
-        eod_scan_button = st.button("🌙 KÍCH HOẠT QUÉT CUỐI NGÀY (Quét toàn bộ)", use_container_width=True, type="primary")
+
+        col_eod_btn, col_cache_info = st.columns([1, 2])
+        with col_eod_btn:
+            eod_scan_button = st.button("🌙 KÍCH HOẠT QUÉT CUỐI NGÀY (Quét toàn bộ)", use_container_width=True, type="primary")
 
         if eod_scan_button:
             results = execute_scan(force_full=True)
             st.session_state['scan_results'] = results
             st.session_state['scan_mode'] = 'EOD'
             st.rerun()
+
+        # --- TỰ ĐỘNG NẠP CACHE EXCEL NGAY KHI VÀO TAB (KHÔNG CẦN BẤM NÚT) ---
+        # Chỉ nạp nếu chưa có kết quả nào trong session (vào tab lần đầu / mới mở app).
+        if not st.session_state.get('scan_results') and st.session_state.get('scan_mode') is None:
+            cached_records, scanned_at = load_screener_cache()
+            if cached_records:
+                st.session_state['scan_results'] = cached_records
+                st.session_state['scan_mode'] = 'EOD'
+                with col_cache_info:
+                    st.info(
+                        f"⚡ Đang hiển thị **{len(cached_records)} mã** từ lần quét gần nhất "
+                        f"lúc **{scanned_at}** (tải tức thì từ cache). "
+                        "Bấm 'QUÉT CUỐI NGÀY' để lấy dữ liệu mới nhất."
+                    )
+            else:
+                with col_cache_info:
+                    st.caption("Chưa có cache. Bấm 'QUÉT CUỐI NGÀY' để quét lần đầu, hoặc đợi bot nền GitHub Actions chạy.")
 
         if st.session_state.get('scan_mode') == 'EOD' and st.session_state.get('scan_results'):
             st.success(f"✅ Bảng kết quả Quét Cuối Ngày ({len(st.session_state['scan_results'])} mã hợp lệ):")
