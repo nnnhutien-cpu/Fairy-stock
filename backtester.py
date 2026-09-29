@@ -2,10 +2,8 @@ import time
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from vnstock import Vnstock
-from tcbs_data import Vnstock
 
-SOURCE = 'VCI'   # phải TRÙNG với SOURCE trong data_loader.py
+from tcbs_data import fetch_bars_range   # nguồn giá trực tiếp từ TCBS (thay vnstock)
 
 
 def _normalize(df):
@@ -26,14 +24,13 @@ def _normalize(df):
     return df if not df.empty else None
 
 
-# 1. Cào dữ liệu Khung Ngày (1D) — API vnstock 4.0
+# 1. Cào dữ liệu Khung Ngày (1D) — trực tiếp từ TCBS
 def get_daily_data(ticker, years_back):
     end_date = datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.now() - timedelta(days=years_back * 365)).strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=int(years_back * 365))).strftime('%Y-%m-%d')
     for _ in range(3):
         try:
-            stock = Vnstock().stock(symbol=ticker, source=SOURCE)
-            df = stock.quote.history(start=start_date, end=end_date, interval='1D')
+            df = fetch_bars_range(ticker, start_date, end_date, 'D')
             norm = _normalize(df)
             if norm is not None:
                 return norm
