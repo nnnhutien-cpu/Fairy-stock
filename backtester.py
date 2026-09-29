@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from vnstock import Vnstock
+from tcbs_data import Vnstock
 
 SOURCE = 'VCI'   # phải TRÙNG với SOURCE trong data_loader.py
 
