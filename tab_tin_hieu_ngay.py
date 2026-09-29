@@ -27,7 +27,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from data_loader import get_stock_data, get_data_freshness
+from data_loader import get_stock_data, get_data_freshness, get_all_tickers
 
 W_T1, W_T2 = 0.30, 0.30          # tỷ trọng bán tầng 1, tầng 2 (tầng 3 = phần còn lại 40%)
 
@@ -268,6 +268,23 @@ def render_card(ticker, res):
 # ==========================================================
 # 4. GIAO DIỆN TAB
 # ==========================================================
+def _show_detail(code, p_line, vol_mult, p_break, p_swing):
+    """Phân tích + vẽ thẻ cho MỘT mã bất kỳ (không cần nằm trong bảng quét)."""
+    try:
+        df = get_stock_data(code, days_back=400)
+    except Exception:
+        df = None
+    if df is None or len(df) == 0:
+        st.warning(f"Không lấy được dữ liệu cho **{code}**. Kiểm tra lại mã (vd VPB, ACB, FPT) hoặc thử lại sau.")
+        return
+    res = analyze_signal(df, p_line=p_line, vol_mult=vol_mult, p_break=p_break, p_swing=p_swing)
+    if res is None:
+        st.info(f"**{code}**: chưa đủ dữ liệu (có {len(df)} phiên, cần > {p_line + 5}). "
+                "Có thể là mã mới niêm yết hoặc thiếu lịch sử giá.")
+        return
+    render_card(code, res)
+
+
 def render_tin_hieu_ngay_tab(tickers):
     st.markdown("""
     <div class="sb-header"><div class="sb-title">🕯️ Tín hiệu khuyến nghị — Khung ngày</div>
@@ -284,10 +301,25 @@ def render_tin_hieu_ngay_tab(tickers):
             "**Vào:** nến tăng, đóng cửa trên đường dài, Volume ≥ hệ số × MA20 và vượt đỉnh đóng cửa N phiên. "
             "**Ra:** tầng 1 (30%) thủng đáy ngắn hạn · tầng 2 (30%) thủng chân nến vào · "
             "tầng 3 (40%) thủng đường dài — đều xét theo giá đóng cửa.")
+    p_line, vol_mult, p_break, p_swing = int(p_line), float(vol_mult), int(p_break), int(p_swing)
 
-    extra = st.text_input("Thêm mã (cách nhau bằng dấu phẩy)", "", placeholder="VPB, ACB")
-    universe = list(dict.fromkeys(
-        [t.strip().upper() for t in list(tickers) + extra.split(",") if t and t.strip()]))
+    # ---------- TÌM MÃ BẤT KỲ ----------
+    try:
+        all_codes = sorted(set(get_all_tickers('all')))
+    except Exception:
+        all_codes = sorted(set(tickers))
+    search = st.selectbox(
+        "🔎 Tìm mã bất kỳ", options=all_codes, index=None,
+        placeholder="Gõ mã cổ phiếu, ví dụ VPB, ACB, FPT... (Enter để tra mã ngoài danh sách)",
+        accept_new_options=True, key="tin_hieu_ngay_search",
+    )
+    if search:
+        _show_detail(str(search).strip().upper(), p_line, vol_mult, p_break, p_swing)
+        st.divider()
+
+    # ---------- BẢNG QUÉT CÁC MÃ ƯU TIÊN ----------
+    st.markdown("#### 📋 Quét các mã ưu tiên")
+    universe = list(dict.fromkeys([str(t).strip().upper() for t in tickers if str(t).strip()]))
 
     col_a, col_b = st.columns([1, 3])
     if col_a.button("🔄 Quét lại", use_container_width=True):
@@ -295,7 +327,7 @@ def render_tin_hieu_ngay_tab(tickers):
     only_buy = col_b.checkbox("Chỉ hiện mã đang BUY", value=True)
 
     with st.spinner(f"Đang phân tích {len(universe)} mã..."):
-        rows = scan_signals(tuple(universe), int(p_line), float(vol_mult), int(p_break), int(p_swing))
+        rows = scan_signals(tuple(universe), p_line, vol_mult, p_break, p_swing)
 
     scan_df = pd.DataFrame(rows)
     if scan_df.empty:
@@ -310,12 +342,9 @@ def render_tin_hieu_ngay_tab(tickers):
         shown = shown.sort_values("Số phiên", na_position="last")
     st.dataframe(shown, use_container_width=True, hide_index=True)
 
-    options = shown["Mã"].tolist() or universe
-    pick = st.selectbox("Xem chi tiết mã", options)
-    df = get_stock_data(pick, days_back=400)
-    res = analyze_signal(df, p_line=int(p_line), vol_mult=float(vol_mult),
-                         p_break=int(p_break), p_swing=int(p_swing))
-    if res is None:
-        st.info(f"{pick}: chưa đủ dữ liệu (cần > {int(p_line) + 5} phiên).")
+    if search:
+        st.caption("💡 Xoá ô tìm kiếm ở trên để xem chi tiết các mã trong bảng quét.")
         return
-    render_card(pick, res)
+    options = shown["Mã"].tolist() or universe
+    pick = st.selectbox("Xem chi tiết mã trong bảng", options)
+    _show_detail(pick, p_line, vol_mult, p_break, p_swing)
