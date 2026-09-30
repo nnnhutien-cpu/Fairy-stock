@@ -2,13 +2,14 @@ name: Scan Breadth HOSE
 on:
   schedule:
     # UTC+7 = ICT. Phiên chiều đóng cửa 15:00, ATC ~15:30.
-    # LƯU Ý: thử nghiệm thực tế cho thấy chạy lúc 16:56 ICT vẫn CHƯA ĐỦ — các
-    # nguồn dữ liệu (vnstock/DNSE/FireAnt/Yahoo) đôi khi trễ vài tiếng mới có
-    # giá đóng cửa chính thức của phiên. Vì vậy đẩy lịch trễ hơn hẳn:
+    # Nguồn giá: TCBS (thay cho vnstock). GitHub cron thường trễ 5-30 phút,
+    # nên đặt nhiều mốc để nếu nguồn chưa có giá đóng cửa thì lượt sau tự bù:
     # - 17:30 ICT = 10:30 UTC (chạy chính)
-    # - 18:30 ICT = 11:30 UTC (dự phòng, nếu nguồn vẫn trễ ở lần chạy đầu)
+    # - 18:30 ICT = 11:30 UTC (dự phòng 1)
+    # - 20:00 ICT = 13:00 UTC (dự phòng 2, chốt sổ trong ngày)
     - cron: '30 10 * * 1-5'
     - cron: '30 11 * * 1-5'
+    - cron: '0 13 * * 1-5'
   workflow_dispatch:
     inputs:
       force:
@@ -17,7 +18,8 @@ on:
         default: "false"
 concurrency:
   group: scan-breadth-hose
-  cancel-in-progress: true
+  # false: lượt đang chạy không bị huỷ giữa chừng khi lượt dự phòng khởi động
+  cancel-in-progress: false
 permissions:
   contents: write
 jobs:
@@ -27,8 +29,11 @@ jobs:
     timeout-minutes: 35
     env:
       TZ: Asia/Ho_Chi_Minh
-      VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
+      PYTHONUNBUFFERED: "1"
+      DATA_SOURCE: tcbs
       FORCE_SCAN: ${{ github.event.inputs.force }}
+      # Chỉ cần giữ dòng dưới nếu breadth_scanner.py vẫn còn dùng vnstock làm nguồn dự phòng.
+      # VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -42,21 +47,22 @@ jobs:
           cache: 'pip'
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Debug - Kiểm tra secret
+      - name: Kiểm tra kết nối nguồn TCBS
         run: |
           echo "=========================================="
-          echo "🔍 KIỂM TRA VNSTOCK_API_KEY"
+          echo "🔍 KIỂM TRA NGUỒN GIÁ TCBS"
           echo "=========================================="
-          if [ -z "$VNSTOCK_API_KEY" ]; then
-            echo "⚠️  VNSTOCK_API_KEY TRỐNG — bot sẽ chạy không có API key (rate limit 18/phút)"
-            echo "   → Nếu muốn tăng tốc: GitHub → Settings → Secrets → Actions → thêm VNSTOCK_API_KEY"
+          NOW_TS=$(date -d "today 00:00" +%s)
+          URL="https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=VNINDEX&type=index&resolution=D&to=${NOW_TS}&countBack=3"
+          RESP=$(curl -s --max-time 20 -H "User-Agent: Mozilla/5.0" "$URL" || true)
+          if [ -z "$RESP" ]; then
+            echo "⚠️  Không gọi được TCBS (timeout/chặn IP) — bot sẽ tự thử lại ở lượt sau"
           else
-            echo "✅ VNSTOCK_API_KEY đã truyền (dài ${#VNSTOCK_API_KEY} ký tự)"
+            echo "✅ TCBS phản hồi. Phiên mới nhất: $(echo "$RESP" | grep -o '"tradingDate":"[^"]*"' | tail -1)"
           fi
           echo "=========================================="
-      # Không còn bước "Kiểm tra giờ giao dịch" phức tạp — logic quyết định
-      # có chạy hay không (đã qua giờ đóng cửa? đã quét gần đây chưa?) nằm
-      # trong chính breadth_scanner.py để dễ bảo trì và test bằng workflow_dispatch.
+      # Logic quyết định có chạy hay không (đã qua giờ đóng cửa? đã quét gần đây chưa?)
+      # nằm trong breadth_scanner.py để dễ bảo trì và test bằng workflow_dispatch.
       - name: Quét Market Breadth (EOD)
         run: python breadth_scanner.py
       - name: Commit breadth.json vào repo
@@ -72,9 +78,11 @@ jobs:
           for i in 1 2 3; do
             if git push origin main; then
               echo "✅ Push thành công (lần $i)"
-              break
+              exit 0
             fi
             echo "⚠️ Push thất bại lần $i, pull rebase lại rồi retry..."
             git pull --rebase origin main
             sleep 3
           done
+          echo "❌ Push thất bại sau 3 lần — báo lỗi đỏ để không bị bỏ sót"
+          exit 1
