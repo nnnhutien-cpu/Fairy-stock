@@ -764,7 +764,7 @@ def render_tab_eod():
             st.session_state['scan_from_cache'] = False
             st.rerun()
 
-                cache_mtime = os.path.getmtime(SCREENER_CACHE_FILE) if os.path.exists(SCREENER_CACHE_FILE) else None
+        cache_mtime = os.path.getmtime(SCREENER_CACHE_FILE) if os.path.exists(SCREENER_CACHE_FILE) else None
         first_load = not st.session_state.get('scan_results') and st.session_state.get('scan_mode') is None
         cache_changed = (st.session_state.get('scan_from_cache')
                          and st.session_state.get('scan_cache_mtime') != cache_mtime)
