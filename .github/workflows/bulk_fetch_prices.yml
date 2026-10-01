@@ -4,7 +4,14 @@ on:
   schedule:
     - cron: '17 10 * * 1-5'  # 17h17 giờ VN (UTC+7), Thứ 2 - Thứ 6 (lệch phút để GitHub ít bỏ lỡ)
     - cron: '47 11 * * 1-5'  # 18h47 giờ VN: chạy lần 2 phòng nguồn chậm cập nhật
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      rebuild:
+        description: 'Tải lại TOÀN BỘ lịch sử từ TCBS/DNSE (1 = có, 0 = không)'
+        default: '0'
+      universe:
+        description: 'existing = các mã đang có trong CSV, hose = toàn bộ mã HOSE'
+        default: 'existing'
 
 permissions:
   contents: write
@@ -30,6 +37,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          FORCE_REBUILD: ${{ github.event.inputs.rebuild || '0' }}
+          UNIVERSE: ${{ github.event.inputs.universe || 'existing' }}
         run: python bulk_fetch_prices_v2.py
 
       - name: Tự commit file data/stock_prices.csv ngược lại repo
