@@ -1,56 +1,30 @@
 """
-bulk_fetch_prices.py
-=====================
-Bot chạy NỀN (1 lần/ngày, sau giờ đóng cửa) để lấy sẵn dữ liệu giá lịch sử của
-nhiều mã cổ phiếu và lưu vào file data/stock_prices.csv NGAY TRONG REPO.
-Không dùng database ngoài nào cả (không Supabase) — GitHub Actions sẽ tự động
-commit file này ngược lại vào repo sau khi chạy xong (xem
-.github/workflows/bulk_fetch_prices.yml).
+Bot bơm giá cổ phiếu (bản mới, không dùng vnstock).
 
-TẠI SAO CẦN FILE NÀY:
-Tab "Bộ Lọc" trong app nếu gọi API sống cho từng mã lúc người dùng bấm nút sẽ luôn
-bị giới hạn 20-60 request/phút của vnstock -> quét 500 mã tối thiểu mất vài phút,
-KHÔNG THỂ nhanh xuống còn ~20 giây dù tối ưu code thế nào.
-Giải pháp: chạy bot này 1 lần/ngày (không ai phải chờ), lấy sẵn dữ liệu và lưu vào
-data/stock_prices.csv. Vì Streamlit Cloud luôn chạy app đúng từ code trong repo,
-file này có sẵn ngay trên đĩa khi app khởi động. Khi người dùng bấm "Quét", app chỉ
-ĐỌC FILE (không gọi API) -> 500 mã chỉ mất vài giây (đọc CSV + tính Ichimoku bằng pandas).
-
-CÁCH DÙNG (chạy thủ công để test):
-    python bulk_fetch_prices.py
+- Nguồn: tcbs_data (TCBS) + DNSE, lấy bản nào MỚI hơn.
+- Đọc data/stock_prices.csv cũ, chỉ tải phần thiếu rồi gộp (không mất lịch sử).
+- Mã nào có < MIN_ROWS phiên thì tải lại đủ HISTORY_DAYS ngày.
+- FORCE_REBUILD=1: bỏ qua lịch sử cũ, tải lại TOÀN BỘ từ TCBS/DNSE (không cần xoá file tay).
+- UNIVERSE=hose: lấy toàn bộ mã HOSE (VNDirect listing) thay vì chỉ các mã đang có trong CSV.
+- Nếu SUPABASE_URL + SUPABASE_KEY có trong môi trường: upsert thêm lên bảng stock_prices.
+- THOÁT MÃ LỖI (job báo đỏ) nếu dữ liệu vẫn cũ hơn phiên kỳ vọng -> không còn 'xanh giả'.
 """
-
 import os
 import sys
 import time
-import threading
 from datetime import datetime, timedelta
 
 import pandas as pd
-from vnstock.api.quote import Quote
+import requests
 
-# ==========================================================
-# 1. CẤU HÌNH
-# ==========================================================
-DAYS_BACK = int(os.environ.get("BULK_FETCH_DAYS_BACK", "200"))
-OUTPUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "stock_prices.csv")
+import tcbs_data
 
-# Hạn mức request/phút: để trống VNSTOCK_API_KEY -> dùng mức khách (18, an toàn dưới 20).
-# Có API key (đăng ký miễn phí tại vnstocks.com/login) -> đặt VNSTOCK_API_KEY trong
-# GitHub Secrets để tăng lên tới 55 (an toàn dưới 60) -> bot chạy nhanh hơn nhiều.
-VNSTOCK_API_KEY = os.environ.get("VNSTOCK_API_KEY", "").strip()
-RATE_LIMIT_PER_MIN = 55 if VNSTOCK_API_KEY else 18
+CSV_PATH = "data/stock_prices.csv"
+HISTORY_DAYS = 400          # ngày lịch -> khoảng 270 phiên
+MIN_ROWS = 250              # ít hơn số này thì tải lại toàn bộ lịch sử
+OVERLAP_DAYS = 7            # tải chồng lên vài ngày cuối để sửa nến dở dang
+SLEEP_BETWEEN = 0.4
 
-if VNSTOCK_API_KEY:
-    try:
-        import vnai
-        vnai.setup_api_key(VNSTOCK_API_KEY)
-        print("🔑 Đã đăng ký API key vnstock -> hạn mức 60 request/phút.")
-    except Exception as e:
-        print(f"⚠️ Không đăng ký được API key vnstock ({e}), dùng hạn mức khách.")
-
-# Danh sách mã cần cào. Có thể mở rộng danh sách này (vd: đọc từ get_all_tickers())
-# để cào hết cả sàn, miễn là chấp nhận bot chạy lâu hơn (không ai phải chờ vì chạy nền).
 PRIORITY_TICKERS = [
     "ACB", "BCM", "BID", "BVH", "CTG", "FPT", "GAS", "GVR", "HDB", "HPG",
     "MBB", "MSN", "MWG", "PLX", "POW", "SAB", "SHB", "SSB", "SSI", "STB",
@@ -59,94 +33,205 @@ PRIORITY_TICKERS = [
     "VND", "HCM", "VCI", "BSI", "CTS", "MSB", "OCB", "EIB", "LPB", "SGB",
     "REE", "GMD", "HAH", "PNJ", "DGW", "FRT", "VTP", "ANV", "VHC", "DBC",
 ]
+COLS = ["ticker", "date", "open", "high", "low", "close", "volume"]
 
-# ==========================================================
-# 2. TỰ GIỚI HẠN TỐC ĐỘ (giống hệt data_loader.py, để không bị vnstock tự chặn)
-# ==========================================================
-_rate_lock = threading.Lock()
-_call_timestamps = []
 
-def _throttle():
-    with _rate_lock:
-        now = time.time()
-        while _call_timestamps and now - _call_timestamps[0] > 60:
-            _call_timestamps.pop(0)
-        if len(_call_timestamps) >= RATE_LIMIT_PER_MIN:
-            wait = 60 - (now - _call_timestamps[0]) + 0.1
-            if wait > 0:
-                time.sleep(wait)
-            now = time.time()
-            while _call_timestamps and now - _call_timestamps[0] > 60:
-                _call_timestamps.pop(0)
-        _call_timestamps.append(now)
+def vn_now():
+    return datetime.utcnow() + timedelta(hours=7)
 
-def _normalize(df):
+
+def expected_latest_date(now=None):
+    """Phiên gần nhất lẽ ra đã có dữ liệu (sau 17:00 giờ VN thì là hôm nay). Bỏ qua ngày lễ."""
+    now = now or vn_now()
+    d = now.date()
+    if now.weekday() < 5 and now.hour < 17:
+        d -= timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= timedelta(days=1)
+    return d
+
+
+def _std(df):
+    """Chuẩn hoá về cột time/open/high/low/close/volume, bỏ timezone."""
     if df is None or len(df) == 0:
         return pd.DataFrame()
     df = df.copy()
     df.columns = [str(c).lower().strip() for c in df.columns]
-    if 'date' in df.columns and 'time' not in df.columns:
-        df.rename(columns={'date': 'time'}, inplace=True)
-    if 'time' in df.columns:
-        df['time'] = pd.to_datetime(df['time'], errors='coerce')
-        if getattr(df['time'].dt, 'tz', None) is not None:
-            df['time'] = df['time'].dt.tz_localize(None)
-    for col in ['open', 'high', 'low', 'close', 'volume']:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-    if 'time' in df.columns:
-        df = df.dropna(subset=['time']).sort_values('time').reset_index(drop=True)
+    for alt in ("date", "tradingdate"):
+        if alt in df.columns and "time" not in df.columns:
+            df = df.rename(columns={alt: "time"})
+    if "time" not in df.columns:
+        return pd.DataFrame()
+    df["time"] = pd.to_datetime(df["time"], errors="coerce")
+    if getattr(df["time"].dt, "tz", None) is not None:
+        df["time"] = df["time"].dt.tz_localize(None)
+    for c in ["open", "high", "low", "close", "volume"]:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+    df = df.dropna(subset=["time", "close"]).sort_values("time").reset_index(drop=True)
     return df
 
-def fetch_one(ticker, start, end):
-    for src in ['VCI', 'MSN']:
+
+def fetch_tcbs(symbol, start, end):
+    # +1 ngày vì nhiều API coi `end` là mốc loại trừ -> mất nến hôm nay
+    end_incl = (datetime.strptime(end, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    return _std(tcbs_data.fetch_bars_range(symbol, start, end_incl, "D"))
+
+
+def fetch_dnse(symbol, start, end):
+    t0 = int(datetime.strptime(start, "%Y-%m-%d").timestamp())
+    t1 = int((datetime.strptime(end, "%Y-%m-%d") + timedelta(days=2)).timestamp())
+    r = requests.get(
+        "https://services.entrade.com.vn/chart/history",
+        params={"symbol": symbol.upper(), "resolution": "D", "from": t0, "to": t1},
+        timeout=15,
+    )
+    data = r.json()
+    if data.get("s") != "ok" or not data.get("t"):
+        return pd.DataFrame()
+    df = pd.DataFrame({
+        "time": pd.to_datetime(data["t"], unit="s"),
+        "open": data["o"], "high": data["h"], "low": data["l"],
+        "close": data["c"], "volume": data["v"],
+    })
+    return _std(df)
+
+
+def fetch_best(symbol, start, end):
+    """Thử cả TCBS và DNSE, lấy bản có nến mới nhất (hoà thì lấy bản nhiều dòng hơn)."""
+    best, best_key = pd.DataFrame(), None
+    for name, fn in (("TCBS", fetch_tcbs), ("DNSE", fetch_dnse)):
         try:
-            _throttle()
-            df = Quote(symbol=ticker, source=src).history(start=start, end=end, interval='1D')
-            if df is not None and not df.empty:
-                return _normalize(df)
-        except Exception:
-            continue
-    return pd.DataFrame()
+            df = fn(symbol, start, end)
+            if df is None or df.empty:
+                continue
+            df = _std(tcbs_data.scale_to_thousand(df, symbol))
+            if df.empty:
+                continue
+            key = (df["time"].max(), len(df))
+            if best_key is None or key > best_key:
+                best, best_key = df, key
+        except Exception as e:
+            print(f"   ! {symbol} {name}: {type(e).__name__}: {e}")
+    return best
 
-# ==========================================================
-# 3. CHẠY CÀO + GHI RA FILE data/stock_prices.csv
-# ==========================================================
+
+def to_rows(symbol, df):
+    out = df[["time", "open", "high", "low", "close", "volume"]].copy()
+    out["date"] = out["time"].dt.strftime("%Y-%m-%d")
+    out["ticker"] = symbol
+    return out[COLS]
+
+
+def hose_tickers():
+    try:
+        r = requests.get(
+            "https://finfo-api.vndirect.com.vn/v4/stocks",
+            params={"q": "type:STOCK~status:LISTED", "fields": "code,floor", "size": 3000},
+            headers={"User-Agent": "Mozilla/5.0"}, timeout=20,
+        )
+        r.raise_for_status()
+        items = r.json().get("data") or []
+        lst = [str(i.get("code", "")).strip().upper() for i in items
+               if str(i.get("floor", "")).upper() == "HOSE"]
+        return [t for t in lst if t]
+    except Exception as e:
+        print(f"Không lấy được danh sách HOSE: {e}")
+        return []
+
+
+def load_existing():
+    if os.path.exists(CSV_PATH):
+        try:
+            df = pd.read_csv(CSV_PATH)
+            df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
+            return df[COLS]
+        except Exception as e:
+            print(f"Không đọc được {CSV_PATH}: {e}")
+    return pd.DataFrame(columns=COLS)
+
+
+def upsert_supabase(rows):
+    url, key = os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_KEY")
+    if not url or not key:
+        print("(Bỏ qua Supabase: chưa có SUPABASE_URL / SUPABASE_KEY)")
+        return
+    try:
+        from supabase import create_client
+        sb = create_client(url, key)
+        recs = rows.where(pd.notna(rows), None).to_dict("records")
+        for i in range(0, len(recs), 500):
+            sb.table("stock_prices").upsert(recs[i:i + 500], on_conflict="ticker,date").execute()
+        print(f"Supabase: đã upsert {len(recs)} dòng.")
+    except Exception as e:
+        print(f"!! Supabase upsert lỗi (CSV vẫn đã ghi): {type(e).__name__}: {e}")
+
+
 def main():
-    end_date = datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.now() - timedelta(days=DAYS_BACK)).strftime('%Y-%m-%d')
+    now = vn_now()
+    today = now.strftime("%Y-%m-%d")
+    existing = load_existing()
+    rebuild = os.environ.get("FORCE_REBUILD", "0") == "1"
+    universe = os.environ.get("UNIVERSE", "existing").lower()
+    tickers = sorted(existing["ticker"].unique().tolist()) or list(PRIORITY_TICKERS)
+    if universe == "hose":
+        hose = hose_tickers()
+        if hose:
+            tickers = hose
+    for t in PRIORITY_TICKERS:          # luôn đảm bảo có đủ nhóm ưu tiên
+        if t not in tickers:
+            tickers.append(t)
+    print(f"Chế độ: rebuild={rebuild} | universe={universe}")
+    print(f"Giờ VN: {now:%Y-%m-%d %H:%M} | {len(tickers)} mã | kỳ vọng phiên {expected_latest_date(now)}")
 
-    all_frames = []
-    ok_count, fail_count = 0, 0
-    print(f"⏳ Bắt đầu cào {len(PRIORITY_TICKERS)} mã (hạn mức {RATE_LIMIT_PER_MIN} req/phút)...")
+    if rebuild:   # coi như chưa có dữ liệu -> tải lại đủ lịch sử; dòng cũ vẫn giữ làm dự phòng nếu mã nào lỗi
+        counts, lasts = {}, {}
+    else:
+        counts = existing.groupby("ticker").size().to_dict()
+        lasts = existing.groupby("ticker")["date"].max().to_dict()
 
-    for i, ticker in enumerate(PRIORITY_TICKERS, start=1):
-        df = fetch_one(ticker, start_date, end_date)
-        if df is None or df.empty:
-            print(f"  [{i}/{len(PRIORITY_TICKERS)}] ⚠️ {ticker}: không lấy được dữ liệu.")
-            fail_count += 1
-            continue
+    new_parts, failed = [], []
+    for i, sym in enumerate(tickers, 1):
+        if counts.get(sym, 0) < MIN_ROWS:
+            start = (now - timedelta(days=HISTORY_DAYS)).strftime("%Y-%m-%d")
+        else:
+            start = (datetime.strptime(lasts[sym], "%Y-%m-%d") - timedelta(days=OVERLAP_DAYS)).strftime("%Y-%m-%d")
+        df = fetch_best(sym, start, today)
+        if df.empty:
+            failed.append(sym)
+            print(f"[{i}/{len(tickers)}] {sym}: KHÔNG có dữ liệu")
+        else:
+            new_parts.append(to_rows(sym, df))
+            print(f"[{i}/{len(tickers)}] {sym}: +{len(df)} dòng, tới {df['time'].max():%Y-%m-%d}")
+        time.sleep(SLEEP_BETWEEN)
 
-        df = df[["time", "open", "high", "low", "close", "volume"]].copy()
-        df.rename(columns={"time": "date"}, inplace=True)
-        df["date"] = df["date"].dt.strftime("%Y-%m-%d")
-        df.insert(0, "ticker", ticker)
-        all_frames.append(df)
-        print(f"  [{i}/{len(PRIORITY_TICKERS)}] ✅ {ticker}: {len(df)} dòng.")
-        ok_count += 1
+    if new_parts:
+        fresh = pd.concat(new_parts, ignore_index=True)
+        merged = pd.concat([existing, fresh], ignore_index=True)
+        merged = (merged.drop_duplicates(subset=["ticker", "date"], keep="last")
+                        .sort_values(["ticker", "date"]).reset_index(drop=True))
+        os.makedirs(os.path.dirname(CSV_PATH), exist_ok=True)
+        merged.to_csv(CSV_PATH, index=False)
+        print(f"Đã ghi {CSV_PATH}: {len(merged)} dòng.")
+        upsert_supabase(fresh)
+    else:
+        merged = existing
+        print("Không lấy được dòng mới nào.")
 
-    if not all_frames:
-        print("❌ Không cào được mã nào. Dừng lại, KHÔNG ghi đè file cũ.")
+    # ---- Kiểm tra độ mới: báo ĐỎ nếu vẫn cũ ----
+    expected = expected_latest_date(now)
+    latest = pd.to_datetime(merged["date"]).max().date() if len(merged) else None
+    ok = latest is not None and latest >= expected
+    print(f"Ngày mới nhất trong CSV: {latest} | kỳ vọng: {expected} | lỗi: {len(failed)}/{len(tickers)} mã")
+    if failed:
+        print("Mã lỗi:", ", ".join(failed))
+    if not ok:
+        print("!! DỮ LIỆU VẪN CŨ (có thể là ngày lễ hoặc nguồn chưa cập nhật).")
+        sys.exit(1)
+    if len(failed) > len(tickers) * 0.3:
+        print("!! Quá nhiều mã lỗi.")
         sys.exit(1)
 
-    final_df = pd.concat(all_frames, ignore_index=True)
-    final_df = final_df.sort_values(["ticker", "date"]).reset_index(drop=True)
-
-    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-    final_df.to_csv(OUTPUT_PATH, index=False)
-
-    print(f"🎉 HOÀN TẤT! Thành công {ok_count} mã, lỗi {fail_count} mã.")
-    print(f"📁 Đã ghi {len(final_df)} dòng vào {OUTPUT_PATH}")
 
 if __name__ == "__main__":
     main()
