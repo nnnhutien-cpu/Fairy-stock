@@ -87,6 +87,35 @@ def get_data_freshness(df, now: datetime = None):
     }
 
 
+# [VÁ 1] Khoá cache theo ngày giao dịch kỳ vọng + nạp dữ liệu có bù ngày thiếu
+def _daily_bucket():
+    """Khoá cache cho dữ liệu NGÀY: đổi đúng lúc 'ngày giao dịch kỳ vọng' đổi
+    (17:00 hằng ngày / qua nửa đêm), nên cache cũ tự mất hiệu lực thay vì sống tới 1 giờ."""
+    return str(get_expected_latest_trading_date(_vn_now()))
+
+
+def _load_stock(ticker, days_back):
+    """Supabase là nền; nếu nến mới nhất cũ hơn ngày kỳ vọng thì chỉ gọi API bù phần thiếu rồi gộp."""
+    now_vn = _vn_now()
+    cached = _read_from_cache(ticker, days_back)
+
+    if cached is not None and len(cached) >= min(60, days_back // 2):
+        if not get_data_freshness(cached, now_vn)["is_stale"]:
+            return cached
+        last = pd.to_datetime(cached["time"].max())
+        start = (last - timedelta(days=5)).strftime('%Y-%m-%d')
+        fresh = _fetch(ticker, start, now_vn.strftime('%Y-%m-%d'), '1D')
+        if fresh is not None and not fresh.empty:
+            merged = pd.concat([cached, fresh], ignore_index=True)
+            merged = (merged.drop_duplicates(subset="time", keep="last")
+                            .sort_values("time").reset_index(drop=True))
+            return merged
+        return cached  # API lỗi: vẫn hơn là không có gì (banner độ trễ ở UI sẽ báo)
+
+    start = (now_vn - timedelta(days=days_back)).strftime('%Y-%m-%d')
+    return _fetch(ticker, start, now_vn.strftime('%Y-%m-%d'), '1D')
+
+
 def _read_from_cache(ticker, days_back):
     sb = _get_supabase()
     if sb is None:
@@ -174,14 +203,16 @@ def _normalize(df):
 # ==========================================================
 # YAHOO FINANCE (fallback cuối cho dữ liệu daily)
 # ==========================================================
+# [VÁ 4] Sửa mã chỉ số (^VNINDEX) và cộng 1 ngày vì Yahoo loại trừ ngày `end`
 def _fetch_yahoo(symbol, start, end):
     try:
         import yfinance as yf
     except ImportError:
         return pd.DataFrame()
     try:
-        ticker = f"{symbol}.VN"
-        df = yf.Ticker(ticker).history(start=start, end=end)
+        ticker = "^VNINDEX" if symbol == "VNINDEX" else f"{symbol}.VN"
+        end_incl = (pd.Timestamp(end) + timedelta(days=1)).strftime('%Y-%m-%d')
+        df = yf.Ticker(ticker).history(start=start, end=end_incl)
         if df is None or df.empty:
             return pd.DataFrame()
         df = df.reset_index()
@@ -260,7 +291,10 @@ def _fetch(symbol, start, end, interval):
 
     def _call_tcbs():
         _throttle()
-        return tcbs_data.fetch_bars_range(symbol, start, end, 'D')
+        # [VÁ 5] Cộng 1 ngày vào `end`: nhiều API coi `end` là mốc loại trừ nên mất nến hôm nay.
+        # Nếu tcbs_data đã tự xử lý (end bao gồm), dòng này vô hại; nếu thấy lỗi thì đổi lại thành `end`.
+        end_incl = (datetime.strptime(end, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+        return tcbs_data.fetch_bars_range(symbol, start, end_incl, 'D')
 
     days = (datetime.strptime(end, '%Y-%m-%d') -
             datetime.strptime(start, '%Y-%m-%d')).days + 10
@@ -614,22 +648,45 @@ get_all_tickers.clear = _get_all_tickers_cached.clear
 # ==========================================================
 # PUBLIC API
 # ==========================================================
+# [VÁ 2] get_stock_data / get_vnindex_data: khoá cache theo ngày giao dịch, không cache kết quả rỗng
 @st.cache_data(ttl=3600, show_spinner=False)
+def _cached_stock(ticker, days_back, bucket):
+    df = _load_stock(ticker, days_back)
+    if df is None or df.empty:
+        # Ném lỗi để Streamlit KHÔNG cache kết quả rỗng suốt 1 giờ
+        raise ValueError("empty")
+    return df
+
+
 def get_stock_data(ticker, days_back=200):
-    cached = _read_from_cache(ticker, days_back)
-    if cached is not None and len(cached) >= min(60, days_back // 2):
-        return cached
+    try:
+        return _cached_stock(ticker, days_back, _daily_bucket())
+    except Exception:
+        return pd.DataFrame()
 
-    now_vn     = _vn_now()
-    end_date   = now_vn.strftime('%Y-%m-%d')
-    start_date = (now_vn - timedelta(days=days_back)).strftime('%Y-%m-%d')
-    return _fetch(ticker, start_date, end_date, '1D')
 
 @st.cache_data(ttl=3600, show_spinner=False)
+def _cached_vnindex(days_back, bucket):
+    now_vn = _vn_now()
+    df = _fetch('VNINDEX',
+                (now_vn - timedelta(days=days_back)).strftime('%Y-%m-%d'),
+                now_vn.strftime('%Y-%m-%d'), '1D')
+    if df is None or df.empty:
+        raise ValueError("empty")
+    return df
+
+
 def get_vnindex_data(ticker="VNINDEX", days_back=365):
-    end_date   = datetime.now().strftime('%Y-%m-%d')
-    start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
-    return _fetch('VNINDEX', start_date, end_date, '1D')
+    try:
+        return _cached_vnindex(days_back, _daily_bucket())
+    except Exception:
+        return pd.DataFrame()
+
+
+# Giữ tương thích với chỗ nào đó gọi get_stock_data.clear() / get_vnindex_data.clear()
+get_stock_data.clear = _cached_stock.clear
+get_vnindex_data.clear = _cached_vnindex.clear
+
 
 @st.cache_data(ttl=60, show_spinner=False)
 def get_intraday_vnindex(_cache_bust: int = 0):
@@ -639,7 +696,8 @@ def get_intraday_vnindex(_cache_bust: int = 0):
     """
     frames = []
     for offset in range(6):
-        day = (datetime.now() - timedelta(days=offset)).strftime('%Y-%m-%d')
+        # [VÁ 3] dùng giờ VN thay vì datetime.now() (UTC trên Streamlit Cloud)
+        day = (_vn_now() - timedelta(days=offset)).strftime('%Y-%m-%d')
         df_day = _fetch_intraday_day('VNINDEX', day, require_fresh=(offset == 0))
         if not df_day.empty:
             frames.append(df_day)
@@ -662,7 +720,8 @@ def get_intraday_stock(ticker: str, days: int = 3, _cache_bust: int = 0):
     """
     frames = []
     for offset in range(15):
-        day = (datetime.now() - timedelta(days=offset)).strftime('%Y-%m-%d')
+        # [VÁ 3] dùng giờ VN thay vì datetime.now() (UTC trên Streamlit Cloud)
+        day = (_vn_now() - timedelta(days=offset)).strftime('%Y-%m-%d')
         df_day = _fetch_intraday_day(ticker, day, require_fresh=(offset == 0))
         if not df_day.empty:
             frames.append(df_day)
