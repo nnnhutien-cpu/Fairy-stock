@@ -11,7 +11,7 @@ from datetime import datetime
 
 from indicators import market_snapshot
 from trend_engine import market_recommendation
-from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex, set_rate_limit
+from data_loader import get_stock_data, get_vnindex_data, get_all_tickers, get_intraday_vnindex, set_rate_limit, get_expected_latest_trading_date
 from indicators import calculate_technical_signals
 import trend_engine as te
 from ui_layout import render_sidebar, render_market_tab, render_screener_results, render_screener_signals
@@ -761,24 +761,36 @@ def render_tab_eod():
             results = execute_scan(force_full=True)
             st.session_state['scan_results'] = results
             st.session_state['scan_mode'] = 'EOD'
+            st.session_state['scan_from_cache'] = False
             st.rerun()
 
-        # --- TỰ ĐỘNG NẠP CACHE EXCEL NGAY KHI VÀO TAB (KHÔNG CẦN BẤM NÚT) ---
-        # Chỉ nạp nếu chưa có kết quả nào trong session (vào tab lần đầu / mới mở app).
-        if not st.session_state.get('scan_results') and st.session_state.get('scan_mode') is None:
+                cache_mtime = os.path.getmtime(SCREENER_CACHE_FILE) if os.path.exists(SCREENER_CACHE_FILE) else None
+        first_load = not st.session_state.get('scan_results') and st.session_state.get('scan_mode') is None
+        cache_changed = (st.session_state.get('scan_from_cache')
+                         and st.session_state.get('scan_cache_mtime') != cache_mtime)
+
+        if first_load or cache_changed:
             cached_records, scanned_at = load_screener_cache()
             if cached_records:
                 st.session_state['scan_results'] = cached_records
                 st.session_state['scan_mode'] = 'EOD'
-                with col_cache_info:
-                    st.info(
-                        f"⚡ Đang hiển thị **{len(cached_records)} mã** từ lần quét gần nhất "
-                        f"lúc **{scanned_at}** (tải tức thì từ cache). "
-                        "Bấm 'QUÉT CUỐI NGÀY' để lấy dữ liệu mới nhất."
-                    )
+                st.session_state['scan_from_cache'] = True
+                st.session_state['scan_cache_mtime'] = cache_mtime
+                st.session_state['scan_cache_at'] = scanned_at
             else:
                 with col_cache_info:
                     st.caption("Chưa có cache. Bấm 'QUÉT CUỐI NGÀY' để quét lần đầu, hoặc đợi bot nền GitHub Actions chạy.")
+
+        if st.session_state.get('scan_from_cache'):
+            _at = st.session_state.get('scan_cache_at')
+            with col_cache_info:
+                try:
+                    if pd.to_datetime(_at).date() < get_expected_latest_trading_date():
+                        st.warning(f"⚠️ Cache quét lúc **{_at}** đã cũ so với phiên gần nhất. Bấm 'QUÉT CUỐI NGÀY' để lấy mới.")
+                    else:
+                        st.info(f"⚡ Hiển thị {len(st.session_state['scan_results'])} mã từ lần quét lúc **{_at}**.")
+                except Exception:
+                    st.info(f"⚡ Hiển thị cache quét lúc **{_at}**.")
 
         if st.session_state.get('scan_mode') == 'EOD' and st.session_state.get('scan_results'):
             st.success(f"✅ Bảng kết quả Quét Cuối Ngày ({len(st.session_state['scan_results'])} mã hợp lệ):")
