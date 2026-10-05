@@ -318,21 +318,61 @@ def iflash_snapshot(tickers=None, index=None):
     return pd.DataFrame(rows)
 
 
+_TRADE_PLACE = {"001": "HOSE", "002": "HNX", "005": "UPCOM"}
+
+
+def iflash_securities(max_pages=10):
+    """
+    GET /ananke/v1/securities (mục 5.11) - toàn bộ chứng khoán niêm yết, có phân trang
+    (mặc định 1000 bản ghi/trang). Tài liệu không nêu tên tham số trang; dùng `page`
+    theo chuẩn Spring (response có number/totalPages/last) và tự dừng nếu trang lặp.
+    """
+    rows, first_sym = [], None
+    for page in range(max_pages):
+        params = {"fields": "all"}
+        if page:
+            params["page"] = page
+        js = _get_json(OPENAPI_URL + "/ananke/v1/securities", params=params, auth=True)
+        if not isinstance(js, dict):
+            break
+        content = js.get("content") or []
+        if not content:
+            break
+        if page and content[0].get("symbol") == first_sym:
+            break  # server bỏ qua tham số trang -> tránh lặp vô hạn
+        if page == 0:
+            first_sym = content[0].get("symbol")
+        rows.extend(content)
+        if js.get("last", True) or page + 1 >= int(js.get("totalPages") or 1):
+            break
+    return rows
+
+
 def sync_symbols(path=None):
     """
-    Lấy danh sách mã HOSE/HNX/UPCOM từ iFlash và ghi ra tickers.json (cần đã đăng nhập).
-    Chỉ giữ mã 3 ký tự (cổ phiếu); chứng quyền/ETF/quỹ có mã dài hơn nên bị loại.
+    Ghi tickers.json = cổ phiếu phổ thông HOSE/HNX/UPCOM (cần đã đăng nhập iFlash).
+    Nguồn chính: 5.11 securities (secType=001, tradePlace, status=Y) - lọc chính xác theo loại.
+    Dự phòng: 5.1 tickerCommons theo rổ 1/3/5, chỉ giữ mã 3 ký tự.
     Trả về số mã đã ghi (0 nếu lỗi).
     """
     out, seen = [], set()
-    for idx, ex in ((1, "HOSE"), (3, "HNX"), (5, "UPCOM")):
-        df = iflash_snapshot(index=idx)
-        if df.empty or "symbol" not in df.columns:
-            continue
-        for sym in df["symbol"].astype(str).str.strip().str.upper():
-            if len(sym) == 3 and sym.isalnum() and sym not in seen:
-                seen.add(sym)
-                out.append({"symbol": sym, "exchange": ex})
+    for it in iflash_securities():
+        sym = str(it.get("symbol", "")).strip().upper()
+        ex = _TRADE_PLACE.get(str(it.get("tradePlace")))
+        if (sym and ex and str(it.get("secType")) == "001"
+                and str(it.get("status", "Y")) == "Y" and sym not in seen):
+            seen.add(sym)
+            out.append({"symbol": sym, "exchange": ex})
+
+    if not out:  # dự phòng
+        for idx, ex in ((1, "HOSE"), (3, "HNX"), (5, "UPCOM")):
+            df = iflash_snapshot(index=idx)
+            if df.empty or "symbol" not in df.columns:
+                continue
+            for sym in df["symbol"].astype(str).str.strip().str.upper():
+                if len(sym) == 3 and sym.isalnum() and sym not in seen:
+                    seen.add(sym)
+                    out.append({"symbol": sym, "exchange": ex})
     if not out:
         return 0
     with open(path or _TICKERS_FILE, "w", encoding="utf-8") as f:
