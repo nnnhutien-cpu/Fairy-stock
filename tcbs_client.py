@@ -12,7 +12,9 @@ Cung cấp:
 
 Cấu hình qua biến môi trường (tuỳ chọn):
   TCBS_BASE_URL       mặc định https://apipubaws.tcbs.com.vn
-  TCBS_TOKEN          Bearer token nếu bạn có (API công khai không cần)
+  TCBS_API_KEY        API key iFlash Open API (chỉ dùng để đổi lấy JWT, cần kèm OTP)
+  TCBS_OTP            Smart OTP (iOTP) từ app TCInvest - dùng 1 lần khi đăng nhập
+  TCBS_OPENAPI_URL    mặc định https://openapi.tcbs.com.vn
   TCBS_RATE_LIMIT     số request/phút, mặc định 100
   TCBS_PRICE_DIVISOR  mặc định 1000 -> giá cổ phiếu trả về theo đơn vị "nghìn đồng"
                       giống vnstock cũ (20.15 thay vì 20150). Đặt 1 để giữ nguyên VNĐ.
@@ -34,6 +36,8 @@ BASE_URL = os.getenv("TCBS_BASE_URL", "https://apipubaws.tcbs.com.vn").rstrip("/
 BARS_URL = BASE_URL + os.getenv("TCBS_BARS_PATH", "/stock-insight/v1/stock/bars-long-term")
 OVERVIEW_URL = BASE_URL + "/tcanalysis/v1/ticker/{ticker}/overview"
 RATIO_URL = BASE_URL + "/tcanalysis/v1/finance/{ticker}/financialratio"
+
+OPENAPI_URL = os.getenv("TCBS_OPENAPI_URL", "https://openapi.tcbs.com.vn").rstrip("/")
 
 INDEXES = {"VNINDEX", "VN30", "HNX", "HNXINDEX", "HNX30", "UPCOM", "UPCOMINDEX", "VN100"}
 _INDEX_ALIAS = {"HNX": "HNXINDEX", "UPCOMINDEX": "UPCOM"}
@@ -64,6 +68,7 @@ _lock = threading.Lock()
 _calls = []
 _rate_limit_per_min = int(os.getenv("TCBS_RATE_LIMIT", "100"))
 _last_error = None
+_jwt = os.getenv("TCBS_JWT")  # có thể truyền sẵn JWT nếu đã có
 
 
 def set_rate_limit(requests_per_minute: int):
@@ -91,13 +96,17 @@ def _throttle():
         _calls.append(now)
 
 
-def _get_json(url, params=None, retries=3, timeout=15):
+def _get_json(url, params=None, retries=3, timeout=15, auth=False):
     """GET + retry/backoff. Trả về JSON hoặc None (và ghi _last_error)."""
-    global _last_error
+    global _last_error, _jwt
     headers = dict(_HEADERS)
-    token = os.getenv("TCBS_TOKEN")
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    # JWT của iFlash chỉ được gửi tới openapi.tcbs.com.vn (auth=True).
+    # API key gốc KHÔNG BAO GIỜ gửi tới các endpoint công khai.
+    if auth:
+        if not _jwt:
+            _last_error = "Chưa đăng nhập iFlash (cần iflash_login với OTP)"
+            return None
+        headers["Authorization"] = f"Bearer {_jwt}"
     for i in range(retries):
         _throttle()
         try:
@@ -109,6 +118,9 @@ def _get_json(url, params=None, retries=3, timeout=15):
             if r.status_code in (429, 500, 502, 503, 504):
                 time.sleep(1.5 * (i + 1))
                 continue
+            if r.status_code == 401 and auth:
+                _jwt = None
+                _last_error = "JWT hết hạn/không hợp lệ - cần iflash_login lại bằng OTP mới"
             return None  # 400/401/403/404...: thử lại cũng vô ích
         except (requests.RequestException, ValueError) as e:
             _last_error = f"{type(e).__name__}: {e} @ {url}"
@@ -249,3 +261,80 @@ def list_symbols(exchange="all"):
         if sym and (want is None or ex == want):
             out.append(sym)
     return out
+
+
+# ----------------------------------------------------------------------------
+# iFLASH OPEN API (openapi.tcbs.com.vn) - cần API key + Smart OTP
+# ----------------------------------------------------------------------------
+# Theo tài liệu chính thức (developers.tcbs.com.vn): POST /gaia/v1/oauth2/openapi/token
+# với {"apiKey", "otp"} -> JWT, gắn dạng Bearer cho các request sau.
+# LƯU Ý: nhóm "Thị trường" của iFlash chỉ có giá snapshot/realtime, khớp lệnh trong phiên,
+# cung cầu, room ngoại, thông tin chứng khoán. KHÔNG có nến lịch sử nhiều ngày và KHÔNG có
+# P/E, P/B -> history() và valuation_snapshot() vẫn dùng endpoint công khai ở trên.
+def iflash_login(otp=None, api_key=None):
+    """Đổi API key + OTP lấy JWT. Trả về True nếu thành công."""
+    global _jwt, _last_error
+    api_key = api_key or os.getenv("TCBS_API_KEY")
+    otp = otp or os.getenv("TCBS_OTP")
+    if not api_key or not otp:
+        _last_error = "Thiếu TCBS_API_KEY hoặc OTP"
+        return False
+    try:
+        _throttle()
+        r = _session.post(
+            OPENAPI_URL + "/gaia/v1/oauth2/openapi/token",
+            json={"apiKey": api_key, "otp": str(otp)},
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            timeout=15,
+        )
+        tok = r.json().get("token") if r.status_code == 200 else None
+        if tok:
+            _jwt = tok
+            _last_error = None
+            return True
+        _last_error = f"Đăng nhập iFlash thất bại: HTTP {r.status_code}"
+    except (requests.RequestException, ValueError) as e:
+        _last_error = f"Đăng nhập iFlash lỗi: {type(e).__name__}"
+    return False
+
+
+def iflash_logged_in():
+    return bool(_jwt)
+
+
+def iflash_snapshot(tickers=None, index=None):
+    """
+    GET /tartarus/v1/tickerCommons (mục 5.1) - giá hiện tại/trần/sàn/tham chiếu, OHLC trong ngày.
+    tickers: list mã (không dùng chung với index).
+    index: 1=HOSE 2=VN30 3=HNX 4=HNX30 5=UPCOM 11=VN100 15=VN50 ...
+    """
+    params = {}
+    if tickers:
+        params["tickers"] = ",".join(str(t).upper() for t in tickers)
+    elif index is not None:
+        params["index"] = index
+    js = _get_json(OPENAPI_URL + "/tartarus/v1/tickerCommons", params=params, auth=True)
+    rows = (js or {}).get("data") or []
+    return pd.DataFrame(rows)
+
+
+def sync_symbols(path=None):
+    """
+    Lấy danh sách mã HOSE/HNX/UPCOM từ iFlash và ghi ra tickers.json (cần đã đăng nhập).
+    Chỉ giữ mã 3 ký tự (cổ phiếu); chứng quyền/ETF/quỹ có mã dài hơn nên bị loại.
+    Trả về số mã đã ghi (0 nếu lỗi).
+    """
+    out, seen = [], set()
+    for idx, ex in ((1, "HOSE"), (3, "HNX"), (5, "UPCOM")):
+        df = iflash_snapshot(index=idx)
+        if df.empty or "symbol" not in df.columns:
+            continue
+        for sym in df["symbol"].astype(str).str.strip().str.upper():
+            if len(sym) == 3 and sym.isalnum() and sym not in seen:
+                seen.add(sym)
+                out.append({"symbol": sym, "exchange": ex})
+    if not out:
+        return 0
+    with open(path or _TICKERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(out, f, ensure_ascii=False, indent=0)
+    return len(out)
