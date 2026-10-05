@@ -6,6 +6,8 @@ import numpy as _np
 import pandas as _pd
 import streamlit as _st
 
+import tcbs_client as _tcbs
+
 # ============================================================
 #  CONSTANTS
 # ============================================================
@@ -47,42 +49,24 @@ _EPS_POINTS = {
 
 
 # ============================================================
-#  STOCK-LEVEL VALUATION
+#  STOCK-LEVEL VALUATION  (nguồn: TCBS, thay thế vnstock)
 # ============================================================
 def get_stock_valuation(ticker, ichi_status, price_val):
+    """
+    P/E, P/B, Vốn hóa (tỷ VNĐ) lấy từ TCBS qua tcbs_client.
+    price_val có thể là 22.5 (nghìn đồng) hoặc 22500 (VNĐ) — tự chuẩn hóa về VNĐ.
+    """
     pe, pb, von_hoa = 0.0, 0.0, 0.0
     try:
-        try:
-            from vnstock.stock import ticker_overview
-        except ImportError:
-            from vnstock import ticker_overview
-        df_overview = ticker_overview(ticker)
-        if df_overview is not None and not df_overview.empty:
-            df_overview.columns = [str(c).lower().strip() for c in df_overview.columns]
-            if 'outstandingshare' in df_overview.columns:
-                p_vnd = price_val * 1000 if price_val < 500 else price_val
-                out_share = float(df_overview['outstandingshare'].iloc[0])
-                von_hoa = (out_share * p_vnd) / 1000
-            if 'pe' in df_overview.columns: pe = df_overview['pe'].iloc[0]
-            if 'pb' in df_overview.columns: pb = df_overview['pb'].iloc[0]
+        p_vnd = None
+        if price_val is not None and float(price_val) > 0:
+            p_vnd = float(price_val) * 1000 if float(price_val) < 500 else float(price_val)
+        snap = _tcbs.valuation_snapshot(ticker, price_vnd=p_vnd)
+        pe = snap.get("pe", 0.0)
+        pb = snap.get("pb", 0.0)
+        von_hoa = snap.get("market_cap_bn", 0.0)  # tỷ VNĐ
     except Exception:
         pass
-
-    if pe == 0.0 and pb == 0.0:
-        try:
-            try:
-                from vnstock.stock import financial_ratio
-            except ImportError:
-                from vnstock import financial_ratio
-            df_ratio = financial_ratio(ticker, 'quarterly', True)
-            if df_ratio is not None and not df_ratio.empty:
-                df_ratio.columns = [str(c).lower().strip() for c in df_ratio.columns]
-                if 'pe' in df_ratio.columns: pe = df_ratio['pe'].iloc[0]
-                elif 'pricetoearning' in df_ratio.columns: pe = df_ratio['pricetoearning'].iloc[0]
-                if 'pb' in df_ratio.columns: pb = df_ratio['pb'].iloc[0]
-                elif 'pricetobook' in df_ratio.columns: pb = df_ratio['pricetobook'].iloc[0]
-        except Exception:
-            pass
 
     pe      = round(float(pe), 2)      if _pd.notna(pe)      else 0.0
     pb      = round(float(pb), 2)      if _pd.notna(pb)      else 0.0
