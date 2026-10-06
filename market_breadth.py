@@ -59,17 +59,14 @@ def _parse_dt(s):
         return None
 
 
-def _job_stale_today(breadth: dict, now: datetime) -> bool:
-    """Chỉ cảnh báo "workflow có thể lỗi" khi: hôm nay là ngày giao dịch, đã qua
-    EXPECTED_RUN_CUTOFF, mà data_date vẫn chưa phải hôm nay."""
-    if not _is_trading_day(now.date()):
-        return False
-    if now.time() < EXPECTED_RUN_CUTOFF:
-        return False
+def _job_stale(breadth: dict, now: datetime, expected) -> bool:
+    """Job được coi là bỏ lỡ khi: dữ liệu cũ hơn phiên kỳ vọng VÀ đã qua hạn chót chạy của phiên đó
+    (EXPECTED_RUN_CUTOFF của chính ngày `expected`). Nhờ vậy bot chết nhiều ngày vẫn bị bắt ngay,
+    còn 17:00-19:00 (bot chưa tới lượt) thì không báo nhầm."""
     data_date = _parse_date((breadth or {}).get("data_date"))
-    if data_date is None:
-        return True
-    return data_date < now.date()
+    if data_date is not None and data_date >= expected:
+        return False
+    return now >= datetime.combine(expected, EXPECTED_RUN_CUTOFF)
 
 
 def breadth_freshness(breadth: dict):
@@ -79,7 +76,7 @@ def breadth_freshness(breadth: dict):
                    -> nguồn giá cập nhật chậm (khác nguyên nhân 1).
     """
     out = {"is_stale": False, "minutes_ago": None, "data_stale": False,
-           "data_date": None, "expected_date": None}
+           "data_date": None, "expected_date": None, "lag_days": None}
     if not breadth:
         return out
 
@@ -88,12 +85,13 @@ def breadth_freshness(breadth: dict):
     if updated_at:
         out["minutes_ago"] = max(0, round((now - updated_at).total_seconds() / 60))
 
-    out["is_stale"] = _job_stale_today(breadth, now)
-
     expected = _expected_latest_trading_date(now)
     out["expected_date"] = expected
+    out["is_stale"] = _job_stale(breadth, now, expected)
     data_date = _parse_date(breadth.get("data_date"))
     out["data_date"] = data_date
+    if data_date:
+        out["lag_days"] = max(0, (expected - data_date).days)
     if data_date and updated_at:
         ready_at = datetime.combine(expected, DATA_READY_TIME)
         # Chỉ coi là "nguồn giá chậm" nếu bot chạy SAU khi giá lẽ ra đã sẵn sàng
@@ -197,33 +195,31 @@ def render_breadth_panel(breadth: dict):
         f"📅 Dữ liệu phản ánh phiên: **{d_date}** · {breadth['n_total']} mã hợp lệ · "
         "🔁 Cập nhật 1 lần/ngày sau đóng cửa (~17:30-18:30 ICT)"
     )
+    lag = f" (trễ {fresh['lag_days']} ngày lịch)" if fresh["lag_days"] else ""
     if fresh["data_stale"]:
         st.warning(
-            f"⚠️ Bot đã chạy nhưng **giá lấy về vẫn thuộc phiên {d_date}** "
-            f"(kỳ vọng: {fresh['expected_date']:%d/%m/%Y}) — nguồn giá có thể chưa cập nhật kịp. "
+            f"⚠️ Bot đã chạy nhưng **giá lấy về vẫn thuộc phiên {d_date}**{lag}, kỳ vọng "
+            f"{fresh['expected_date']:%d/%m/%Y} — nguồn giá có thể chưa cập nhật kịp. "
             "Bot sẽ tự lấy lại ở lượt quét kế tiếp."
         )
-    if fresh["is_stale"]:
-        st.warning(
-            f"⚠️ Đã qua {EXPECTED_RUN_CUTOFF:%H:%M} ICT mà chưa có dữ liệu phiên hôm nay — "
-            "workflow có thể đang lỗi. Kiểm tra **GitHub → Actions → Scan Breadth HOSE**."
+    elif fresh["is_stale"]:
+        st.error(
+            f"🚨 Dữ liệu breadth đang cũ: mới đến phiên **{d_date}**{lag}, kỳ vọng "
+            f"{fresh['expected_date']:%d/%m/%Y}. Workflow có thể đã ngừng chạy — kiểm tra "
+            "**GitHub → Actions → Scan Breadth HOSE** (GitHub tự tắt lịch chạy của repo không có "
+            "hoạt động sau ~60 ngày; vào tab Actions bấm *Enable workflow* nếu thấy bị tắt)."
         )
 
     ad, ma20, ma50, score = (breadth["ad_pct"], breadth["pct_above_ma20"],
                              breadth["pct_above_ma50"], breadth["breadth_score"])
 
     c1, c2, c3, c4 = st.columns(4)
-    # delta hiển thị số mã tăng/giảm (trung tính) thay vì mũi tên xanh/đỏ dễ gây hiểu nhầm
-    c1.metric("📈 A/D%", f"{ad:.1f}%",
-              delta=f"{breadth['advance']} tăng · {breadth['decline']} giảm", delta_color="off")
+    c1.metric("📈 % mã tăng giá", f"{ad:.1f}%", help="Số mã tăng / tổng số mã hợp lệ")
+    c1.caption(f"{breadth['advance']} tăng · {breadth['decline']} giảm · {breadth['unchanged']} đứng giá")
     c2.metric("📊 % trên MA20", f"{ma20:.1f}%")
     c3.metric("📊 % trên MA50", f"{ma50:.1f}%")
-    if score >= 3:
-        c4.metric("🎯 Breadth Score", f"{score:+d}", delta="🟢 Tích cực", delta_color="off")
-    elif score <= -3:
-        c4.metric("🎯 Breadth Score", f"{score:+d}", delta="🔴 Tiêu cực", delta_color="off")
-    else:
-        c4.metric("🎯 Breadth Score", f"{score:+d}", delta="🟡 Trung tính", delta_color="off")
+    c4.metric("🎯 Breadth Score", f"{score:+d}")
+    c4.caption("🟢 Tích cực" if score >= 3 else ("🔴 Tiêu cực" if score <= -3 else "🟡 Trung tính"))
 
     ad_icon = "🟢" if ad >= 50 else "🔴"
     ma_icon = "🟢" if ma50 >= 50 else ("🟡" if ma50 >= 30 else "🔴")
