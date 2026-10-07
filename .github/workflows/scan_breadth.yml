@@ -1,190 +1,98 @@
-#!/usr/bin/env python3
-"""Quét Market Breadth HOSE (EOD) từ nguồn giá TCBS -> breadth.json.
+name: Scan Breadth HOSE
+on:
+  schedule:
+    # ICT = UTC+7. Phiên chiều đóng cửa 15:00, ATC ~15:30.
+    # Nguồn giá: TCBS. GitHub cron thường trễ 5-30 phút nên đặt 3 mốc dự phòng:
+    # - 17:30 ICT = 10:30 UTC (chạy chính)
+    # - 18:30 ICT = 11:30 UTC (dự phòng 1)
+    # - 20:00 ICT = 13:00 UTC (dự phòng 2, chốt sổ trong ngày)
+    - cron: '30 10 * * 1-5'
+    - cron: '30 11 * * 1-5'
+    - cron: '0 13 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "true = quét bất kể giờ giấc / đã có dữ liệu (để test)"
+        required: false
+        default: "false"
+concurrency:
+  group: scan-breadth-hose
+  cancel-in-progress: false
+permissions:
+  contents: write
+  actions: write   # để tự bật lại lịch chạy nếu GitHub tắt (repo ít hoạt động ~60 ngày)
+jobs:
+  scan:
+    name: Quét Sức Khỏe Thị Trường HOSE (EOD)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      TZ: Asia/Ho_Chi_Minh
+      PYTHONUNBUFFERED: "1"
+      DATA_SOURCE: tcbs
+      FORCE_SCAN: ${{ github.event.inputs.force }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
-Chạy bởi .github/workflows/scan_breadth.yml (3 mốc cron mỗi ngày làm dự phòng cho nhau).
-Mã thoát: 0 = ổn (gồm cả trường hợp bỏ qua hợp lệ), 1 = lỗi thật -> workflow đỏ để biết.
-"""
-import json
-import os
-import random
-import sys
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta, timezone
+      # Giữ lịch chạy luôn bật: nếu GitHub từng tắt, lượt chạy tay/lượt này sẽ bật lại.
+      - name: Giữ lịch chạy luôn bật
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow enable "Scan Breadth HOSE" --repo "${{ github.repository }}" || true
 
-import pandas as pd
-import requests
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
 
-ICT = timezone(timedelta(hours=7))
-BASE = "https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term"
-HEADERS = {"User-Agent": "Mozilla/5.0"}
-OUT = "breadth.json"
-UNIVERSE_CSV = "data/stock_prices.csv"
-FALLBACK = ["ACB", "BCM", "BID", "BVH", "CTG", "FPT", "GAS", "GVR", "HDB", "HPG", "MBB", "MSN",
-            "MWG", "PLX", "POW", "SAB", "SHB", "SSB", "SSI", "STB", "TCB", "TPB", "VCB", "VHM",
-            "VIB", "VIC", "VJC", "VNM", "VPB", "VRE"]
-COUNT_BACK = 160      # đủ cho MA100 + chuỗi A-D dài
-WORKERS = 6
-MIN_COVERAGE = 0.6    # dưới mức này coi là quét hỏng, không ghi đè file cũ
-FORCE = os.getenv("FORCE_SCAN", "").strip().lower() == "true"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install requests pandas
 
+      - name: Kiểm tra kết nối nguồn TCBS
+        run: |
+          echo "=========================================="
+          echo "🔍 KIỂM TRA NGUỒN GIÁ TCBS"
+          echo "=========================================="
+          NOW_TS=$(date +%s)
+          URL="https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=VNINDEX&type=index&resolution=D&to=${NOW_TS}&countBack=3"
+          RESP=$(curl -s --max-time 20 -H "User-Agent: Mozilla/5.0" "$URL" || true)
+          if [ -z "$RESP" ]; then
+            echo "⚠️  Không gọi được TCBS (timeout/chặn IP) — bot sẽ tự thử lại ở lượt sau"
+          else
+            echo "✅ TCBS phản hồi. Phiên mới nhất: $(echo "$RESP" | grep -o '"tradingDate":"[^"]*"' | tail -1)"
+          fi
+          echo "=========================================="
 
-def log(msg):
-    print(msg, flush=True)
+      # Quyết định có chạy hay không (đã qua giờ đóng cửa? đã có dữ liệu phiên đó chưa?)
+      # nằm trong breadth_scanner.py. Lỗi thật sẽ trả mã thoát 1 -> workflow đỏ.
+      - name: Quét Market Breadth (EOD)
+        run: python breadth_scanner.py
 
-
-def fetch_bars(ticker, kind="stock", retries=3):
-    """Trả về Series close theo ngày (index 'YYYY-MM-DD'), hoặc None nếu lỗi."""
-    params = {"ticker": ticker, "type": kind, "resolution": "D",
-              "to": int(time.time()) + 86400, "countBack": COUNT_BACK}
-    for i in range(retries):
-        try:
-            r = requests.get(BASE, params=params, headers=HEADERS, timeout=20)
-            if r.status_code == 200:
-                rows = r.json().get("data") or []
-                if rows:
-                    df = pd.DataFrame(rows)
-                    idx = df["tradingDate"].astype(str).str[:10]
-                    s = pd.Series(pd.to_numeric(df["close"], errors="coerce").values, index=idx)
-                    return s[~s.index.duplicated(keep="last")].sort_index().dropna()
-            time.sleep(1.5 * (i + 1) + random.random())
-        except Exception:
-            time.sleep(1.5 * (i + 1) + random.random())
-    return None
-
-
-def load_universe():
-    try:
-        t = pd.read_csv(UNIVERSE_CSV, usecols=["ticker"])["ticker"].dropna().astype(str).str.upper()
-        out = sorted(set(t))
-        if len(out) >= 50:
-            return out
-    except Exception as e:
-        log(f"⚠️ Không đọc được {UNIVERSE_CSV}: {e}")
-    log("⚠️ Dùng danh sách dự phòng (ít mã)")
-    return FALLBACK
-
-
-def band(p):
-    return 2 if p >= 70 else 1 if p >= 55 else 0 if p >= 40 else -1 if p >= 25 else -2
-
-
-def compute(prices, data_date):
-    closes = pd.DataFrame(prices).sort_index()
-    closes = closes[closes.index <= data_date]
-    prev = closes.shift(1)
-    adv = (closes > prev).sum(axis=1)
-    dec = (closes < prev).sum(axis=1)
-    unc = (closes == prev).sum(axis=1)
-
-    filled = closes.ffill(limit=5)
-    last = closes.iloc[-1]
-    pct = {}
-    for w in (20, 50, 100):
-        ma = filled.rolling(w, min_periods=w).mean().iloc[-1]
-        ok = last.notna() & ma.notna()
-        pct[w] = round(float((last[ok] > ma[ok]).mean() * 100), 2) if ok.any() else None
-
-    a, d, u = int(adv.iloc[-1]), int(dec.iloc[-1]), int(unc.iloc[-1])
-    n_total = a + d + u
-    net = (adv - dec)
-    cum = net.cumsum()
-
-    a10, d10 = int(adv.tail(10).sum()), int(dec.tail(10).sum())
-    n10 = (a10 - d10) / max(a10 + d10, 1) * 100
-    b1 = 2 if n10 >= 15 else 1 if n10 >= 5 else 0 if n10 > -5 else -1 if n10 > -15 else -2
-    up_days = float((adv.tail(20) > dec.tail(20)).mean() * 100)
-    b2 = 1 if up_days >= 60 else -1 if up_days <= 40 else 0
-    b3 = 1 if cum.iloc[-1] > cum.tail(20).mean() else -1
-    score = b1 + 0.5 * (b2 + b3)
-    for w in (20, 50, 100):
-        if pct[w] is not None:
-            score += band(pct[w])
-    score = int(round(score))
-
-    equity = max(10, min(90, 60 + 10 * score))
-    if score >= 4:
-        action, note = "TĂNG TỶ TRỌNG", "🟢 Độ rộng mạnh, dòng tiền lan tỏa."
-    elif score >= 2:
-        action, note = "TĂNG NHẸ", "🟢 Thị trường cải thiện, số mã tăng chiếm ưu thế."
-    elif score >= -1:
-        action, note = "GIỮ NGUYÊN", "🟡 Thị trường phân hóa, chưa rõ xu hướng."
-    elif score >= -3:
-        action, note = "GIẢM NHẸ", "🟠 Thị trường suy yếu, số mã giảm giá đang chiếm ưu thế."
-    else:
-        action, note = "GIẢM MẠNH", "🔴 Độ rộng rất yếu, nên ưu tiên phòng thủ."
-
-    hist = [{"d": k, "a": int(adv[k]), "dc": int(dec[k]), "u": int(unc[k])} for k in adv.index[-30:]]
-    return {
-        "data_date": data_date,
-        "n_total": n_total,
-        "advance": a, "decline": d, "unchanged": u,
-        "ad_pct": round(a / n_total * 100, 2) if n_total else None,
-        "ad_net_pct": round((a - d) / max(a + d, 1), 3),
-        "ad_ratio_10d": round(a10 / max(d10, 1), 2),
-        "up_days_20": round(up_days, 1),
-        "pct_above_ma20": pct[20], "pct_above_ma50": pct[50], "pct_above_ma100": pct[100],
-        "breadth_score": score,
-        "action": action,
-        "equity_pct": equity, "cash_pct": 100 - equity,
-        "momentum_note": note,
-        "history": hist,
-    }
-
-
-def main():
-    now = datetime.now(ICT)
-    vn = fetch_bars("VNINDEX", kind="index")
-    if vn is None or vn.empty:
-        log("❌ Không lấy được VNINDEX từ TCBS (timeout/chặn IP). Lượt sau sẽ thử lại.")
-        return 1
-    latest = vn.index[-1]
-    log(f"📅 Phiên mới nhất trên TCBS: {latest} | Bây giờ: {now:%Y-%m-%d %H:%M} ICT")
-
-    if not FORCE and latest == now.strftime("%Y-%m-%d") and now.hour * 60 + now.minute < 15 * 60 + 35:
-        log("⏳ Chưa quá giờ đóng cửa, bỏ qua (dùng force=true để test).")
-        return 0
-
-    old = {}
-    if os.path.exists(OUT):
-        try:
-            old = json.load(open(OUT, encoding="utf-8"))
-        except Exception:
-            old = {}
-    if not FORCE and old.get("data_date") == latest and old.get("coverage", 0) >= MIN_COVERAGE:
-        log(f"✅ breadth.json đã là phiên {latest}, không cần quét lại.")
-        return 0
-
-    tickers = load_universe()
-    log(f"🔎 Quét {len(tickers)} mã...")
-    prices, failed = {}, 0
-    with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-        futs = {ex.submit(fetch_bars, t): t for t in tickers}
-        for f in as_completed(futs):
-            s = f.result()
-            if s is not None and len(s) >= 25 and s.index[-1] >= latest:
-                prices[futs[f]] = s
-            elif s is None:
-                failed += 1
-
-    coverage = len(prices) / len(tickers)
-    log(f"📊 Có dữ liệu phiên {latest}: {len(prices)}/{len(tickers)} mã (lỗi tải: {failed})")
-    if coverage < MIN_COVERAGE:
-        log("❌ Độ phủ quá thấp, không ghi đè breadth.json cũ.")
-        return 1
-
-    res = compute(prices, latest)
-    res["coverage"] = round(coverage, 3)
-    res["updated_at"] = now.strftime("%Y-%m-%d %H:%M:%S")
-    res["source"] = "tcbs"
-    tmp = OUT + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(res, fh, ensure_ascii=False, indent=2)
-    os.replace(tmp, OUT)
-    log(f"✅ Đã ghi {OUT}: {res['action']} | score {res['breadth_score']} | "
-        f"CP {res['equity_pct']}% / tiền mặt {res['cash_pct']}%")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+      - name: Commit breadth.json vào repo
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add breadth.json
+          if git diff --staged --quiet; then
+            echo "📝 breadth.json không đổi, bỏ qua commit"
+            exit 0
+          fi
+          git commit -m "🤖 Auto: cập nhật breadth.json (EOD) $(date '+%Y-%m-%d %H:%M ICT')"
+          for i in 1 2 3; do
+            if git push origin main; then
+              echo "✅ Push thành công (lần $i)"
+              exit 0
+            fi
+            echo "⚠️ Push thất bại lần $i, pull rebase lại rồi retry..."
+            git pull --rebase origin main
+            sleep 3
+          done
+          echo "❌ Push thất bại sau 3 lần — báo lỗi đỏ để không bị bỏ sót"
+          exit 1
