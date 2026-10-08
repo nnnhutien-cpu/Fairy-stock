@@ -1,0 +1,61 @@
+# SỬA: file này trước đây nằm ở THƯ MỤC GỐC repo nên GitHub không bao giờ chạy nó.
+# Phải đặt tại: .github/workflows/scan_screener.yml
+#
+# Chạy tự động sau giờ đóng cửa (15:30 giờ VN = UTC+7 -> 08:30 UTC), thứ 2-6.
+# Có thể bấm "Run workflow" thủ công trong tab Actions để quét ngay bất cứ lúc nào.
+
+name: Quét Bộ Lọc -> Cache Excel
+
+on:
+  schedule:
+    - cron: "30 8 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write            # SỬA: cần quyền ghi để push screener_cache.xlsx
+
+concurrency:
+  group: scan-screener
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      TZ: Asia/Ho_Chi_Minh
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Cài thư viện
+        run: pip install -r requirements.txt openpyxl pytz
+
+      - name: Chạy quét toàn sàn
+        env:
+          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
+        run: python bulk_scan_screener.py
+
+      - name: Commit screener_cache.xlsx vào repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add screener_cache.xlsx
+          if git diff --cached --quiet; then
+            echo "screener_cache.xlsx không đổi, bỏ qua commit"
+            exit 0
+          fi
+          git commit -m "Cập nhật screener_cache.xlsx $(date +'%Y-%m-%d %H:%M')"
+          for i in 1 2 3; do
+            git pull --rebase origin main
+            if git push origin main; then echo "Push thành công (lần $i)"; exit 0; fi
+            echo "Push thất bại lần $i, thử lại..."
+            sleep 5
+          done
+          echo "Push thất bại sau 3 lần"
+          exit 1
