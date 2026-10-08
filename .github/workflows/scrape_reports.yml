@@ -6,9 +6,14 @@ on:
     - cron: "30 8 * * 1-5"  # 15:30 CH giờ VN, sau đóng cửa
   workflow_dispatch:          # Cho phép chạy thủ công từ GitHub UI
 
+concurrency:
+  group: scrape-reports
+  cancel-in-progress: false
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write         # Cần để commit reports.json lên repo
 
@@ -31,13 +36,19 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull origin main --rebase
           git add reports.json
-          git diff --staged --quiet || git commit -m "auto: cập nhật reports.json $(date +'%Y-%m-%d %H:%M')"
+          if git diff --staged --quiet; then
+            echo "reports.json không đổi, bỏ qua commit"
+            exit 0
+          fi
+          git commit -m "auto: cập nhật reports.json $(date +'%Y-%m-%d %H:%M')"
+          # SỬA: bản cũ chạy "git pull --rebase" khi reports.json đang bị sửa chưa commit
+          # -> lỗi "cannot pull with rebase: You have unstaged changes". Nay commit trước rồi mới pull.
           for i in 1 2 3; do
-            git push origin main && break || {
-              echo "Retry lần $i..."
-              git pull origin main --rebase
-              sleep 5
-            }
+            git pull --rebase origin main
+            if git push origin main; then echo "Push thành công (lần $i)"; exit 0; fi
+            echo "Retry lần $i..."
+            sleep 5
           done
+          echo "Push thất bại sau 3 lần"
+          exit 1
