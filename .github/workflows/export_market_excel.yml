@@ -5,21 +5,35 @@ on:
     - cron: '30 8 * * 1-5'   # 15:30 ICT, thứ 2 - thứ 6
   workflow_dispatch:           # cho phép chạy tay
 
+# SỬA: thiếu quyền ghi -> bước git push bị 403 khi repo để token mặc định read-only
+permissions:
+  contents: write
+
+concurrency:
+  group: export-market-excel
+  cancel-in-progress: false
+
 jobs:
   export:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      TZ: Asia/Ho_Chi_Minh
+      PYTHONUNBUFFERED: "1"
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4          # SỬA: v3 -> v4 (v3 chạy Node 16, đã bị gỡ)
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5      # SỬA: v4 -> v5
         with:
           python-version: '3.11'
+          cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        # SỬA: export_market_excel.py dùng "from vnstock import Vnstock" nhưng requirements.txt không có vnstock
+        run: pip install -r requirements.txt vnstock pytz
 
       - name: Run export
         env:
@@ -32,12 +46,26 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add market_data.xlsx
-          git commit -m "📊 Auto export $(date +'%Y-%m-%d')" || echo "No changes"
-          git push
+          if git diff --cached --quiet; then
+            echo "market_data.xlsx không đổi, bỏ qua commit"
+            exit 0
+          fi
+          git commit -m "📊 Auto export $(date +'%Y-%m-%d')"
+          # SỬA: thêm retry + pull --rebase vì các bot khác cũng push vào main cùng giờ 15:30
+          for i in 1 2 3; do
+            git pull --rebase origin main
+            if git push origin main; then echo "Push thành công (lần $i)"; exit 0; fi
+            echo "Push thất bại lần $i, thử lại..."
+            sleep 5
+          done
+          echo "Push thất bại sau 3 lần"
+          exit 1
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4        # ✅ v3 đã bị deprecated từ 2024
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: market-data-${{ github.run_id }}
           path: market_data.xlsx
           retention-days: 30
+          if-no-files-found: ignore
