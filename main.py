@@ -437,10 +437,13 @@ def execute_scan(force_full=False):
     return results
 
 # ==========================================
-# TAB 1: THỊ TRƯỜNG CHUNG (ĐÃ SỬA)
-# Thay toàn bộ block "TAB 1" cũ trong main.py bằng đoạn này.
-# Yêu cầu Streamlit >= 1.37 (st.fragment run_every).
+# TAB 1: THỊ TRƯỜNG CHUNG (BẢN SỬA LOGIC)
+# Thay toàn bộ block từ dòng "# TAB 1: THỊ TRƯỜNG CHUNG" đến hết khối `with tab_market:`
+# (ngay trước dòng "# TAB 2: BỘ LỌC CỔ PHIẾU") bằng đoạn này.
+# Cần thêm file market_fallback.py vào repo. Yêu cầu Streamlit >= 1.37.
 # ==========================================
+from market_fallback import compute_snapshot, fallback_reco, fetch_tcbs_vnindex, normalize_ohlcv
+
 
 def _num(x, default=None):
     """Ép về float an toàn, trả default nếu None/NaN/lỗi."""
@@ -457,6 +460,44 @@ def _fmt(x, spec, default="—"):
     return format(v, spec) if v is not None else default
 
 
+# ---------- Nạp giá ngày VNINDEX (nhiều nguồn, lỗi thì thử nguồn kế) ----------
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_vnindex_daily(days=300):
+    """Thử lần lượt các nguồn. Nếu tất cả lỗi thì ném exception (kết quả lỗi KHÔNG bị cache)."""
+    errors = []
+    attempts = [
+        ("get_vnindex_data", lambda: get_vnindex_data(days_back=days)),
+        ("get_vnindex_data()", lambda: get_vnindex_data()),
+        ("get_stock_data", lambda: get_stock_data("VNINDEX", days_back=days)),
+        ("TCBS", lambda: fetch_tcbs_vnindex(days)),
+    ]
+    for name, fn in attempts:
+        try:
+            df = normalize_ohlcv(fn())
+            if df is not None and len(df) >= 30:
+                return df
+            errors.append(f"{name}: rỗng/thiếu dữ liệu")
+        except Exception as e:
+            errors.append(f"{name}: {str(e)[:70]}")
+    raise RuntimeError(" | ".join(errors))
+
+
+def _get_snapshot(days=250):
+    """market_snapshot() trước; nếu rỗng thì tự tính từ giá ngày. Trả (snap, danh_sách_lỗi)."""
+    snap, errs = {}, []
+    try:
+        snap = market_snapshot(symbol="VNINDEX", days=days) or {}
+    except Exception as e:
+        errs.append(f"market_snapshot: {str(e)[:80]}")
+
+    if _num(snap.get("price")) is None or _num(snap.get("ma20")) is None:
+        try:
+            snap = compute_snapshot(_load_vnindex_daily(300))
+        except Exception as e:
+            errs.append(f"dự phòng: {str(e)[:200]}")
+    return snap, errs
+
+
 def _prepare_intraday(raw):
     """Chuẩn hoá dữ liệu intraday VNINDEX -> (df_today, df_yesterday) hoặc (None, None)."""
     if raw is None or raw.empty:
@@ -464,7 +505,6 @@ def _prepare_intraday(raw):
 
     df = raw.copy()  # KHÔNG sửa trực tiếp object trả về từ cache
 
-    # Map tên cột, mỗi cột đích chỉ lấy 1 cột nguồn đầu tiên (tránh trùng tên cột)
     aliases = {
         'close':  ['close', 'price', 'c', 'điểm', 'index', 'indexvalue'],
         'volume': ['volume', 'vol', 'v', 'khối lượng', 'matchvolume'],
@@ -484,7 +524,6 @@ def _prepare_intraday(raw):
         return None, None
 
     t = pd.to_datetime(df['time'], errors='coerce')
-    # Nếu có timezone (thường là UTC) -> đổi sang giờ VN để hour_min đúng 09:00-15:00
     if getattr(t.dt, 'tz', None) is not None:
         t = t.dt.tz_convert('Asia/Ho_Chi_Minh').dt.tz_localize(None)
     df['time'] = t
@@ -513,11 +552,8 @@ def _prepare_intraday(raw):
 
 def _render_market_body():
     # ---------- Lấy dữ liệu (mỗi khối độc lập, lỗi khối nào bỏ qua khối đó) ----------
-    snap, snap_error = {}, None
-    try:
-        snap = market_snapshot(symbol="VNINDEX", days=250) or {}
-    except Exception as e:
-        snap_error = str(e)
+    snap, snap_errs = _get_snapshot()
+    snap_ok = _num(snap.get("price")) is not None and _num(snap.get("ma20")) is not None
 
     pe_stats_data, pe_hist = None, None
     try:
@@ -534,11 +570,15 @@ def _render_market_body():
     except Exception:
         pass
 
+    # Khuyến nghị: trend_engine trước, lỗi/rỗng thì dùng bản dự phòng
     reco = None
-    try:
-        reco = market_recommendation(snap, pe_stats=pe_stats_data)
-    except Exception:
-        pass
+    if snap_ok:
+        try:
+            reco = market_recommendation(snap, pe_stats=pe_stats_data)
+        except Exception:
+            reco = None
+        if not reco or not reco.get("action"):
+            reco = fallback_reco(snap, pe_stats_data)
 
     # ---------- Intraday ----------
     chart_df, df_today = None, None
@@ -557,7 +597,7 @@ def _render_market_body():
         if df_yesterday is not None and not df_yesterday.empty:
             df_yesterday['Vol_Hôm_Qua'] = df_yesterday['volume'].cumsum()
             prev_vol_eod = df_yesterday['Vol_Hôm_Qua'].iloc[-1]
-            # SỬA: so sánh với volume lũy kế hôm qua tại CÙNG MỐC GIỜ (trước đây trừ cả ngày hôm qua)
+            # So với volume lũy kế hôm qua tại CÙNG MỐC GIỜ
             same = df_yesterday.loc[df_yesterday['hour_min'] <= max_time_actual, 'Vol_Hôm_Qua']
             prev_vol_same_time = same.iloc[-1] if len(same) else 0
 
@@ -606,6 +646,18 @@ def _render_market_body():
 
     # ---------- Phân tích xu hướng ----------
     sb_header("🧠 Phân tích xu hướng")
+
+    if not snap_ok:
+        st.error("⚠️ Không tải được giá lịch sử VN-Index từ bất kỳ nguồn nào, nên MA / RSI / MACD / Volume chưa tính được.")
+        with st.expander("Chi tiết lỗi", expanded=False):
+            for e in snap_errs:
+                st.caption(e)
+        st.caption("Bấm '🔄 CẬP NHẬT DỮ LIỆU' để thử lại. Nếu vẫn lỗi, kiểm tra log của app (Manage app).")
+    elif snap.get("_source") == "fallback":
+        _d = snap.get("date")
+        _d_txt = pd.to_datetime(_d).strftime("%d/%m/%Y") if _d is not None else "?"
+        st.caption(f"ℹ️ Chỉ báo được tính trực tiếp từ giá ngày (nguồn dự phòng), phiên gần nhất: **{_d_txt}**")
+
     row1_l, row1_r = st.columns(2)
 
     with row1_l:
@@ -616,20 +668,17 @@ def _render_market_body():
             support = _num(snap.get("support"), 0)
             resist = _num(snap.get("resistance"), 0)
 
-            if snap_error and not snap.get("ma20"):
-                st.caption(f"⚠️ {snap_error[:60]}")
-            else:
-                st.markdown(f"**{trend_txt}**")
-                if ma20_txt and ma20_txt != "—":
-                    st.caption(ma20_txt)
+            st.markdown(f"**{trend_txt}**")
+            if ma20_txt and ma20_txt != "—":
+                st.caption(ma20_txt)
 
             c1, c2, c3 = st.columns(3)
-            c1.metric("MA20", _fmt(snap.get('ma20'), '.1f'))
-            c2.metric("MA50", _fmt(snap.get('ma50'), '.1f'))
-            c3.metric("MA200", _fmt(snap.get('ma200'), '.1f'))
+            c1.metric("MA20", _fmt(snap.get('ma20'), ',.1f'))
+            c2.metric("MA50", _fmt(snap.get('ma50'), ',.1f'))
+            c3.metric("MA200", _fmt(snap.get('ma200'), ',.1f'))
 
             if support or resist:
-                st.markdown(f"**🟢 Hỗ trợ:** `{support:.1f}` &nbsp;•&nbsp; **🔴 Kháng cự:** `{resist:.1f}`")
+                st.markdown(f"**🟢 Hỗ trợ:** `{support:,.1f}` &nbsp;•&nbsp; **🔴 Kháng cự:** `{resist:,.1f}`")
 
     with row1_r:
         with st.container(border=True):
@@ -640,16 +689,18 @@ def _render_market_body():
                 pe_c1, pe_c2 = st.columns(2)
                 pct_vs_avg = _num(pe_stats_data.get('pct_vs_avg'))
                 zscore = _num(pe_stats_data.get('zscore'))
+                pe_now = _num(pe_stats_data.get('pe_now'))
+                pe_mean = _num(pe_stats_data.get('mean'))
                 pe_c1.metric(
                     "P/E hiện tại",
-                    f"{_num(pe_stats_data.get('pe_now')):.1f}x" if _num(pe_stats_data.get('pe_now')) else "—",
-                    delta=f"{pct_vs_avg:+.1f}% vs TB" if pct_vs_avg else None,
+                    f"{pe_now:.1f}x" if pe_now else "—",
+                    delta=f"{pct_vs_avg:+.1f}% vs TB" if pct_vs_avg is not None else None,
                     delta_color="inverse",
                 )
                 pe_c2.metric(
                     "TB 20 năm",
-                    f"{_num(pe_stats_data.get('mean')):.1f}x" if _num(pe_stats_data.get('mean')) else "—",
-                    delta=f"{zscore:+.2f}σ" if zscore else None,
+                    f"{pe_mean:.1f}x" if pe_mean else "—",
+                    delta=f"{zscore:+.2f}σ" if zscore is not None else None,
                 )
                 pct = _num(pe_stats_data.get('percentile'))
                 if pct is not None:
@@ -674,12 +725,11 @@ def _render_market_body():
             st.markdown("#### 📊 Chỉ báo kỹ thuật")
             rsi_val = _num(snap.get('rsi'))
             rsi_txt = snap.get('rsi_text') or "—"
-            macd_val = _num(snap.get('macd'), 0)
-            macd_sig = _num(snap.get('macd_signal'), 0)
+            macd_val = _num(snap.get('macd'))
+            macd_sig = _num(snap.get('macd_signal'))
             macd_cross = snap.get('macd_cross') or "—"
 
             if rsi_val is None:
-                # SỬA: trước đây thiếu dữ liệu vẫn hiện RSI = 50
                 st.markdown("**RSI(14):** —")
             else:
                 rsi_emoji = "🔴" if rsi_val >= 70 else ("🟢" if rsi_val <= 30 else "🟡")
@@ -687,11 +737,12 @@ def _render_market_body():
                 st.progress(min(max(rsi_val / 100, 0.0), 1.0), text=f"RSI = {rsi_val:.1f}")
             st.divider()
 
-            st.markdown(f"**MACD:** `{macd_val:.3f}` &nbsp;·&nbsp; **Signal:** `{macd_sig:.3f}`")
+            # SỬA: thiếu dữ liệu thì hiện "—" thay vì 0.000 gây hiểu nhầm
+            st.markdown(f"**MACD:** `{_fmt(macd_val, '.3f')}` &nbsp;·&nbsp; **Signal:** `{_fmt(macd_sig, '.3f')}`")
             if macd_cross == "Vàng":
-                st.markdown("**Trạng thái:** 🟢 Cắt lên (Vàng)")
+                st.markdown("**Trạng thái:** 🟢 MACD trên Signal (Vàng)")
             elif macd_cross != "—":
-                st.markdown("**Trạng thái:** 🔴 Cắt xuống (Chết)")
+                st.markdown("**Trạng thái:** 🔴 MACD dưới Signal (Chết)")
             else:
                 st.markdown("**Trạng thái:** —")
 
@@ -732,7 +783,7 @@ def _render_market_body():
         st_color = _cmap.get(reco.get("color", "gray"), "gray")
         action_emoji = _emap.get(reco.get("color", "info"), "🔵")
 
-        # SỬA: dùng `or 50` làm 0% bị đổi thành 50% -> kiểm tra None
+        # Kiểm tra None (không dùng `or 50` vì làm 0% bị đổi thành 50%)
         stock_raw = _num(reco.get("stock"))
         cash_raw = _num(reco.get("cash"))
         if stock_raw is None and cash_raw is None:
@@ -743,7 +794,8 @@ def _render_market_body():
             stock_pct, cash_pct = stock_raw, 100 - stock_raw
         else:
             stock_pct, cash_pct = stock_raw, cash_raw
-        stock_pct, cash_pct = int(stock_pct), int(cash_pct)
+        stock_pct = int(min(max(stock_pct, 0), 100))
+        cash_pct = int(min(max(cash_pct, 0), 100))
         cur_score = int(_num(reco.get("score"), 0))
 
         with st.container(border=True):
@@ -757,6 +809,8 @@ def _render_market_body():
                 min(max(stock_pct / 100, 0.0), 1.0),
                 text=f"Cổ phiếu {stock_pct}%  ·  Tiền mặt {cash_pct}%",
             )
+            if reco.get("source") == "fallback":
+                st.caption("ℹ️ Khuyến nghị tính theo quy tắc đơn giản (MA, RSI, MACD, P/E) vì bộ phân tích chính chưa trả kết quả.")
 
         st.caption("⚠️ Khuyến nghị dựa trên PTKT + định giá, không phải tư vấn đầu tư chính thức.")
 
@@ -767,7 +821,8 @@ with tab_market:
         sb_header("🌟 Tổng quan thị trường real-time")
     with col_btn:
         if st.button("🔄 CẬP NHẬT DỮ LIỆU", type="primary", use_container_width=True, key="btn_refresh_market"):
-            for fn in (get_intraday_vnindex, get_vnindex_data, market_snapshot, get_market_breadth):
+            for fn in (get_intraday_vnindex, get_vnindex_data, market_snapshot,
+                       get_market_breadth, _load_vnindex_daily):
                 try:
                     fn.clear()
                 except Exception:
