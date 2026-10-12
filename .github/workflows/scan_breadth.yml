@@ -63,7 +63,12 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install requests pandas vnstock pytz
+          pip install requests pandas pytz
+          echo "Python: $(python --version)"
+          echo "--- Chan doan vnstock tren PyPI ---"
+          pip index versions vnstock || true
+          pip install vnstock || echo "::warning::Khong cai duoc vnstock tu PyPI (xem log chan doan o tren)"
+          python -c "import vnstock; print('vnstock OK')" || echo "::warning::Khong import duoc vnstock - breadth_scanner.py phai chay duoc khi khong co vnstock"
 
       - name: Kiem tra ket noi nguon TCBS
         run: |
