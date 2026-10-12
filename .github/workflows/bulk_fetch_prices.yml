@@ -10,23 +10,63 @@ on:
         type: boolean
         default: false
 
+# Không cho 2 lần chạy ghi đè Supabase cùng lúc (vd: bấm tay trùng giờ chạy lịch)
+concurrency:
+  group: nap-gia-tcbs
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
 jobs:
   fetch:
+    name: Nạp giá EOD vào Supabase
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    env:
+      TZ: Asia/Ho_Chi_Minh
+      PYTHONUNBUFFERED: "1"          # log hiện ngay, không bị dồn đến cuối
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      TCBS_RATE_LIMIT: "100"
+      # Chạy theo lịch thì inputs.backfill rỗng -> 'false'
+      BACKFILL: ${{ inputs.backfill && 'true' || 'false' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Kiểm tra file và secrets cần thiết
+        run: |
+          missing=0
+          [ -f bulk_fetch_prices.py ] || { echo "::error::Thiếu file bulk_fetch_prices.py trong repo (chưa commit hoặc sai tên/thư mục)"; ls -la; missing=1; }
+          [ -n "$SUPABASE_URL" ] || { echo "::error::Thiếu secret SUPABASE_URL (Settings > Secrets and variables > Actions)"; missing=1; }
+          [ -n "$SUPABASE_KEY" ] || { echo "::error::Thiếu secret SUPABASE_KEY (Settings > Secrets and variables > Actions)"; missing=1; }
+          [ "$missing" = "0" ] || exit 1
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install pandas requests supabase
-      - name: Chạy bot
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          TCBS_RATE_LIMIT: "100"
+
+      - name: Cài thư viện
+        run: pip install pandas requests supabase
+
+      - name: Kiểm tra kết nối TCBS
         run: |
-          if [ "${{ inputs.backfill }}" = "true" ]; then
+          NOW_TS=$(date +%s)
+          URL="https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=VNINDEX&type=index&resolution=D&to=${NOW_TS}&countBack=3"
+          CODE=$(curl -s --max-time 20 -o /tmp/tcbs.json -w "%{http_code}" -H "User-Agent: Mozilla/5.0" "$URL" || echo "000")
+          echo "TCBS HTTP status: $CODE"
+          if [ "$CODE" = "200" ]; then
+            echo "Phiên mới nhất: $(grep -o '"tradingDate":"[^"]*"' /tmp/tcbs.json | tail -1)"
+          else
+            echo "::warning::TCBS trả về $CODE (000=timeout, 403/429=bị chặn IP hoặc giới hạn tốc độ). Bot có thể không nạp được dữ liệu."
+          fi
+
+      - name: Chạy bot nạp giá
+        run: |
+          if [ "$BACKFILL" = "true" ]; then
+            echo "Chế độ BACKFILL (lịch sử dài)"
             python bulk_fetch_prices.py --backfill
           else
             python bulk_fetch_prices.py
