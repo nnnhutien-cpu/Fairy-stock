@@ -1,12 +1,10 @@
-# Nội dung giữ nguyên logic bản cũ; chỉ viết lại từ 1 dòng JSON sang YAML dễ đọc/sửa,
-# và cài thêm vnstock + pytz (breadth_scanner.py import vnstock để lấy danh sách mã).
 name: Scan Breadth HOSE
 
 on:
   schedule:
     - cron: "30 10 * * 1-5"   # 17:30 ICT
-    - cron: "30 11 * * 1-5"   # 18:30 ICT (dự phòng)
-    - cron: "0 13 * * 1-5"    # 20:00 ICT (dự phòng cuối)
+    - cron: "30 11 * * 1-5"   # 18:30 ICT (du phong)
+    - cron: "0 13 * * 1-5"    # 20:00 ICT (du phong cuoi)
   workflow_dispatch:
     inputs:
       force:
@@ -31,7 +29,8 @@ jobs:
       TZ: Asia/Ho_Chi_Minh
       PYTHONUNBUFFERED: "1"
       DATA_SOURCE: tcbs
-      FORCE_SCAN: ${{ github.event.inputs.force }}
+      # Khi chay theo lich, github.event.inputs.force la rong -> mac dinh "false"
+      FORCE_SCAN: ${{ github.event.inputs.force || 'false' }}
       VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
     steps:
       - name: Checkout repo
@@ -39,6 +38,16 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
+
+      - name: Kiem tra file can thiet co trong repo
+        run: |
+          for f in breadth_scanner.py requirements.txt; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Thieu file $f trong repo (chua commit hoac sai ten/thu muc)"
+              ls -la
+              exit 1
+            fi
+          done
 
       - name: Giu lich chay luon bat
         env:
@@ -60,11 +69,12 @@ jobs:
         run: |
           NOW_TS=$(date +%s)
           URL="https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=VNINDEX&type=index&resolution=D&to=${NOW_TS}&countBack=3"
-          RESP=$(curl -s --max-time 20 -H "User-Agent: Mozilla/5.0" "$URL" || true)
-          if [ -z "$RESP" ]; then
-            echo "Khong goi duoc TCBS (timeout/chan IP) - bot se tu thu lai o luot sau"
+          CODE=$(curl -s --max-time 20 -o /tmp/tcbs.json -w "%{http_code}" -H "User-Agent: Mozilla/5.0" "$URL" || echo "000")
+          echo "TCBS HTTP status: $CODE"
+          if [ "$CODE" = "200" ]; then
+            echo "Phien moi nhat: $(grep -o '"tradingDate":"[^"]*"' /tmp/tcbs.json | tail -1)"
           else
-            echo "TCBS phan hoi. Phien moi nhat: $(echo "$RESP" | grep -o '"tradingDate":"[^"]*"' | tail -1)"
+            echo "::warning::TCBS tra ve $CODE (000=timeout, 403/429=bi chan IP hoac gioi han toc do). Bot se dung nguon du phong neu co."
           fi
 
       - name: Quet Market Breadth (EOD)
@@ -72,6 +82,10 @@ jobs:
 
       - name: Commit breadth.json vao repo
         run: |
+          if [ ! -f breadth.json ]; then
+            echo "::error::breadth_scanner.py chay xong nhung khong tao ra breadth.json"
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add breadth.json
@@ -83,5 +97,5 @@ jobs:
             git pull --rebase origin main
             sleep 3
           done
-          echo "Push that bai sau 3 lan"
+          echo "::error::Push that bai sau 3 lan (kiem tra branch protection / quyen ghi cua Actions)"
           exit 1
