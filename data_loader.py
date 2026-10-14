@@ -697,10 +697,10 @@ def get_stock_data(ticker, days_back=200):
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def _cached_vnindex(days_back, bucket):
+@st.cache_data(ttl=900, show_spinner=False)
+def _cached_vnindex(ticker, days_back, bucket):
     now_vn = _vn_now()
-    df = _fetch('VNINDEX',
+    df = _fetch(ticker,
                 (now_vn - timedelta(days=days_back)).strftime('%Y-%m-%d'),
                 now_vn.strftime('%Y-%m-%d'), '1D')
     if df is None or df.empty:
@@ -709,10 +709,15 @@ def _cached_vnindex(days_back, bucket):
 
 
 def get_vnindex_data(ticker="VNINDEX", days_back=365):
+    """Giá ngày của 1 CHỈ SỐ (VNINDEX, VN30, HNXINDEX, UPCOM...).
+    SỬA: bản cũ bỏ qua tham số ticker (luôn trả VNINDEX)."""
     try:
-        return _cached_vnindex(days_back, _daily_bucket())
+        return _cached_vnindex(str(ticker).upper(), days_back, _daily_bucket())
     except Exception:
         return pd.DataFrame()
+
+
+get_index_data = get_vnindex_data
 
 
 # Giữ tương thích với chỗ nào đó gọi get_stock_data.clear() / get_vnindex_data.clear()

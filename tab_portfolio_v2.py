@@ -17,6 +17,7 @@ import streamlit as st
 from datetime import datetime
 
 from data_loader import get_stock_data
+import ui_kit
 
 
 # ══════════════════════════════════════════════
@@ -120,9 +121,9 @@ SB_CSS = """
 
 
 def _inject_css():
-    if not st.session_state.get("_sb_css_injected"):
-        st.markdown(SB_CSS, unsafe_allow_html=True)
-        st.session_state["_sb_css_injected"] = True
+    """SỬA: bản cũ chỉ chèn CSS ở lần chạy ĐẦU (cờ trong session_state) -> từ lần bấm thứ 2 trở đi
+    Streamlit vẽ lại trang không còn CSS, các thẻ slot mất định dạng. CSS nay nằm trong ui_kit (luôn có)."""
+    return
 
 
 # ══════════════════════════════════════════════
@@ -137,10 +138,10 @@ ACTIONS = ["GIỮ CP", "BÁN 25%", "BÁN HẾT", "MUA", "CHỜ"]
 
 # Badge class + màu dùng cho từng trạng thái (đồng bộ với SB_CSS ở trên)
 ACTION_BADGE = {
-    "GIỮ CP":  {"class": "badge-hold",    "color": "#ffd740"},
-    "BÁN 25%": {"class": "badge-sell25",  "color": "#ffab40"},
-    "BÁN HẾT": {"class": "badge-sellall", "color": "#ff5252"},
-    "MUA":     {"class": "badge-buy",     "color": "#00e676"},
+    "GIỮ CP":  {"class": "badge-hold",    "color": ui_kit.WARN},
+    "BÁN 25%": {"class": "badge-sell25",  "color": "#f97316"},
+    "BÁN HẾT": {"class": "badge-sellall", "color": ui_kit.DOWN},
+    "MUA":     {"class": "badge-buy",     "color": ui_kit.UP},
     "CHỜ":     {"class": "badge-wait",    "color": "#8b7fb5"},
 }
 
@@ -162,7 +163,20 @@ def _init_state():
     if 'pv2_last_updated' not in st.session_state:
         st.session_state.pv2_last_updated = ""
     if 'pv2_market_state' not in st.session_state:
-        st.session_state.pv2_market_state = "Sideways"
+        st.session_state.pv2_market_state = _market_state_from_regime() or "Sideways"
+        st.session_state.pv2_market_auto = True
+
+
+def _market_state_from_regime():
+    """Đồng bộ với tab Thị Trường: lấy pha thị trường do market_insights tính (dùng chung cache)."""
+    try:
+        import market_insights as mi
+        from tab_market import _try_index
+        d = _try_index("VNINDEX")
+        regime = mi.classify_regime(mi.index_metrics(d)) if d is not None else None
+        return {"uptrend": "Uptrend", "downtrend": "Downtrend"}.get(regime, "Sideways" if regime else None)
+    except Exception:
+        return None
 
 
 def _get_slots():
@@ -347,26 +361,21 @@ def render_portfolio_v2_tab(priority_tickers=None):
     mkt = MARKET_BADGE.get(market_state, MARKET_BADGE["Sideways"])
     now_str = st.session_state.pv2_last_updated or datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
-    # ── Header dashboard (đúng theo mẫu) + chọn trạng thái thị trường ──
-    h1, h2 = st.columns([4, 1])
+    # ── Header + trạng thái thị trường (mặc định lấy theo tab Thị Trường, có thể chỉnh tay) ──
+    h1, h2 = st.columns([4, 1], vertical_alignment="center")
     with h1:
-        st.markdown(f"""
-        <div class="sb-header">
-            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-                <span class="sb-title">📊 Dashboard — Chiến lược 4 mã × 25%</span>
-                <span class="sb-sub" style="margin:0;">● Cập nhật {now_str}</span>
-                <span class="{mkt['class']}">{mkt['label']}</span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        ui_kit.page_header("💼 Danh mục — Chiến lược 4 mã × 25%",
+                           f'Cập nhật {now_str} · Thị trường: <span class="{mkt["class"]}">{mkt["label"]}</span>'
+                           + (" (theo tab Thị Trường)" if st.session_state.get("pv2_market_auto") else ""))
     with h2:
         new_market_state = st.selectbox(
-            "Thị trường", ["Uptrend", "Sideways", "Downtrend"],
+            "Trạng thái thị trường", ["Uptrend", "Sideways", "Downtrend"],
             index=["Uptrend", "Sideways", "Downtrend"].index(market_state),
-            key="pv2_mkt_state", label_visibility="collapsed",
+            key="pv2_mkt_state",
         )
         if new_market_state != market_state:
             st.session_state.pv2_market_state = new_market_state
+            st.session_state.pv2_market_auto = False
             st.rerun()
 
     # ── 4 slot: card hiển thị + nhập mã / chiến lược ngay bên dưới ──
@@ -394,7 +403,7 @@ def render_portfolio_v2_tab(priority_tickers=None):
     labels = ["🟡 GIỮ tất cả", "🟠 BÁN 25%", "🔴 BÁN HẾT", "🟢 MUA tất cả", "⚪ CHỜ tất cả"]
     for i, (action, label) in enumerate(zip(ACTIONS, labels)):
         with bulk_cols[i]:
-            if st.button(label, key=f"pv2_bulk_{i}", use_container_width=True):
+            if st.button(label, key=f"pv2_bulk_{i}", width="stretch"):
                 for j in range(4):
                     if st.session_state[f"pv2_ticker_{j}"]:
                         st.session_state[f"pv2_action_{j}"] = action
@@ -464,20 +473,11 @@ def render_portfolio_v2_tab(priority_tickers=None):
         if results:
             df_res = pd.DataFrame(results)
 
-            st.markdown(f"""
-            <div class="sb-stat-row">
-                <div class="sb-stat">
-                    <div class="sb-stat-label">Mã đạt điểm mua vàng</div>
-                    <div class="sb-stat-value">{len(results)}</div>
-                </div>
-                <div class="sb-stat">
-                    <div class="sb-stat-label">Score cao nhất</div>
-                    <div class="sb-stat-value">{results[0]['Score']}</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            m1, m2 = st.columns(2)
+            m1.metric("Mã đạt điểm mua vàng", len(results))
+            m2.metric("Score cao nhất", results[0]['Score'])
 
-            st.dataframe(df_res, use_container_width=True, hide_index=True,
+            st.dataframe(df_res, width="stretch", hide_index=True,
                 column_config={
                     'Vị thế 129d': st.column_config.ProgressColumn(
                         "Vị thế 129d", min_value=0.0, max_value=1.0, format="%.0f%%"),

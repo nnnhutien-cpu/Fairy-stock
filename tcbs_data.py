@@ -21,7 +21,7 @@ import requests
 TCBS_BARS_URL = "https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term"
 
 VN_TZ = timezone(timedelta(hours=7))
-INDEX_SYMBOLS = {"VNINDEX", "VN30", "HNXINDEX", "HNX30", "UPCOMINDEX", "VNALL"}
+INDEX_SYMBOLS = {"VNINDEX", "VN30", "VN100", "HNXINDEX", "HNX30", "UPCOM", "UPCOMINDEX", "VNALL"}  # TCBS dùng "UPCOM"
 
 _HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",

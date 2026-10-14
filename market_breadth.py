@@ -174,6 +174,14 @@ def get_market_breadth():
         # tương thích market_recommendation() trong trend_engine.py
         "total":          n_total,
         "ad_change":      _num(row.get("ad_change"), 0),
+        # dùng cho market_insights.breadth_view()
+        "pct_above_ma100": row.get("pct_above_ma100"),
+        "ad_ratio_10d":   row.get("ad_ratio_10d"),
+        "up_days_20":     row.get("up_days_20"),
+        "coverage":       row.get("coverage"),
+        "history":        row.get("history") or [],
+        "bot_action":     row.get("action"),
+        "bot_equity_pct": row.get("equity_pct"),
     }
 
 

@@ -93,12 +93,12 @@ def render_screener_results(results_df, signal_filter):
         with tab:
             cols = groups[label]
             if cols:
-                st.dataframe(df[cols], use_container_width=True, hide_index=True)
+                st.dataframe(df[cols], width="stretch", hide_index=True)
             else:
                 st.caption("Không có cột dữ liệu phù hợp cho nhóm này.")
 
     with st.expander("🗂️ Xem toàn bộ cột cùng lúc (bảng gốc, đầy đủ)"):
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True)
 
 
 def render_screener_signals(results_df, signal_filter):
@@ -116,6 +116,6 @@ def render_screener_signals(results_df, signal_filter):
         "Tín Hiệu Bắt Đáy", "RSI14", "MFI14", "Tín Hiệu Sideway (MFI/RSI)",
     ] if c in df.columns]
     if cols:
-        st.dataframe(df[cols], use_container_width=True, hide_index=True)
+        st.dataframe(df[cols], width="stretch", hide_index=True)
     else:
         st.info("Không có cột tín hiệu phù hợp trong dữ liệu hiện tại.")

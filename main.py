@@ -31,187 +31,14 @@ from tab_tin_hieu_ngay import render_tin_hieu_ngay_tab
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
 
-# --- 1b. GIAO DIỆN: TÍM ĐẬM SANG TRỌNG + FONT + HÒA HEADER ---
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');
-    
-    html, body, [class*="css"], .stMarkdown, .stButton, .stTextInput, .stSelectbox, .stDataFrame {
-        font-family: 'Sora', sans-serif !important;
-    }
-
-    .stApp {
-        background: linear-gradient(180deg, #0f0a1f 0%, #16112e 100%);
-        color: #dcd6ec;
-    }
-
-    header[data-testid="stHeader"] { background: #0f0a1f !important; }
-    header[data-testid="stHeader"] a, header[data-testid="stToolbar"] * { color: #b9aee0 !important; }
-
-    h1 { font-size: 2rem !important; line-height: 1.25 !important; }
-    h2, .stSubheader { font-size: 1.4rem !important; }
-    h3 { font-size: 1.15rem !important; }
-    h1, h2, h3, .stSubheader { color: #a394d4 !important; font-weight: 700 !important; letter-spacing: .2px; }
-
-    section[data-testid="stSidebar"] { background: #120d26; border-right: 1px solid #241a45; }
-    section[data-testid="stSidebar"] .block-container { padding-left: 1rem !important; padding-right: 1rem !important; }
-
-    .block-container {
-        padding-top: 2.5rem !important;
-        padding-bottom: 2rem !important;
-        padding-left: 2.5rem !important;
-        padding-right: 2.5rem !important;
-        max-width: 100% !important;
-    }
-
-    div[data-testid="stMetric"] {
-        background: #1a1436;
-        border: 1px solid #2c2151;
-        border-radius: 14px;
-        padding: 16px 18px;
-        box-shadow: 0 4px 14px rgba(40,25,80,.35);
-    }
-    div[data-testid="stMetricValue"] { color: #f2eeff; font-weight: 700; font-size: 1.5rem !important; }
-    div[data-testid="stMetricLabel"] { color: #a99fcf; font-size: .85rem !important; }
-
-    .stButton > button {
-        border-radius: 10px; font-weight: 600; border: 1px solid #4a3a7a; transition: all .15s ease;
-    }
-    .stButton > button[kind="primary"] {
-        background: linear-gradient(90deg, #4c1d95, #6d28d9); color: #efe9ff; border: none;
-    }
-    .stButton > button:hover { transform: translateY(-1px); filter: brightness(1.12); }
-
-    .stTabs [data-baseweb="tab-list"] { gap: 6px; background: #120d26; padding: 6px; border-radius: 12px; }
-    .stTabs [data-baseweb="tab"] { border-radius: 8px; padding: 6px 14px; color: #a99fcf; font-weight: 600; font-size: .9rem; }
-    .stTabs [aria-selected="true"] { background: linear-gradient(90deg, #4c1d95, #6d28d9) !important; color: #ffffff !important; }
-
-    [data-testid="stAppDeployButton"] button, .stDeployButton button, button[title="Manage app"] {
-        background: linear-gradient(90deg, #4c1d95, #6d28d9) !important; color: #efe9ff !important;
-        border: none !important; border-radius: 8px !important; font-weight: 600 !important;
-    }
-    #MainMenu button, [data-testid="stMainMenu"] button { color: #b9aee0 !important; }
-    #MainMenu button:hover { background: #2c2151 !important; }
-    [data-testid="stSidebarCollapseButton"] button, [data-testid="collapsedControl"] button {
-        color: #b9aee0 !important; background: #1a1436 !important; border-radius: 8px !important;
-    }
-    [data-testid="StyledFullScreenButton"] { color: #b9aee0 !important; }
-    .stSlider [role="slider"] { background: #6d28d9 !important; }
-
-    .stTextInput input, .stSelectbox div[data-baseweb="select"] { background: #1a1436; color: #dcd6ec; border-radius: 8px; }
-    .stDataFrame { border-radius: 12px; overflow: hidden; }
-
-    /* ══════════ Bộ class dùng chung mọi tab (đồng bộ với Sức Bật / Danh mục) ══════════ */
-    .sb-header {
-        background: linear-gradient(135deg,#1a1a2e,#16213e);
-        border-radius: 12px; padding: 16px 20px; margin-bottom: 18px;
-    }
-    .sb-title { font-size: 22px; font-weight: 800; color: #e0e0ff; }
-    .sb-sub   { font-size: 12px; color: #888; margin-top: 2px; }
-    .sb-note {
-        background: #1a1a2e; border-left: 3px solid #8b7fb5;
-        padding: 10px 14px; border-radius: 0 8px 8px 0;
-        font-size: 12px; color: #aaa; margin-bottom: 14px;
-    }
-    .lk-card {
-        background: #1e1e2e; border: 1px solid #2c2151;
-        border-radius: 14px; padding: 20px 24px; margin-bottom: 16px;
-    }
-    .lk-ticker { font-size: 28px; font-weight: 800; color: #a78bfa; letter-spacing: 2px; }
-    .lk-company { font-size: 13px; color: #888; margin-top: 2px; margin-bottom: 16px; }
-    .lk-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 14px; }
-    .lk-metric { background: #12102a; border-radius: 10px; padding: 12px 14px; }
-    .lk-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: .5px; }
-    .lk-value { font-size: 22px; font-weight: 700; color: #e0e0ff; margin-top: 3px; }
-    .lk-sub   { font-size: 10px; color: #555; margin-top: 2px; }
-    .val-up   { color: #00e676 !important; }
-    .val-down { color: #ff5252 !important; }
-    .val-warn { color: #ffd740 !important; }
-    .lk-section { font-size: 11px; color: #8b7fb5; text-transform: uppercase;
-                   letter-spacing: .6px; margin: 14px 0 8px;
-                   border-bottom: 1px solid #2c2151; padding-bottom: 4px; }
-    .sr-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .sr-table th { color: #666; font-weight: 400; text-align: left;
-                   padding: 4px 8px; font-size: 11px; text-transform: uppercase; }
-    .sr-table td { padding: 5px 8px; border-bottom: 1px solid #1e1a33; color: #ccc; }
-    .sr-table tr:last-child td { border-bottom: none; }
-    .badge-r { background:#3a1a1a; color:#ff5252; padding:2px 8px;
-               border-radius:4px; font-size:11px; font-weight:600; }
-    .badge-s { background:#1a3a1a; color:#00e676; padding:2px 8px;
-               border-radius:4px; font-size:11px; font-weight:600; }
-    .badge-fib { background:#1a1a3a; color:#7c9ef5; padding:2px 6px;
-                 border-radius:4px; font-size:10px; }
-    .formula-note {
-        background: #12102a; border-left: 3px solid #a78bfa;
-        padding: 10px 14px; border-radius: 0 8px 8px 0;
-        font-size: 12px; color: #999; margin-top: 12px; line-height: 1.7;
-    }
-    .sb-stat-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-    .sb-stat { background: #1e1e2e; border-radius: 10px; padding: 10px 16px;
-               flex: 1; min-width: 130px; }
-    .sb-stat-label { font-size: 11px; color: #888; text-transform: uppercase; }
-    .sb-stat-value { font-size: 20px; font-weight: 800; color: #e0e0ff; margin-top: 2px; }
-    .src-badge { display:inline-block; padding:1px 7px; border-radius:10px;
-                 font-size:10px; font-weight:600; margin-left:6px; }
-    .src-vci     { background:#1a2a3a; color:#5b9bd5; }
-    .src-fireant { background:#1a2e1a; color:#4caf50; }
-    .src-yahoo   { background:#1a1a3a; color:#8b7fb5; }
-
-    /* ══════════ Đồng bộ font cho NỘI DUNG mọi tab ══════════ */
-    h4, h5, h6 { color: #a394d4 !important; font-weight: 700 !important; letter-spacing: .2px; }
-
-    /* SỬA: bỏ ".stMarkdown div" vì nó ghi đè font-size/màu của .sb-title, .lk-value, .sb-stat-value... */
-    .stMarkdown p, .stMarkdown li,
-    [data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] li {
-        font-size: 13px !important; color: #ccc !important; line-height: 1.6 !important;
-    }
-
-    [data-testid="stCaptionContainer"], .stCaption, small {
-        font-size: 12px !important; color: #888 !important;
-    }
-
-    [data-testid="stDataFrame"], [data-testid="stDataFrame"] * ,
-    [data-testid="stTable"], [data-testid="stTable"] * {
-        font-family: 'Sora', sans-serif !important;
-        font-size: 13px !important;
-    }
-
-    [data-testid="stExpander"] summary,
-    .streamlit-expanderHeader, details > summary {
-        font-size: 13px !important; font-weight: 700 !important; color: #a394d4 !important;
-    }
-    [data-testid="stExpander"] [data-testid="stMarkdownContainer"] p {
-        font-size: 13px !important;
-    }
-
-    .stRadio label, .stCheckbox label, .stSelectbox label,
-    .stTextInput label, .stSlider label, .stNumberInput label,
-    [data-testid="stWidgetLabel"] p {
-        font-size: 12px !important; color: #a99fcf !important; font-weight: 600 !important;
-    }
-    .stRadio [data-testid="stMarkdownContainer"] p,
-    .stCheckbox [data-testid="stMarkdownContainer"] p {
-        font-size: 13px !important; color: #dcd6ec !important;
-    }
-
-    [data-testid="stAlert"] p, [data-testid="stAlert"] div {
-        font-size: 13px !important;
-    }
-
-    .stTabs [data-baseweb="tab"] p { font-size: .9rem !important; font-weight: 600 !important; }
-</style>
-""", unsafe_allow_html=True)
+# --- 1b. GIAO DIỆN: CSS dùng chung nằm ở ui_kit.py ---
+import ui_kit
+ui_kit.inject_css()
 
 
 def sb_header(title: str, subtitle: str = "") -> None:
-    """Header đồng bộ đồ họa cho mọi tab (thay cho st.subheader / st.markdown('###'))."""
-    sub_html = f'<div class="sb-sub">{subtitle}</div>' if subtitle else ""
-    st.markdown(f"""
-    <div class="sb-header">
-        <div class="sb-title">{title}</div>
-        {sub_html}
-    </div>
-    """, unsafe_allow_html=True)
+    """Giữ tên cũ cho tương thích — dùng ui_kit.page_header."""
+    ui_kit.page_header(title, subtitle)
 
 
 # --- 2. KẾT NỐI SUPABASE ---
@@ -268,18 +95,7 @@ else:
 
 setup_cache_clear_button()
 
-st.title("📈 Dashboard Phân Tích Dòng Tiền & Kỹ Thuật")
-
-# --- 4. TẠO TABS (ĐÃ CHIA RÕ LỌC CUỐI NGÀY & TÍN HIỆU TRONG PHIÊN) ---
-tab_market, tab_screener, tab_signals, tab_recommendation, tab_suc_bat, tab_portfolio, tab_ichimoku_vol = st.tabs([
-    "🌟 Thị Trường",
-    "🔍 Lọc Cuối Ngày",
-    "📡 Tín Hiệu (Realtime)",
-    "💡 Khuyến Nghị",
-    "🚀 Sức Bật",
-    "💼 Danh mục",
-    "🕯️ Tín Hiệu Ngày",
-])
+ui_kit.app_title()
 
 # ==========================================
 # HÀM ĐỌC CACHE EXCEL (bot nền ghi đè screener_cache.xlsx mỗi ngày)
@@ -289,6 +105,12 @@ def load_screener_cache():
     Trả về (list_records, scanned_at) hoặc (None, None) nếu chưa có cache / lỗi."""
     if not os.path.exists(SCREENER_CACHE_FILE):
         return None, None
+    return _read_screener_cache(os.path.getmtime(SCREENER_CACHE_FILE))
+
+
+@st.cache_data(show_spinner=False)
+def _read_screener_cache(_mtime):
+    """Đọc Excel 1 lần cho mỗi phiên bản file (khoá cache = thời điểm sửa file)."""
     try:
         cached_df = pd.read_excel(SCREENER_CACHE_FILE, sheet_name="scan")
         scanned_at = (
@@ -418,7 +240,7 @@ def execute_scan(force_full=False):
                         with live_results_box.container():
                             if not preview_df_live.empty:
                                 st.caption(f"🎯 Đang bắt được **{len(preview_df_live)} mã** thỏa mãn điều kiện [{signal_filter}]:")
-                                st.dataframe(preview_df_live, use_container_width=True, hide_index=True)
+                                st.dataframe(preview_df_live, width="stretch", hide_index=True)
                             else:
                                 st.caption(f"👀 Đang quét {processed}/{total} mã, chưa thấy mã nào thỏa mãn [{signal_filter}]...")
                                 
@@ -437,475 +259,9 @@ def execute_scan(force_full=False):
     return results
 
 # ==========================================
-# TAB 1: THỊ TRƯỜNG CHUNG (BẢN SỬA LOGIC)
-# Thay toàn bộ block từ dòng "# TAB 1: THỊ TRƯỜNG CHUNG" đến hết khối `with tab_market:`
-# (ngay trước dòng "# TAB 2: BỘ LỌC CỔ PHIẾU") bằng đoạn này.
-# Cần thêm file market_fallback.py vào repo. Yêu cầu Streamlit >= 1.37.
+# TAB 1: THỊ TRƯỜNG (thiết kế lại — xem tab_market.py + market_insights.py)
 # ==========================================
-from market_fallback import compute_snapshot, fallback_reco, fetch_tcbs_vnindex, normalize_ohlcv
-
-
-def _num(x, default=None):
-    """Ép về float an toàn, trả default nếu None/NaN/lỗi."""
-    try:
-        if x is None or pd.isna(x):
-            return default
-        return float(x)
-    except Exception:
-        return default
-
-
-def _fmt(x, spec, default="—"):
-    v = _num(x)
-    return format(v, spec) if v is not None else default
-
-
-# ---------- Nạp giá ngày VNINDEX (nhiều nguồn, lỗi thì thử nguồn kế) ----------
-@st.cache_data(ttl=300, show_spinner=False)
-def _load_vnindex_daily(days=300):
-    """Thử lần lượt các nguồn. Nếu tất cả lỗi thì ném exception (kết quả lỗi KHÔNG bị cache)."""
-    errors = []
-    attempts = [
-        ("get_vnindex_data", lambda: get_vnindex_data(days_back=days)),
-        ("get_vnindex_data()", lambda: get_vnindex_data()),
-        ("get_stock_data", lambda: get_stock_data("VNINDEX", days_back=days)),
-        ("TCBS", lambda: fetch_tcbs_vnindex(days)),
-    ]
-    for name, fn in attempts:
-        try:
-            df = normalize_ohlcv(fn())
-            if df is not None and len(df) >= 30:
-                return df
-            errors.append(f"{name}: rỗng/thiếu dữ liệu")
-        except Exception as e:
-            errors.append(f"{name}: {str(e)[:70]}")
-    raise RuntimeError(" | ".join(errors))
-
-
-def _get_snapshot(days=250):
-    """market_snapshot() trước; nếu rỗng thì tự tính từ giá ngày. Trả (snap, danh_sách_lỗi)."""
-    snap, errs = {}, []
-    try:
-        snap = market_snapshot(symbol="VNINDEX", days=days) or {}
-    except Exception as e:
-        errs.append(f"market_snapshot: {str(e)[:80]}")
-
-    if _num(snap.get("price")) is None or _num(snap.get("ma20")) is None:
-        try:
-            snap = compute_snapshot(_load_vnindex_daily(300))
-        except Exception as e:
-            errs.append(f"dự phòng: {str(e)[:200]}")
-    return snap, errs
-
-
-def _prepare_intraday(raw):
-    """Chuẩn hoá dữ liệu intraday VNINDEX -> (df_today, df_yesterday) hoặc (None, None)."""
-    if raw is None or raw.empty:
-        return None, None
-
-    df = raw.copy()  # KHÔNG sửa trực tiếp object trả về từ cache
-
-    aliases = {
-        'close':  ['close', 'price', 'c', 'điểm', 'index', 'indexvalue'],
-        'volume': ['volume', 'vol', 'v', 'khối lượng', 'matchvolume'],
-        'time':   ['time', 't', 'thời gian'],
-    }
-    mapping, used = {}, set()
-    for col in df.columns:
-        lc = str(col).lower().strip()
-        for target, names in aliases.items():
-            if lc in names and target not in used:
-                mapping[col] = target
-                used.add(target)
-                break
-    df = df.rename(columns=mapping)
-
-    if 'time' not in df.columns or 'close' not in df.columns:
-        return None, None
-
-    t = pd.to_datetime(df['time'], errors='coerce')
-    if getattr(t.dt, 'tz', None) is not None:
-        t = t.dt.tz_convert('Asia/Ho_Chi_Minh').dt.tz_localize(None)
-    df['time'] = t
-    df = df.dropna(subset=['time'])
-    if df.empty:
-        return None, None
-
-    df['close'] = pd.to_numeric(df['close'], errors='coerce').fillna(0)
-    df['volume'] = pd.to_numeric(
-        df['volume'] if 'volume' in df.columns else 0, errors='coerce'
-    ).fillna(0)
-    df['hour_min'] = df['time'].dt.strftime('%H:%M')
-    df['date'] = df['time'].dt.date
-
-    dates = sorted(df['date'].unique())
-    latest_date = dates[-1]
-    prev_date = dates[-2] if len(dates) >= 2 else None
-
-    def _session(d):
-        return df[(df['date'] == d) & (df['hour_min'] >= '09:00') & (df['hour_min'] <= '15:00')].copy()
-
-    df_today = _session(latest_date)
-    df_yday = _session(prev_date) if prev_date else pd.DataFrame(columns=df.columns)
-    return df_today, df_yday
-
-
-def _render_market_body():
-    # ---------- Lấy dữ liệu (mỗi khối độc lập, lỗi khối nào bỏ qua khối đó) ----------
-    snap, snap_errs = _get_snapshot()
-    snap_ok = _num(snap.get("price")) is not None and _num(snap.get("ma20")) is not None
-
-    pe_stats_data, pe_hist = None, None
-    try:
-        _price = _num(snap.get("price"), 0)
-        pe_now_val = valuation.get_current_pe(_price if _price > 0 else None)
-        pe_hist = valuation.get_pe_history(years=20)
-        pe_stats_data = valuation.pe_stats(pe_hist, pe_now_val)
-    except Exception:
-        pass
-
-    breadth = None
-    try:
-        breadth = get_market_breadth()
-    except Exception:
-        pass
-
-    # Khuyến nghị: trend_engine trước, lỗi/rỗng thì dùng bản dự phòng
-    # SỬA: bản cũ KHÔNG truyền breadth -> lớp Breadth (±5 điểm) của trend_engine luôn bị bỏ qua.
-    #      Đồng thời chặn None ở rsi/vol_ratio (snapshot dự phòng) gây TypeError -> rơi về fallback.
-    reco = None
-    if snap_ok:
-        snap_for_reco = dict(snap)
-        if _num(snap_for_reco.get("rsi")) is None:
-            snap_for_reco["rsi"] = 50.0
-        if _num(snap_for_reco.get("vol_ratio")) is None:
-            snap_for_reco["vol_ratio"] = 1.0
-        try:
-            # breadth quá cũ (> 4 ngày lịch) thì không cho vào điểm khuyến nghị
-            breadth_for_reco = breadth
-            try:
-                lag = breadth_freshness(breadth).get("lag_days") if breadth else None
-                if lag is not None and lag > 4:
-                    breadth_for_reco = None
-            except Exception:
-                pass
-            reco = market_recommendation(snap_for_reco, pe_stats=pe_stats_data, breadth=breadth_for_reco)
-        except Exception:
-            reco = None
-        if not reco or not reco.get("action"):
-            reco = fallback_reco(snap, pe_stats_data)
-
-    # ---------- Intraday ----------
-    chart_df, df_today = None, None
-    try:
-        df_today, df_yesterday = _prepare_intraday(get_intraday_vnindex())
-    except Exception:
-        df_today, df_yesterday = None, None
-
-    if df_today is not None and not df_today.empty:
-        df_today['Vol_Hôm_Nay'] = df_today['volume'].cumsum()
-        current_index = df_today['close'].iloc[-1]
-        current_vol = df_today['Vol_Hôm_Nay'].iloc[-1]
-        max_time_actual = df_today['hour_min'].max()
-
-        prev_vol_eod, prev_vol_same_time = 0, 0
-        if df_yesterday is not None and not df_yesterday.empty:
-            df_yesterday['Vol_Hôm_Qua'] = df_yesterday['volume'].cumsum()
-            prev_vol_eod = df_yesterday['Vol_Hôm_Qua'].iloc[-1]
-            # So với volume lũy kế hôm qua tại CÙNG MỐC GIỜ
-            same = df_yesterday.loc[df_yesterday['hour_min'] <= max_time_actual, 'Vol_Hôm_Qua']
-            prev_vol_same_time = same.iloc[-1] if len(same) else 0
-
-        vol_change = current_vol - prev_vol_same_time
-
-        m1, m2, m3 = st.columns(3)
-        m1.metric("📊 VN-INDEX", f"{current_index:,.2f}")
-        m2.metric(
-            "💰 Thanh khoản hôm nay", f"{current_vol/1e6:,.1f}M CP",
-            f"{vol_change/1e6:+,.1f}M CP so với cùng giờ hôm qua" if prev_vol_same_time else None,
-        )
-        m3.metric("⏳ Thanh khoản hôm qua (EOD)", f"{prev_vol_eod/1e6:,.1f}M CP")
-        st.info(f"🕒 Dữ liệu thực tế đến **{max_time_actual}** (trễ ~1 phút)")
-
-        times = (
-            pd.date_range("09:00", "11:30", freq="min").strftime('%H:%M').tolist()
-            + pd.date_range("13:00", "15:00", freq="min").strftime('%H:%M').tolist()
-        )
-        base = pd.DataFrame({'hour_min': times})
-
-        chart_today = base.merge(
-            df_today.groupby('hour_min')['Vol_Hôm_Nay'].last().reset_index(),
-            on='hour_min', how='left',
-        )
-        chart_today['Vol_Hôm_Nay'] = chart_today['Vol_Hôm_Nay'].ffill()
-        chart_today.loc[chart_today['hour_min'] > max_time_actual, 'Vol_Hôm_Nay'] = None
-        chart_df = chart_today.set_index('hour_min')
-
-        if df_yesterday is not None and not df_yesterday.empty:
-            yday_agg = base.merge(
-                df_yesterday.groupby('hour_min')['Vol_Hôm_Qua'].last().reset_index(),
-                on='hour_min', how='left',
-            )
-            yday_agg['Vol_Hôm_Qua'] = yday_agg['Vol_Hôm_Qua'].ffill()
-            chart_df = chart_df.join(yday_agg.set_index('hour_min'), how='left')
-        else:
-            chart_df['Vol_Hôm_Qua'] = float('nan')
-
-        chart_df = chart_df[['Vol_Hôm_Qua', 'Vol_Hôm_Nay']].astype('float64')
-
-    elif snap_ok:
-        # SỬA: không có intraday (ngoài giờ / nguồn 1 phút bị chặn) thì trước đây không hiện
-        # điểm VN-Index nào cả. Nay dùng giá đóng cửa phiên gần nhất.
-        m1, m2, m3 = st.columns(3)
-        chg = _num(snap.get("change_pct"))
-        m1.metric("📊 VN-INDEX (đóng cửa)", _fmt(snap.get("price"), ",.2f"),
-                  f"{chg:+.2f}%" if chg is not None else None)
-        m2.metric("💰 KL phiên gần nhất",
-                  f"{_num(snap.get('vol_today'), 0)/1e6:,.1f}M CP" if _num(snap.get('vol_today')) else "—")
-        m3.metric("📏 TB 20 phiên",
-                  f"{_num(snap.get('vol_avg'), 0)/1e6:,.1f}M CP" if _num(snap.get('vol_avg')) else "—")
-        _d = snap.get("date")
-        st.caption("🕒 Chưa có dữ liệu trong phiên — hiển thị số liệu phiên gần nhất"
-                   + (f" ({pd.to_datetime(_d):%d/%m/%Y})" if _d is not None else ""))
-
-    sb_header("💓 Nhịp đập thị trường")
-    try:
-        render_market_tab(chart_df, df_today)
-    except Exception as e:
-        st.warning(f"⚠️ Không vẽ được biểu đồ thị trường: {str(e)[:80]}")
-
-    # ---------- Phân tích xu hướng ----------
-    sb_header("🧠 Phân tích xu hướng")
-
-    if not snap_ok:
-        st.error("⚠️ Không tải được giá lịch sử VN-Index từ bất kỳ nguồn nào, nên MA / RSI / MACD / Volume chưa tính được.")
-        with st.expander("Chi tiết lỗi", expanded=False):
-            for e in snap_errs:
-                st.caption(e)
-        st.caption("Bấm '🔄 CẬP NHẬT DỮ LIỆU' để thử lại. Nếu vẫn lỗi, kiểm tra log của app (Manage app).")
-    elif snap.get("_source") == "fallback":
-        _d = snap.get("date")
-        _d_txt = pd.to_datetime(_d).strftime("%d/%m/%Y") if _d is not None else "?"
-        st.caption(f"ℹ️ Chỉ báo được tính trực tiếp từ giá ngày (nguồn dự phòng), phiên gần nhất: **{_d_txt}**")
-
-    row1_l, row1_r = st.columns(2)
-
-    with row1_l:
-        with st.container(border=True):
-            st.markdown("#### 📈 Xu hướng giá")
-            trend_txt = snap.get("trend_text") or "—"
-            ma20_txt = snap.get("ma20_text") or ""
-            support = _num(snap.get("support"), 0)
-            resist = _num(snap.get("resistance"), 0)
-
-            st.markdown(f"**{trend_txt}**")
-            if ma20_txt and ma20_txt != "—":
-                st.caption(ma20_txt)
-
-            c1, c2, c3 = st.columns(3)
-            c1.metric("MA20", _fmt(snap.get('ma20'), ',.1f'))
-            c2.metric("MA50", _fmt(snap.get('ma50'), ',.1f'))
-            c3.metric("MA200", _fmt(snap.get('ma200'), ',.1f'))
-
-            if support or resist:
-                st.markdown(f"**🟢 Hỗ trợ:** `{support:,.1f}` &nbsp;•&nbsp; **🔴 Kháng cự:** `{resist:,.1f}`")
-
-    with row1_r:
-        with st.container(border=True):
-            st.markdown("#### 💰 Định giá P/E (20 năm)")
-            if pe_stats_data is None:
-                st.info("⏳ Chưa tải được dữ liệu P/E")
-            else:
-                pe_c1, pe_c2 = st.columns(2)
-                pct_vs_avg = _num(pe_stats_data.get('pct_vs_avg'))
-                zscore = _num(pe_stats_data.get('zscore'))
-                pe_now = _num(pe_stats_data.get('pe_now'))
-                pe_mean = _num(pe_stats_data.get('mean'))
-                pe_c1.metric(
-                    "P/E hiện tại",
-                    f"{pe_now:.1f}x" if pe_now else "—",
-                    delta=f"{pct_vs_avg:+.1f}% vs TB" if pct_vs_avg is not None else None,
-                    delta_color="inverse",
-                )
-                pe_c2.metric(
-                    "TB 20 năm",
-                    f"{pe_mean:.1f}x" if pe_mean else "—",
-                    delta=f"{zscore:+.2f}σ" if zscore is not None else None,
-                )
-                pct = _num(pe_stats_data.get('percentile'))
-                if pct is not None:
-                    color_pe = "🟢" if pct < 25 else "🟡" if pct < 75 else "🔴"
-                    label_pe = "RẺ" if pct < 25 else "HỢP LÝ" if pct < 75 else "ĐẮT"
-                    st.progress(min(max(pct / 100, 0.0), 1.0), text=f"{color_pe} Percentile: {pct:.0f}% — {label_pe}")
-                if pe_stats_data.get('comment'):
-                    st.caption(pe_stats_data['comment'])
-                if pe_hist is not None and not pe_hist.empty:
-                    with st.expander("📈 P/E lịch sử 20 năm", expanded=False):
-                        st.line_chart(pe_hist.set_index("date")["pe"], height=180)
-                try:
-                    src = valuation.get_current_pe_source()
-                    if src:
-                        st.caption(f"🔗 Nguồn: **{src}**")
-                except Exception:
-                    pass
-
-    row2_l, row2_r = st.columns(2)
-    with row2_l:
-        with st.container(border=True):
-            st.markdown("#### 📊 Chỉ báo kỹ thuật")
-            rsi_val = _num(snap.get('rsi'))
-            rsi_txt = snap.get('rsi_text') or "—"
-            macd_val = _num(snap.get('macd'))
-            macd_sig = _num(snap.get('macd_signal'))
-            macd_cross = snap.get('macd_cross') or "—"
-
-            if rsi_val is None:
-                st.markdown("**RSI(14):** —")
-            else:
-                rsi_emoji = "🔴" if rsi_val >= 70 else ("🟢" if rsi_val <= 30 else "🟡")
-                st.markdown(f"**RSI(14):** {rsi_emoji} `{rsi_val:.1f}` — {rsi_txt}")
-                st.progress(min(max(rsi_val / 100, 0.0), 1.0), text=f"RSI = {rsi_val:.1f}")
-            st.divider()
-
-            # SỬA: thiếu dữ liệu thì hiện "—" thay vì 0.000 gây hiểu nhầm
-            st.markdown(f"**MACD:** `{_fmt(macd_val, '.3f')}` &nbsp;·&nbsp; **Signal:** `{_fmt(macd_sig, '.3f')}`")
-            if macd_cross == "Vàng":
-                st.markdown("**Trạng thái:** 🟢 MACD trên Signal (Vàng)")
-            elif macd_cross != "—":
-                st.markdown("**Trạng thái:** 🔴 MACD dưới Signal (Chết)")
-            else:
-                st.markdown("**Trạng thái:** —")
-
-    with row2_r:
-        with st.container(border=True):
-            st.markdown("#### 🔊 Dòng tiền (Volume)")
-            vol_today = _num(snap.get('vol_today'), 0)
-            vol_avg = _num(snap.get('vol_avg'), 0)
-            vol_ratio = _num(snap.get('vol_ratio'), 0)
-            vol_txt = snap.get('vol_text') or "—"
-
-            if vol_txt != "—":
-                st.markdown(f"**{vol_txt}**")
-
-            v1, v2 = st.columns(2)
-            v1.metric("Vol phiên GD", f"{vol_today/1e6:,.1f}M" if vol_today else "—")
-            v2.metric("TB 20 phiên", f"{vol_avg/1e6:,.1f}M" if vol_avg else "—")
-
-            if vol_ratio and vol_avg:
-                st.progress(min(vol_ratio / 2.0, 1.0), text=f"Tỷ lệ: {vol_ratio:.2f}x trung bình")
-            else:
-                st.caption("Chưa có dữ liệu volume phiên")
-
-    # ---------- Breadth ----------
-    _n = (breadth or {}).get("n_total")
-    sb_header(f"🏥 Sức khoẻ thị trường ({_n} mã HOSE)" if _n else "🏥 Sức khoẻ thị trường (HOSE)")
-    try:
-        render_breadth_panel(breadth)
-    except Exception as e:
-        st.warning(f"⚠️ Không hiển thị được độ rộng thị trường: {str(e)[:80]}")
-
-    # ---------- Khuyến nghị ----------
-    sb_header("💡 Khuyến nghị hành động")
-    if reco is None:
-        st.warning("⚠️ Chưa tính được khuyến nghị — thiếu dữ liệu kỹ thuật.")
-    else:
-        _cmap = {"danger": "red", "warning": "orange", "success": "green", "info": "blue", "gray": "gray"}
-        _emap = {"danger": "🔴", "warning": "🟠", "success": "🟢", "info": "🔵"}
-        st_color = _cmap.get(reco.get("color", "gray"), "gray")
-        action_emoji = _emap.get(reco.get("color", "info"), "🔵")
-
-        # Kiểm tra None (không dùng `or 50` vì làm 0% bị đổi thành 50%)
-        stock_raw = _num(reco.get("stock"))
-        cash_raw = _num(reco.get("cash"))
-        if stock_raw is None and cash_raw is None:
-            stock_pct, cash_pct = 50, 50
-        elif stock_raw is None:
-            stock_pct, cash_pct = 100 - cash_raw, cash_raw
-        elif cash_raw is None:
-            stock_pct, cash_pct = stock_raw, 100 - stock_raw
-        else:
-            stock_pct, cash_pct = stock_raw, cash_raw
-        stock_pct = int(min(max(stock_pct, 0), 100))
-        cash_pct = int(min(max(cash_pct, 0), 100))
-        cur_score = int(_num(reco.get("score"), 0))
-
-        action_txt = str(reco.get('action', '—'))
-        # trend_engine đã gắn emoji sẵn trong action -> không gắn thêm (tránh "🟢 🟢 MUA/GIỮ")
-        if action_txt[:1].isalnum():
-            action_txt = f"{action_emoji} {action_txt}"
-        with st.container(border=True):
-            ka, kb, kc, kd = st.columns([2.5, 1, 1, 1])
-            with ka:
-                st.markdown(f"## :{st_color}[{action_txt}]")
-            kb.metric("🎯 Score", f"{cur_score:+d}")
-            kc.metric("📈 Tỷ trọng CP", f"{stock_pct}%")
-            kd.metric("💵 Tiền mặt", f"{cash_pct}%")
-            st.progress(
-                min(max(stock_pct / 100, 0.0), 1.0),
-                text=f"Cổ phiếu {stock_pct}%  ·  Tiền mặt {cash_pct}%",
-            )
-            if reco.get("source") == "fallback":
-                st.caption("ℹ️ Khuyến nghị tính theo quy tắc đơn giản (MA, RSI, MACD, P/E) vì bộ phân tích chính chưa trả kết quả.")
-            elif reco.get("ad_pct") is None:
-                st.caption("ℹ️ Chưa tính lớp Breadth (dữ liệu độ rộng thị trường chưa có hoặc đã quá cũ).")
-            reasons = reco.get("reasons") or []
-            if reasons:
-                with st.expander("🔎 Vì sao ra khuyến nghị này?", expanded=False):
-                    for r in reasons:
-                        st.markdown(f"- {r}")
-
-        st.caption("⚠️ Khuyến nghị dựa trên PTKT + định giá, không phải tư vấn đầu tư chính thức.")
-
-
-with tab_market:
-    col_title, col_btn, col_interval = st.columns([3, 1, 1])
-    with col_title:
-        sb_header("🌟 Tổng quan thị trường real-time")
-    with col_btn:
-        if st.button("🔄 CẬP NHẬT DỮ LIỆU", type="primary", width="stretch", key="btn_refresh_market"):
-            for fn in (get_intraday_vnindex, get_vnindex_data, market_snapshot,
-                       get_market_breadth, _load_vnindex_daily):
-                try:
-                    fn.clear()
-                except Exception:
-                    pass
-            st.session_state['_t1_last_clear'] = time.time()
-            st.rerun()
-    with col_interval:
-        refresh_interval = st.selectbox(
-            "⏱️ Tự làm mới",
-            options=[0, 30, 60, 120, 300],
-            format_func=lambda x: "Tắt" if x == 0 else f"{x}s",
-            index=2,
-            key="refresh_interval_select",
-            label_visibility="collapsed",
-        )
-
-    # SỬA: chỉ tự làm mới trong giờ giao dịch (9:00-15:05, T2-T6 giờ VN); ngoài giờ dữ liệu
-    # không đổi, rerun mỗi 60s chỉ làm app chậm và tốn lượt gọi API.
-    _now_vn = pd.Timestamp.now(tz="Asia/Ho_Chi_Minh")
-    _in_session = _now_vn.weekday() < 5 and "09:00" <= _now_vn.strftime("%H:%M") <= "15:05"
-    effective_interval = refresh_interval if _in_session else 0
-    if effective_interval > 0:
-        st.caption(f"🔁 Tự động làm mới mỗi **{effective_interval}s** (trong phiên)")
-    elif refresh_interval > 0:
-        st.caption("⏸️ Ngoài giờ giao dịch — tạm dừng tự làm mới")
-    st.divider()
-
-    def _market_fragment_body():
-        # Khi chạy theo timer: chỉ xoá cache intraday (nhẹ), KHÔNG xoá breadth 400 mã
-        if effective_interval > 0:
-            last = st.session_state.get('_t1_last_clear', 0)
-            if time.time() - last >= effective_interval - 1:
-                try:
-                    get_intraday_vnindex.clear()
-                except Exception:
-                    pass
-                st.session_state['_t1_last_clear'] = time.time()
-        _render_market_body()
-
-    # Fragment tự chạy lại theo chu kỳ, KHÔNG rerun các tab khác
-    st.fragment(_market_fragment_body, run_every=(effective_interval or None))()
+from tab_market import render_market
 
 
 # ==========================================
@@ -913,12 +269,12 @@ with tab_market:
 # ==========================================
 @st.fragment
 def render_tab_eod():
-    with tab_screener:
+    if True:
         sb_header("🔍 Lọc Cổ Phiếu Cuối Ngày", "Quét toàn bộ danh sách mã, bỏ qua giới hạn Fast Mode. Nên chạy sau 15:00")
 
         col_eod_btn, col_cache_info = st.columns([1, 2])
         with col_eod_btn:
-            eod_scan_button = st.button("🌙 KÍCH HOẠT QUÉT CUỐI NGÀY (Quét toàn bộ)", use_container_width=True, type="primary")
+            eod_scan_button = st.button("🌙 KÍCH HOẠT QUÉT CUỐI NGÀY (Quét toàn bộ)", width="stretch", type="primary")
 
         if eod_scan_button:
             results = execute_scan(force_full=True)
@@ -970,17 +326,15 @@ def render_tab_eod():
                 unsafe_allow_html=True,
             )
 
-render_tab_eod()
-
 # ==========================================
 # TAB 3: TÍN HIỆU TRONG PHIÊN (DÙNG FAST MODE - ICHIMOKU/VOLUME)
 # ==========================================
 @st.fragment
 def render_tab_intraday():
-    with tab_signals:
+    if True:
         sb_header("📡 Tín Hiệu & Cảnh Báo (Trong Phiên)", "Quét nhanh các mã thanh khoản/VN30 (Fast Mode) để theo dõi Volume và Ichimoku realtime")
         
-        intraday_scan_button = st.button("⚡ QUÉT TÍN HIỆU TRONG PHIÊN (Chế độ Nhanh)", use_container_width=True, type="primary")
+        intraday_scan_button = st.button("⚡ QUÉT TÍN HIỆU TRONG PHIÊN (Chế độ Nhanh)", width="stretch", type="primary")
 
         if intraday_scan_button:
             results = execute_scan(force_full=False)
@@ -1003,28 +357,33 @@ def render_tab_intraday():
                 unsafe_allow_html=True,
             )
 
-render_tab_intraday()
+# ==========================================
+# ĐIỀU HƯỚNG — chỉ chạy code của trang đang mở
+# SỬA HIỆU NĂNG: st.tabs chạy code của CẢ 7 tab ở mỗi lần tải/tương tác (tab Tín Hiệu Ngày tự
+# quét 60 mã, tab Thị Trường tải 4 chỉ số...) dù người dùng chỉ xem 1 tab. Thanh điều hướng
+# bên dưới chỉ chạy trang được chọn -> mở app và chuyển trang nhanh hơn nhiều lần.
+# ==========================================
+PAGES = {
+    "🌟 Thị Trường": ("thi-truong", render_market),
+    "🔍 Lọc Cuối Ngày": ("loc-cuoi-ngay", render_tab_eod),
+    "📡 Tín Hiệu Realtime": ("tin-hieu-realtime", render_tab_intraday),
+    "💡 Khuyến Nghị": ("khuyen-nghi",
+                      lambda: render_recommendation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift)),
+    "🚀 Sức Bật": ("suc-bat", render_suc_bat_tab),
+    "💼 Danh mục": ("danh-muc", lambda: render_portfolio_v2_tab(PRIORITY_TICKERS)),
+    "🕯️ Tín Hiệu Ngày": ("tin-hieu-ngay", lambda: render_tin_hieu_ngay_tab(PRIORITY_TICKERS)),
+}
+_slug_to_name = {slug: name for name, (slug, _) in PAGES.items()}
+if "nav_page" not in st.session_state:
+    # mở đúng trang theo link chia sẻ ?trang=khuyen-nghi
+    st.session_state["nav_page"] = _slug_to_name.get(st.query_params.get("trang", ""), "🌟 Thị Trường")
 
-# ==========================================
-# TAB 4: KHUYẾN NGHỊ
-# ==========================================
-with tab_recommendation:
-    render_recommendation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift) 
+page = st.segmented_control("Trang", list(PAGES), key="nav_page", selection_mode="single",
+                            label_visibility="collapsed")
+if page is None:  # bấm lại vào trang đang chọn sẽ bỏ chọn -> giữ trang cũ
+    page = st.session_state.get("_nav_last", "🌟 Thị Trường")
+st.session_state["_nav_last"] = page
+if st.query_params.get("trang") != PAGES[page][0]:
+    st.query_params["trang"] = PAGES[page][0]
 
-# ========================================== 
-# TAB 5: SCREENER SỨC BẬT 
-# ========================================== 
-with tab_suc_bat: 
-    render_suc_bat_tab()
-
-# ==========================================
-# TAB 6: QUẢN LÝ GIAO DỊCH (PORTFOLIO MANAGER)
-# ==========================================
-with tab_portfolio:
-    render_portfolio_v2_tab(PRIORITY_TICKERS)
-
-# ==========================================
-# TAB 7: TÍN HIỆU MUA THEO MA VOLUME + ICHIMOKU (KHUNG 5 PHÚT)
-# ==========================================
-with tab_ichimoku_vol:
-    render_tin_hieu_ngay_tab(PRIORITY_TICKERS)
+PAGES[page][1]()

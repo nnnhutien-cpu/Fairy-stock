@@ -9,7 +9,8 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from data_loader import get_data_freshness, get_expected_latest_trading_date
+from data_loader import get_data_freshness, get_expected_latest_trading_date, get_all_tickers
+import ui_kit
 
 KIET_CUNG_RATIO = 0.5
 
@@ -178,34 +179,30 @@ def _compute_recommendation_data(df, ticker, p_tenkan=9, p_kijun=26, p_senkou_b=
 
 
 def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senkou_b=52, p_shift=26):
-    # ── Header đồng bộ font với tab Sức Bật ──────────────────────────────────
-    st.markdown("""
-    <div class="sb-header">
-        <div class="sb-title">💡 Khuyến Nghị MUA / BÁN — Hệ Thống Cô Tiên</div>
-        <div class="sb-sub">Phân tích dựa trên Kijun17 / Knife65 / Knife129 + Volume MA20 + RSI14 (Sideway) + Kiệt Cung (&lt;50% MA20)</div>
-    </div>
-    """, unsafe_allow_html=True)
+    ui_kit.page_header("💡 Khuyến Nghị MUA / BÁN — Hệ Thống Cô Tiên",
+                       "Kijun17 / Knife65 / Knife129 + Volume MA20 + RSI14 (Sideway) + Kiệt Cung (<50% MA20)")
 
-    col_input, col_btn, col_refresh = st.columns([3, 1, 1])
+    try:
+        all_codes = sorted(set(get_all_tickers("all")))
+    except Exception:
+        all_codes = []
+    default = st.session_state.get("rec_last_ticker", "PVT")
+    col_input, col_refresh = st.columns([4, 1], vertical_alignment="bottom")
     with col_input:
-        rec_ticker = st.text_input(
-            "Nhập mã cổ phiếu:",
-            value="PVT",
-            key="rec_ticker_input",
-            placeholder="VD: HPG, FPT, PVT..."
-        ).upper().strip()
-    with col_btn:
-        st.write("")
-        st.write("")
-        run_btn = st.button("🔍 PHÂN TÍCH", type="primary", use_container_width=True)
-    with col_refresh:
-        st.write("")
-        st.write("")
-        refresh_btn = st.button(
-            "🔄 Làm mới",
-            use_container_width=True,
-            help="Xoá cache và cào lại dữ liệu mới nhất, dùng khi dữ liệu đang bị chậm."
+        rec_ticker = st.selectbox(
+            "Mã cổ phiếu", options=all_codes or [default],
+            index=(all_codes.index(default) if default in all_codes else 0) if all_codes else 0,
+            accept_new_options=True, key="rec_ticker_select",
+            placeholder="Gõ mã, ví dụ HPG, FPT, PVT…",
         )
+        rec_ticker = str(rec_ticker or "").upper().strip()
+    with col_refresh:
+        refresh_btn = st.button("🔄 Làm mới dữ liệu", width="stretch",
+                                help="Xoá cache và tải lại dữ liệu mới nhất cho mã này.")
+    # Chọn mã là phân tích luôn (không cần bấm thêm nút) — kết quả giữ trong phiên làm việc
+    run_btn = bool(rec_ticker) and rec_ticker != st.session_state.get("rec_last_ticker")
+    if rec_ticker:
+        st.session_state["rec_last_ticker"] = rec_ticker
 
     if not rec_ticker:
         st.info("Nhập mã cổ phiếu và bấm PHÂN TÍCH.")
@@ -217,10 +214,6 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
         except Exception:
             pass
         st.session_state.pop(f"rec_data_{rec_ticker}", None)
-
-    if not (run_btn or refresh_btn) and f"rec_data_{rec_ticker}" not in st.session_state:
-        st.info(f"Bấm **PHÂN TÍCH** để xem khuyến nghị cho **{rec_ticker}**.")
-        return
 
     # Load dữ liệu (cache session — không gọi lại API nếu đã có)
     if run_btn or refresh_btn or f"rec_data_{rec_ticker}" not in st.session_state:
@@ -262,30 +255,17 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
             "có thể chưa phản ánh đúng phiên gần nhất."
         )
 
-    st.divider()
-
     # ── Panel khuyến nghị (dùng lk-card class đồng bộ CSS) ──────────────────
-    color_map = {
-        "MUA MẠNH": "#00C853",
-        "MUA THĂM DÒ": "#29B6F6",
-        "MUA": "#00E676",
-        "BẮT ĐÁY": "#FFA726",
-        "GIỮ": "#78909C",
-        "CHỜ": "#78909C",
-        "BÁN MỘT PHẦN": "#FF7043",
-        "BÁN": "#FF1744",
-        "TRÁNH": "#FF1744",
-    }
-    kn_color = "#78909C"
-    for k, v in color_map.items():
-        if k in khuyen_nghi.upper():
-            kn_color = v
-            break
+    tone = [("MUA MẠNH", ui_kit.UP), ("MUA THĂM DÒ", "#60a5fa"), ("MUA", ui_kit.UP), ("BẮT ĐÁY", ui_kit.WARN),
+            ("BÁN MỘT PHẦN", "#f97316"), ("BÁN", ui_kit.DOWN), ("TRÁNH", ui_kit.DOWN),
+            ("GIỮ", ui_kit.MUTED), ("CHỜ", ui_kit.MUTED)]
+    kn_color = next((c for k, c in tone if k in khuyen_nghi.upper()), ui_kit.MUTED)
 
     st.markdown(f"""
-    <div class="lk-card" style="border-color:{kn_color}40;">
-        <div style="font-size:1.8rem;font-weight:800;color:{kn_color};">{khuyen_nghi}</div>
-        <div style="font-size:0.95rem;color:#dcd6ec;margin-top:8px;">{mo_ta}</div>
+    <div class="lk-card" style="border-left:4px solid {kn_color};">
+        <div class="lk-label">Khuyến nghị cho {ticker} · giá {close:,.2f}</div>
+        <div style="font-size:1.6rem;font-weight:800;color:{kn_color};margin-top:4px;">{khuyen_nghi}</div>
+        <div style="font-size:0.92rem;color:#dcd6ec;margin-top:6px;">{mo_ta}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -349,7 +329,8 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
         x=plot_df.index,
         open=plot_df['open'], high=plot_df['high'],
         low=plot_df['low'], close=plot_df['close'],
-        increasing_line_color='#00C853', decreasing_line_color='#FF1744',
+        increasing_line_color=ui_kit.UP, increasing_fillcolor=ui_kit.UP,
+        decreasing_line_color=ui_kit.DOWN, decreasing_fillcolor=ui_kit.DOWN,
         name='Giá', showlegend=False
     ), row=1, col=1)
 
@@ -365,18 +346,18 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
 
     fig.add_trace(go.Scatter(
         x=plot_df.index, y=plot_df['kijun17'],
-        line=dict(color='#29B6F6', width=1.5, dash='dot'), name='Kijun17'
+        line=dict(color=ui_kit.SERIES[0], width=1.5, dash='dot'), name='Kijun17'
     ), row=1, col=1)
     fig.add_trace(go.Scatter(
         x=plot_df.index, y=plot_df['knife65'],
-        line=dict(color='#FFA726', width=2), name='Knife65'
+        line=dict(color=ui_kit.SERIES[3], width=2, dash='dash'), name='Knife65'
     ), row=1, col=1)
     fig.add_trace(go.Scatter(
         x=plot_df.index, y=plot_df['knife129'],
-        line=dict(color='#EF5350', width=2.5), name='Knife129 ★'
+        line=dict(color=ui_kit.SERIES[4], width=2.5), name='Knife129 ★'
     ), row=1, col=1)
 
-    vol_colors = ['#00C853' if plot_df['close'].iloc[i] >= plot_df['open'].iloc[i] else '#FF1744'
+    vol_colors = ['rgba(34,197,94,.6)' if plot_df['close'].iloc[i] >= plot_df['open'].iloc[i] else 'rgba(239,68,68,.6)'
                   for i in range(len(plot_df))]
     fig.add_trace(go.Bar(
         x=plot_df.index, y=plot_df['volume'],
@@ -384,7 +365,7 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
     ), row=2, col=1)
     fig.add_trace(go.Scatter(
         x=plot_df.index, y=plot_df['vol_ma20'],
-        line=dict(color='#FF6D00', width=2, shape='spline'), name='Vol MA20'
+        line=dict(color=ui_kit.SERIES[1], width=2, shape='spline'), name='Vol MA20'
     ), row=2, col=1)
     fig.add_trace(go.Scatter(
         x=plot_df.index, y=plot_df['vol_ma20'] * KIET_CUNG_RATIO,
@@ -394,24 +375,15 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
 
     fig.add_trace(go.Scatter(
         x=plot_df.index, y=plot_df['rsi14'],
-        line=dict(color='#CE93D8', width=1.5), name='RSI14'
+        line=dict(color=ui_kit.SERIES[5], width=1.5), name='RSI14'
     ), row=3, col=1)
     fig.add_hline(y=70, line_dash="dash", line_color="rgba(255,68,68,0.5)", row=3, col=1)
     fig.add_hline(y=30, line_dash="dash", line_color="rgba(0,200,83,0.5)", row=3, col=1)
     fig.add_hrect(y0=30, y1=70, fillcolor="rgba(200,200,200,0.05)", row=3, col=1)
 
-    fig.update_layout(
-        height=750,
-        margin=dict(l=10, r=10, t=40, b=10),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='#dcd6ec', family='Sora, sans-serif'),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        xaxis_rangeslider_visible=False,
-        dragmode='pan',
-    )
-    fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
-    st.plotly_chart(fig, use_container_width=True)
+    ui_kit.style_fig(fig, 720, dates=False)
+    fig.update_xaxes(type="category", nticks=8)
+    ui_kit.plot(fig)
 
     with st.expander("📖 Hướng dẫn đọc khuyến nghị Cô Tiên"):
         st.markdown(f"""

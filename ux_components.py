@@ -3,7 +3,7 @@ import pandas as pd
 
 
 def setup_cache_clear_button():
-    if st.sidebar.button("🧹 XÓA BỘ NHỚ CACHE", use_container_width=True):
+    if st.sidebar.button("🧹 XÓA BỘ NHỚ CACHE", width="stretch"):
         st.cache_data.clear()
         st.sidebar.success("Đã làm sạch toàn bộ hệ thống!")
 
@@ -33,7 +33,7 @@ def render_search_and_export(results_df):
             data=csv_data,
             file_name="Danh_Sach_Sieu_Co_Phieu.csv",
             mime="text/csv",
-            use_container_width=True
+            width="stretch",
         )
 
     # 3. Lọc theo mã (ép sang chuỗi để không lỗi nếu cột không phải string)

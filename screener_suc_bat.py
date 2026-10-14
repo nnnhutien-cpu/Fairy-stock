@@ -25,6 +25,9 @@ import time
 import requests
 import concurrent.futures as _cf
 
+import tcbs_data
+import ui_kit
+
 # ─────────────────────────────────────────────────────────────
 #  CSS  (giữ nguyên palette tím của app)
 # ─────────────────────────────────────────────────────────────
@@ -56,9 +59,9 @@ _CSS = """
 .lk-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: .5px; }
 .lk-value { font-size: 22px; font-weight: 700; color: #e0e0ff; margin-top: 3px; }
 .lk-sub   { font-size: 10px; color: #555; margin-top: 2px; }
-.val-up   { color: #00e676 !important; }
-.val-down { color: #ff5252 !important; }
-.val-warn { color: #ffd740 !important; }
+.val-up   { color: #22c55e !important; }
+.val-down { color: #ef4444 !important; }
+.val-warn { color: #f5a524 !important; }
 
 .lk-section { font-size: 11px; color: #8b7fb5; text-transform: uppercase;
                letter-spacing: .6px; margin: 14px 0 8px;
@@ -69,9 +72,9 @@ _CSS = """
                padding: 4px 8px; font-size: 11px; text-transform: uppercase; }
 .sr-table td { padding: 5px 8px; border-bottom: 1px solid #1e1a33; color: #ccc; }
 .sr-table tr:last-child td { border-bottom: none; }
-.badge-r { background:#3a1a1a; color:#ff5252; padding:2px 8px;
+.badge-r { background:#3a1a1a; color:#ef4444; padding:2px 8px;
            border-radius:4px; font-size:11px; font-weight:600; }
-.badge-s { background:#1a3a1a; color:#00e676; padding:2px 8px;
+.badge-s { background:#1a3a1a; color:#22c55e; padding:2px 8px;
            border-radius:4px; font-size:11px; font-weight:600; }
 .badge-fib { background:#1a1a3a; color:#7c9ef5; padding:2px 6px;
              border-radius:4px; font-size:10px; }
@@ -120,6 +123,22 @@ _BROWSER_HEADERS = {
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
 }
+
+
+def _fetch_tcbs(symbol: str, start: str = _DATA_START):
+    """TCBS (nguồn chính của cả app). Trả giá theo VNĐ như các nguồn khác của tab này."""
+    try:
+        df = tcbs_data.fetch_bars_range(symbol, start, None, "D")
+        if df is None or len(df) < 20:
+            return None, None
+        df = df.copy()
+        df["time"] = pd.to_datetime(df["time"]).dt.date
+        if symbol.upper() not in tcbs_data.INDEX_SYMBOLS and df["close"].median() < 1000:
+            for col in ("open", "high", "low", "close"):
+                df[col] = df[col] * 1000
+        return df.reset_index(drop=True), "TCBS"
+    except Exception:
+        return None, None
 
 
 def _fetch_dnse(symbol: str, start: str = _DATA_START):
@@ -268,7 +287,7 @@ def fetch_ohlcv(symbol: str, start: str = _DATA_START):
     Dùng cho SCAN TOÀN THỊ TRƯỜNG — chạy tuần tự để tránh 4x request cùng lúc.
     Returns (df, source_name). Raise OhlcvNotFound nếu cả 4 nguồn đều fail.
     """
-    for fn in (_fetch_dnse, _fetch_fireant, _fetch_vnstock, _fetch_yfinance):
+    for fn in (_fetch_tcbs, _fetch_dnse, _fetch_fireant, _fetch_vnstock, _fetch_yfinance):
         df, src = fn(symbol, start)
         if df is not None:
             return df, src
@@ -284,10 +303,10 @@ def _fetch_ohlcv_race(symbol: str, start: str = _DATA_START, race_timeout: float
 
     Chỉ dùng cho TRA CỨU 1 MÃ. Scan toàn thị trường dùng fetch_ohlcv() tuần tự.
     """
-    fetchers = (_fetch_dnse, _fetch_fireant, _fetch_vnstock, _fetch_yfinance)
+    fetchers = (_fetch_tcbs, _fetch_dnse, _fetch_fireant, _fetch_vnstock, _fetch_yfinance)
     result = (None, None)
     # Dùng context manager để executor được cleanup đúng cách
-    with _cf.ThreadPoolExecutor(max_workers=4) as ex:
+    with _cf.ThreadPoolExecutor(max_workers=5) as ex:
         futures = {ex.submit(fn, symbol, start): fn.__name__ for fn in fetchers}
         try:
             for fut in _cf.as_completed(futures, timeout=race_timeout):
@@ -411,6 +430,7 @@ _SRC_BADGE = {
 }
 
 _SRC_DISPLAY_MAP = {
+    "TCBS":    "TCBS",
     "DNSE":    "DNSE",
     "VCI":     "VCI",
     "FireAnt": "FireAnt",
@@ -445,14 +465,14 @@ def _render_fib_table(m: dict):
         kc_active = kc > price_now      # còn là kháng cự thật (giá chưa vượt qua)
         ht_active = ht < price_now      # còn là hỗ trợ thật (giá chưa thủng qua)
 
-        kc_color = "#ff5252" if kc_active else "#7a4444"
-        ht_color = "#00e676" if ht_active else "#3f7a5c"
+        kc_color = "#ef4444" if kc_active else "#7a4444"
+        ht_color = "#22c55e" if ht_active else "#3f7a5c"
 
         kc_strike = "" if kc_active else "text-decoration:line-through;"
         ht_strike = "" if ht_active else "text-decoration:line-through;"
 
-        kc_badge = "<span style='color:#ff5252;font-size:9px;margin-left:4px;'>▲ KC</span>" if kc_active else ""
-        ht_badge = "<span style='color:#00e676;font-size:9px;margin-left:4px;'>▼ HT</span>" if ht_active else ""
+        kc_badge = "<span style='color:#ef4444;font-size:9px;margin-left:4px;'>▲ KC</span>" if kc_active else ""
+        ht_badge = "<span style='color:#22c55e;font-size:9px;margin-left:4px;'>▼ HT</span>" if ht_active else ""
 
         # QUAN TRỌNG: không được thụt lề các dòng HTML này. Markdown coi dòng
         # thụt lề ≥4 space là code block, làm "bể mạch" render HTML giữa chừng
@@ -475,15 +495,15 @@ def _render_fib_table(m: dict):
         '<table class="sr-table" style="width:100%;border-collapse:collapse;">'
         '<thead><tr>'
         '<th style="color:#555;font-size:11px;padding:4px 8px;text-align:left;">Mức Fibo</th>'
-        '<th style="color:#ff5252;font-size:11px;padding:4px 8px;text-align:left;font-weight:700;">🔴 KHÁNG CỰ</th>'
-        '<th style="color:#00e676;font-size:11px;padding:4px 8px;text-align:left;font-weight:700;">🟢 HỖ TRỢ</th>'
+        '<th style="color:#ef4444;font-size:11px;padding:4px 8px;text-align:left;font-weight:700;">🔴 KHÁNG CỰ</th>'
+        '<th style="color:#22c55e;font-size:11px;padding:4px 8px;text-align:left;font-weight:700;">🟢 HỖ TRỢ</th>'
         '</tr></thead>'
         f'<tbody>{rows_html}</tbody>'
         '</table>'
         '<div style="font-size:10px;color:#555;margin-top:6px;padding:0 8px;">'
         f'Giá hiện tại: <b style="color:#e0e0ff;">{price_now:,.2f}</b> &nbsp;|&nbsp; '
-        f'Đỉnh pha: <b style="color:#ff5252;">{m["phase_high"]:,.2f}</b> &nbsp;|&nbsp; '
-        f'Đáy pha: <b style="color:#00e676;">{m["phase_low"]:,.2f}</b>'
+        f'Đỉnh pha: <b style="color:#ef4444;">{m["phase_high"]:,.2f}</b> &nbsp;|&nbsp; '
+        f'Đáy pha: <b style="color:#22c55e;">{m["phase_low"]:,.2f}</b>'
         '</div>'
     )
     st.markdown(table_html, unsafe_allow_html=True)
@@ -500,7 +520,7 @@ def _render_lookup_card(symbol: str, company: str, m: dict, source: str, elapsed
 
     speed_html = ""
     if elapsed is not None:
-        speed_color = "#00e676" if elapsed <= 2 else ("#ffd740" if elapsed <= 4 else "#ff5252")
+        speed_color = "#22c55e" if elapsed <= 2 else ("#f5a524" if elapsed <= 4 else "#ef4444")
         speed_html = (f'<span class="src-badge" style="background:#12102a;color:{speed_color};">'
                       f'⚡ {elapsed:.1f}s</span>')
 
@@ -560,9 +580,9 @@ def _render_lookup_card(symbol: str, company: str, m: dict, source: str, elapsed
 
 def render_lookup_section():
     """Phần tra cứu 1 mã — hiển thị đầu tab."""
-    st.markdown("### 🔎 Tra cứu nhanh 1 mã")
+    ui_kit.section("🔎 Tra cứu nhanh 1 mã")
 
-    col_inp, col_btn = st.columns([3, 1])
+    col_inp, col_btn = st.columns([3, 1], vertical_alignment="bottom")
     with col_inp:
         symbol_input = st.text_input(
             "Nhập mã cổ phiếu",
@@ -571,7 +591,7 @@ def render_lookup_section():
             key="sb_lookup_input",
         ).upper().strip()
     with col_btn:
-        lookup_btn = st.button("📊 Tra cứu", use_container_width=True, key="sb_lookup_btn")
+        lookup_btn = st.button("📊 Tra cứu", width="stretch", key="sb_lookup_btn")
 
     if not (lookup_btn or symbol_input) and "sb_lookup_result" not in st.session_state:
         st.caption("Gõ mã → Enter hoặc nhấn **Tra cứu** để xem ngay. Không cần scan toàn thị trường.")
@@ -637,6 +657,16 @@ def get_all_symbols(exchanges: list) -> list:
     3 cách gọi API (Vnstock 4.x / listing_companies 3.x / Listing api mới),
     đúng logic đã chứng minh hoạt động trong breadth_scanner.py (lấy được
     403 mã HOSE thành công)."""
+    # SỬA TỐC ĐỘ: đọc danh sách tĩnh tickers.json trước (tức thì, không gọi vnstock)
+    try:
+        import tcbs_client
+        fast = []
+        for ex in exchanges:
+            fast += tcbs_client.list_symbols(ex)
+        if len(fast) >= 50:
+            return sorted(set(fast))
+    except Exception:
+        pass
     symbols = []
 
     def _get_listing_df(src):
@@ -760,20 +790,28 @@ def scan_all(
     results = []
     total   = len(symbols)
 
-    for i, sym in enumerate(symbols):
-        if progress_bar:
-            progress_bar.progress((i + 1) / total, text=f"Đang quét {sym}… ({i+1}/{total})")
-        if status_text:
-            status_text.text(f"⏳ {sym}")
-
-        row = _compute_symbol_scan(sym)
-        if row:
-            beta = row["_drawdown_abs"] / vn_dd if vn_dd > 0 else 1.0
-            row["beta_dd"]       = round(beta, 2)
-            row["suc_bat_score"] = round(row["_drawdown_abs"] * beta * 100, 2)
-            row["do_gian_score"] = round(row["_speed_abs"]    * beta * 1000, 2)
-            results.append(row)
-        time.sleep(batch_delay)
+    # SỬA TỐC ĐỘ: quét SONG SONG 6 luồng thay vì tuần tự + nghỉ 0,12s/mã
+    # (HOSE ~390 mã: từ 5-10 phút xuống còn khoảng 1-2 phút). Thanh tiến độ cập nhật ở luồng chính.
+    done = 0
+    with _cf.ThreadPoolExecutor(max_workers=6) as ex:
+        futs = {ex.submit(_compute_symbol_scan, sym): sym for sym in symbols}
+        for fut in _cf.as_completed(futs):
+            done += 1
+            sym = futs[fut]
+            if progress_bar:
+                progress_bar.progress(done / total, text=f"Đang quét… {done}/{total} mã")
+            if status_text:
+                status_text.text(f"⏳ {sym}")
+            try:
+                row = fut.result()
+            except Exception:
+                row = None
+            if row:
+                beta = row["_drawdown_abs"] / vn_dd if vn_dd > 0 else 1.0
+                row["beta_dd"]       = round(beta, 2)
+                row["suc_bat_score"] = round(row["_drawdown_abs"] * beta * 100, 2)
+                row["do_gian_score"] = round(row["_speed_abs"]    * beta * 1000, 2)
+                results.append(row)
 
     df = pd.DataFrame(results)
     if df.empty:
@@ -809,7 +847,7 @@ def _sr_str(sr_levels: list) -> str:
 
 def render_scan_section():
     """Phần scan toàn thị trường — bên dưới lookup."""
-    st.markdown("### 🔍 Scan toàn thị trường")
+    ui_kit.section("🔍 Scan toàn thị trường")
 
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
@@ -820,13 +858,13 @@ def render_scan_section():
     with col3:
         min_dd = st.number_input("DD tối thiểu (%)", min_value=5, max_value=60, value=15)
 
-    col_a, col_b = st.columns([1, 2])
+    col_a, col_b = st.columns([1, 2], vertical_alignment="center")
     with col_a:
-        run_btn = st.button("▶ Bắt đầu Scan", use_container_width=True,
+        run_btn = st.button("▶ Bắt đầu Scan", width="stretch",
                             type="primary", key="sb_scan_btn")
     with col_b:
-        st.caption("⏱️ Dữ liệu tải từ 01/2025 đến nay (biến động ngắn hạn), pha giảm/hồi tính trên "
-                   "khung này · HOSE ~700 mã ≈ 5–10 phút | HNX+UPCOM thêm ~800 mã. Nên chọn 1 sàn trước.")
+        st.caption("⏱️ Dữ liệu từ 01/2025 đến nay, quét song song · HOSE ~390 mã ≈ 1–2 phút, "
+                   "HNX + UPCoM thêm ~1.000 mã.")
 
     cache_key = f"suc_bat_df_{','.join(sorted(exchanges))}"
 
@@ -863,19 +901,19 @@ def render_scan_section():
         </div>
         <div class="sb-stat">
             <div class="sb-stat-label">DD TB top 10</div>
-            <div class="sb-stat-value" style="color:#ff5252">
+            <div class="sb-stat-value" style="color:#ef4444">
                 {df_show['drawdown_pct'].head(10).mean():.1f}%
             </div>
         </div>
         <div class="sb-stat">
             <div class="sb-stat-label">Hồi TB top 10</div>
-            <div class="sb-stat-value" style="color:#00e676">
+            <div class="sb-stat-value" style="color:#22c55e">
                 +{df_show['recovery_pct'].head(10).mean():.1f}%
             </div>
         </div>
         <div class="sb-stat">
             <div class="sb-stat-label">Beta DD TB top 10</div>
-            <div class="sb-stat-value" style="color:#ffd740">
+            <div class="sb-stat-value" style="color:#f5a524">
                 {df_show['beta_dd'].head(10).mean():.2f}x
             </div>
         </div>
@@ -901,20 +939,20 @@ def render_scan_section():
         styles = pd.DataFrame("", index=df_s.index, columns=df_s.columns)
         if "Độ giãn%" in df_s.columns:
             styles["Độ giãn%"] = df_s["Độ giãn%"].apply(
-                lambda v: "color:#ff5252;font-weight:700" if v < -30
+                lambda v: "color:#ef4444;font-weight:700" if v < -30
                 else ("color:#ff8a65" if v < -20 else "color:#ffcc80"))
         if "Sức bật" in df_s.columns:
             styles["Sức bật"] = df_s["Sức bật"].apply(
-                lambda v: "color:#00e676;font-weight:800" if v >= 2
-                else ("color:#ffd740;font-weight:700" if v >= 1 else "color:#ff5252"))
+                lambda v: "color:#22c55e;font-weight:800" if v >= 2
+                else ("color:#f5a524;font-weight:700" if v >= 1 else "color:#ef4444"))
         if "Hồi%" in df_s.columns:
             styles["Hồi%"] = df_s["Hồi%"].apply(
-                lambda v: "color:#00e676;font-weight:700" if v > 10
+                lambda v: "color:#22c55e;font-weight:700" if v > 10
                 else ("color:#69db7c" if v > 5 else "color:#aaa"))
         if "⭐ Score" in df_s.columns:
             styles["⭐ Score"] = df_s["⭐ Score"].apply(
-                lambda v: "color:#00e676;font-weight:800" if v >= 70
-                else ("color:#ffd740;font-weight:700" if v >= 40 else "color:#ff5252"))
+                lambda v: "color:#22c55e;font-weight:800" if v >= 70
+                else ("color:#f5a524;font-weight:700" if v >= 40 else "color:#ef4444"))
         return styles
 
     styled = df_table.style.apply(_style, axis=None).format({
@@ -925,39 +963,39 @@ def render_scan_section():
         "Hồi%":       "+{:.1f}%",
         "⭐ Score":    "{:.0f}",
     })
-    st.dataframe(styled, use_container_width=True, hide_index=True, height=500)
+    st.dataframe(styled, width="stretch", hide_index=True, height=500)
 
     # Chi tiết KC/HT
-    st.markdown("---")
-    st.markdown("#### 🎯 Vùng Kháng Cự / Hỗ Trợ (Volume Profile)")
-    selected_sym = st.selectbox("Chọn mã xem chi tiết",
-                                options=df_show["symbol"].tolist(),
-                                key="sb_sr_select")
-    row = df_show[df_show["symbol"] == selected_sym].iloc[0]
-    sr  = row.get("sr_levels", [])
-    if sr:
-        kc_list = [(p, v) for p, v, r in sr if r == "KC"]
-        ht_list = [(p, v) for p, v, r in sr if r == "HT"]
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("**🔴 Kháng cự**")
-            for p, v in kc_list:
-                st.markdown(
-                    f"<span style='color:#ff5252;font-weight:700'>{p:,.2f}</span>"
-                    f" &nbsp; vol: <span style='color:#aaa'>{v:.1f}%</span>",
-                    unsafe_allow_html=True)
-        with c2:
-            st.markdown("**🟢 Hỗ trợ**")
-            for p, v in ht_list:
-                st.markdown(
-                    f"<span style='color:#00e676;font-weight:700'>{p:,.2f}</span>"
-                    f" &nbsp; vol: <span style='color:#aaa'>{v:.1f}%</span>",
-                    unsafe_allow_html=True)
-    else:
-        st.info("Không có dữ liệu KC/HT cho mã này.")
+    # Chỉ hiện khi có dữ liệu KC/HT (bản quét hiện chưa tính volume profile -> ẩn thay vì báo "không có dữ liệu")
+    if "sr_levels" in df_show.columns and df_show["sr_levels"].map(bool).any():
+        ui_kit.section("🎯 Vùng Kháng Cự / Hỗ Trợ (Volume Profile)")
+        selected_sym = st.selectbox("Chọn mã xem chi tiết",
+                                    options=df_show["symbol"].tolist(),
+                                    key="sb_sr_select")
+        row = df_show[df_show["symbol"] == selected_sym].iloc[0]
+        sr  = row.get("sr_levels", [])
+        if sr:
+            kc_list = [(p, v) for p, v, r in sr if r == "KC"]
+            ht_list = [(p, v) for p, v, r in sr if r == "HT"]
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("**🔴 Kháng cự**")
+                for p, v in kc_list:
+                    st.markdown(
+                        f"<span style='color:#ef4444;font-weight:700'>{p:,.2f}</span>"
+                        f" &nbsp; vol: <span style='color:#aaa'>{v:.1f}%</span>",
+                        unsafe_allow_html=True)
+            with c2:
+                st.markdown("**🟢 Hỗ trợ**")
+                for p, v in ht_list:
+                    st.markdown(
+                        f"<span style='color:#22c55e;font-weight:700'>{p:,.2f}</span>"
+                        f" &nbsp; vol: <span style='color:#aaa'>{v:.1f}%</span>",
+                        unsafe_allow_html=True)
+        else:
+            st.info("Không có dữ liệu KC/HT cho mã này.")
 
     # Export
-    st.markdown("---")
     csv = df_show.drop(
         columns=["sr_levels", "_drawdown_abs", "_speed_abs"], errors="ignore"
     ).to_csv(index=False)
@@ -978,26 +1016,12 @@ def render_scan_section():
 # ─────────────────────────────────────────────────────────────
 
 def render_suc_bat_tab():
-    st.markdown(_CSS, unsafe_allow_html=True)
+    # CSS dùng chung nằm ở ui_kit (bản _CSS cục bộ trùng lặp, ghi đè màu -> không chèn nữa)
 
-    st.markdown("""
-    <div class="sb-header">
-        <div>
-            <div class="sb-title">🚀 Screener Sức Bật</div>
-            <div class="sb-sub">
-                Lọc cổ phiếu giảm sâu – giảm nhanh – tiềm năng bật mạnh hơn thị trường
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="sb-note">
-        ⚠️ Screener này đo <b>pha tăng/giảm ngắn hạn từ 01/2025 đến nay</b> —
-        không còn phản ánh mức hồi phục từ đáy vĩ mô 2022.
-        Về sau cần kết hợp Volume + Ichimoku — không áp dụng mãi.
-    </div>
-    """, unsafe_allow_html=True)
+    ui_kit.page_header("🚀 Screener Sức Bật",
+                       "Lọc cổ phiếu giảm sâu – giảm nhanh – tiềm năng bật mạnh hơn thị trường")
+    ui_kit.note("⚠️ Screener đo <b>pha tăng/giảm ngắn hạn từ 01/2025 đến nay</b> — không phản ánh mức hồi "
+                "phục từ đáy 2022. Nên kết hợp thêm Volume + Ichimoku khi ra quyết định.")
 
     # 1. Tra cứu 1 mã (luôn hiện trên đầu)
     render_lookup_section()
@@ -1010,7 +1034,7 @@ def render_suc_bat_tab():
     #    hoặc một mã bị lỗi tạm thời đã bị cache 30 phút — xem OhlcvNotFound
     #    ở trên để biết lý do lỗi đó không còn tái diễn kể từ bản patch này).
     st.divider()
-    if st.button("🗑️ Xoá cache dữ liệu Sức Bật", key="sb_clear_cache"):
+    if st.button("🗑️ Xoá cache dữ liệu Sức Bật", key="sb_clear_cache", type="tertiary"):
         fetch_ohlcv.clear()
         fetch_ohlcv_fast.clear()
         _vnindex_drawdown.clear()

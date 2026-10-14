@@ -28,6 +28,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from data_loader import get_stock_data, get_data_freshness, get_all_tickers
+import ui_kit
 
 W_T1, W_T2 = 0.30, 0.30          # tỷ trọng bán tầng 1, tầng 2 (tầng 3 = phần còn lại 40%)
 
@@ -173,18 +174,18 @@ def build_chart(res, n_bars=110):
                         vertical_spacing=0.03)
     fig.add_trace(go.Candlestick(
         x=x, open=d["open"], high=d["high"], low=d["low"], close=d["close"],
-        increasing_line_color="#22c55e", increasing_fillcolor="#22c55e",
-        decreasing_line_color="#ef4444", decreasing_fillcolor="#ef4444",
+        increasing_line_color=ui_kit.UP, increasing_fillcolor=ui_kit.UP,
+        decreasing_line_color=ui_kit.DOWN, decreasing_fillcolor=ui_kit.DOWN,
         name="Giá", showlegend=False), row=1, col=1)
     fig.add_trace(go.Scatter(
-        x=x, y=d["line"], mode="lines", line=dict(color="#ef4444", width=2, shape="hv"),
+        x=x, y=d["line"], mode="lines", line=dict(color=ui_kit.SERIES[4], width=2, shape="hv"),
         name="Đường 129"), row=1, col=1)
 
     vcol = np.where(d["close"] >= d["open"], "rgba(34,197,94,.65)", "rgba(239,68,68,.65)")
     fig.add_trace(go.Bar(x=x, y=d["volume"], marker_color=vcol, name="Volume",
                          showlegend=False), row=2, col=1)
     fig.add_trace(go.Scatter(x=x, y=d["vol_ma"], mode="lines",
-                             line=dict(color="#a78bfa", width=1.5), name="MA20 Vol",
+                             line=dict(color=ui_kit.SERIES[1], width=1.5), name="MA20 Vol",
                              showlegend=False), row=2, col=1)
 
     if res["status"] == "BUY":
@@ -203,14 +204,8 @@ def build_chart(res, n_bars=110):
             fig.add_shape(type="line", x0=x.iloc[k0], x1=x.iloc[-1], y0=lvl, y1=lvl,
                           line=dict(color=col, width=1.4, dash=dash), row=1, col=1)
 
-    fig.update_layout(
-        template="plotly_dark", height=520, margin=dict(l=10, r=10, t=10, b=10),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        xaxis_rangeslider_visible=False, legend=dict(orientation="h", y=1.02),
-        font=dict(family="Sora, sans-serif", size=11),
-    )
+    ui_kit.style_fig(fig, 520, dates=False)
     fig.update_xaxes(type="category", nticks=8, showgrid=False)
-    fig.update_yaxes(gridcolor="rgba(255,255,255,.06)")
     return fig
 
 
@@ -258,7 +253,7 @@ def render_card(ticker, res):
   <div class="lk-company">Chưa có lệnh mở. Đường 129 hiện tại: <b>{_fmt(res['lvl3'])}</b>.{extra}</div>
 </div>""", unsafe_allow_html=True)
 
-    st.plotly_chart(build_chart(res), use_container_width=True)
+    ui_kit.plot(build_chart(res))
     msg = f"Nến cuối {res['last_date']:%d/%m/%Y}"
     if fresh.get("is_stale"):
         msg += f" · ⚠️ dữ liệu trễ {fresh['lag_days']} ngày so với phiên kỳ vọng ({fresh['expected_date']:%d/%m/%Y})"
@@ -286,10 +281,8 @@ def _show_detail(code, p_line, vol_mult, p_break, p_swing):
 
 
 def render_tin_hieu_ngay_tab(tickers):
-    st.markdown("""
-    <div class="sb-header"><div class="sb-title">🕯️ Tín hiệu khuyến nghị — Khung ngày</div>
-    <div class="sb-sub">Điểm vào / điểm ra theo 3 tầng, dựa trên nến ngày đã đóng cửa</div></div>
-    """, unsafe_allow_html=True)
+    ui_kit.page_header("🕯️ Tín hiệu khuyến nghị — Khung ngày",
+                       "Điểm vào / điểm ra theo 3 tầng, dựa trên nến ngày đã đóng cửa")
 
     with st.expander("⚙️ Tham số & luật", expanded=False):
         c1, c2, c3, c4 = st.columns(4)
@@ -318,11 +311,11 @@ def render_tin_hieu_ngay_tab(tickers):
         st.divider()
 
     # ---------- BẢNG QUÉT CÁC MÃ ƯU TIÊN ----------
-    st.markdown("#### 📋 Quét các mã ưu tiên")
+    ui_kit.section("📋 Quét các mã ưu tiên")
     universe = list(dict.fromkeys([str(t).strip().upper() for t in tickers if str(t).strip()]))
 
-    col_a, col_b = st.columns([1, 3])
-    if col_a.button("🔄 Quét lại", use_container_width=True):
+    col_a, col_b = st.columns([1, 3], vertical_alignment="center")
+    if col_a.button("🔄 Quét lại", width="stretch"):
         scan_signals.clear()
     only_buy = col_b.checkbox("Chỉ hiện mã đang BUY", value=True)
 
@@ -340,7 +333,7 @@ def render_tin_hieu_ngay_tab(tickers):
     shown = scan_df[scan_df["Trạng thái"] == "ĐANG BUY"] if only_buy else scan_df
     if "Số phiên" in shown.columns:
         shown = shown.sort_values("Số phiên", na_position="last")
-    st.dataframe(shown, use_container_width=True, hide_index=True)
+    st.dataframe(shown, width="stretch", hide_index=True)
 
     if search:
         st.caption("💡 Xoá ô tìm kiếm ở trên để xem chi tiết các mã trong bảng quét.")
