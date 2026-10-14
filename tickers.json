@@ -1,0 +1,5594 @@
+[
+{
+"symbol": "AAA",
+"exchange": "HOSE"
+},
+{
+"symbol": "AAH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "AAM",
+"exchange": "HOSE"
+},
+{
+"symbol": "AAN",
+"exchange": "HOSE"
+},
+{
+"symbol": "AAS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "AAT",
+"exchange": "HOSE"
+},
+{
+"symbol": "AAV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ABB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ABC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ABI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ABR",
+"exchange": "HOSE"
+},
+{
+"symbol": "ABS",
+"exchange": "HOSE"
+},
+{
+"symbol": "ABT",
+"exchange": "HOSE"
+},
+{
+"symbol": "ABW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ACB",
+"exchange": "HOSE"
+},
+{
+"symbol": "ACC",
+"exchange": "HOSE"
+},
+{
+"symbol": "ACE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ACG",
+"exchange": "HOSE"
+},
+{
+"symbol": "ACL",
+"exchange": "HOSE"
+},
+{
+"symbol": "ACM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ACS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ACV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ADC",
+"exchange": "HNX"
+},
+{
+"symbol": "ADG",
+"exchange": "HOSE"
+},
+{
+"symbol": "ADP",
+"exchange": "HOSE"
+},
+{
+"symbol": "ADS",
+"exchange": "HOSE"
+},
+{
+"symbol": "AFX",
+"exchange": "HOSE"
+},
+{
+"symbol": "AGF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "AGG",
+"exchange": "HOSE"
+},
+{
+"symbol": "AGM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "AGP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "AGR",
+"exchange": "HOSE"
+},
+{
+"symbol": "AGX",
+"exchange": "UPCOM"
+},
+{
+"symbol": "AIC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "AIG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ALC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ALT",
+"exchange": "HNX"
+},
+{
+"symbol": "ALV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "AMC",
+"exchange": "HNX"
+},
+{
+"symbol": "AME",
+"exchange": "HNX"
+},
+{
+"symbol": "AMP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "AMS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "AMV",
+"exchange": "HNX"
+},
+{
+"symbol": "ANI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ANT",
+"exchange": "HOSE"
+},
+{
+"symbol": "ANV",
+"exchange": "HOSE"
+},
+{
+"symbol": "APC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "APF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "APG",
+"exchange": "HOSE"
+},
+{
+"symbol": "APH",
+"exchange": "HOSE"
+},
+{
+"symbol": "API",
+"exchange": "HNX"
+},
+{
+"symbol": "APL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "APP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "APS",
+"exchange": "HNX"
+},
+{
+"symbol": "APT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ARM",
+"exchange": "HNX"
+},
+{
+"symbol": "ART",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ASG",
+"exchange": "HOSE"
+},
+{
+"symbol": "ASM",
+"exchange": "HOSE"
+},
+{
+"symbol": "ASP",
+"exchange": "HOSE"
+},
+{
+"symbol": "AST",
+"exchange": "HOSE"
+},
+{
+"symbol": "ATA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ATG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ATS",
+"exchange": "HNX"
+},
+{
+"symbol": "AVC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "AVG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BAB",
+"exchange": "HNX"
+},
+{
+"symbol": "BAF",
+"exchange": "HOSE"
+},
+{
+"symbol": "BAL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BAX",
+"exchange": "HNX"
+},
+{
+"symbol": "BBH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BBM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BBS",
+"exchange": "HNX"
+},
+{
+"symbol": "BBT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BCA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BCB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BCC",
+"exchange": "HNX"
+},
+{
+"symbol": "BCE",
+"exchange": "HOSE"
+},
+{
+"symbol": "BCF",
+"exchange": "HNX"
+},
+{
+"symbol": "BCM",
+"exchange": "HOSE"
+},
+{
+"symbol": "BCP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BCR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BCV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BDG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BDT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BDW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BED",
+"exchange": "HNX"
+},
+{
+"symbol": "BEL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BFC",
+"exchange": "HOSE"
+},
+{
+"symbol": "BGE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BGW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BHA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BHC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BHG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BHH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BHI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BHK",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BHN",
+"exchange": "HOSE"
+},
+{
+"symbol": "BHP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BIC",
+"exchange": "HOSE"
+},
+{
+"symbol": "BID",
+"exchange": "HOSE"
+},
+{
+"symbol": "BIG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BIO",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BKC",
+"exchange": "HNX"
+},
+{
+"symbol": "BKG",
+"exchange": "HOSE"
+},
+{
+"symbol": "BLF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BLI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BLN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BLT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BMC",
+"exchange": "HOSE"
+},
+{
+"symbol": "BMD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BMF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BMG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BMI",
+"exchange": "HOSE"
+},
+{
+"symbol": "BMJ",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BMK",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BMP",
+"exchange": "HOSE"
+},
+{
+"symbol": "BMS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BMV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BNA",
+"exchange": "HNX"
+},
+{
+"symbol": "BNW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BOT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BPC",
+"exchange": "HNX"
+},
+{
+"symbol": "BQB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BQP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BRC",
+"exchange": "HOSE"
+},
+{
+"symbol": "BRR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BRS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BSA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BSD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BSG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BSH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BSI",
+"exchange": "HOSE"
+},
+{
+"symbol": "BSL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BSP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BSQ",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BSR",
+"exchange": "HOSE"
+},
+{
+"symbol": "BTB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BTD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BTG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BTH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BTN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BTP",
+"exchange": "HOSE"
+},
+{
+"symbol": "BTS",
+"exchange": "HNX"
+},
+{
+"symbol": "BTT",
+"exchange": "HOSE"
+},
+{
+"symbol": "BTU",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BTV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BTW",
+"exchange": "HNX"
+},
+{
+"symbol": "BVG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BVH",
+"exchange": "HOSE"
+},
+{
+"symbol": "BVL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BVN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BVS",
+"exchange": "HNX"
+},
+{
+"symbol": "BWA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BWE",
+"exchange": "HOSE"
+},
+{
+"symbol": "BWS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "BXH",
+"exchange": "HNX"
+},
+{
+"symbol": "CAD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CAG",
+"exchange": "HNX"
+},
+{
+"symbol": "CAN",
+"exchange": "HNX"
+},
+{
+"symbol": "CAP",
+"exchange": "HNX"
+},
+{
+"symbol": "CAR",
+"exchange": "HNX"
+},
+{
+"symbol": "CAT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CBI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CBS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CCA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CCC",
+"exchange": "HOSE"
+},
+{
+"symbol": "CCI",
+"exchange": "HOSE"
+},
+{
+"symbol": "CCL",
+"exchange": "HOSE"
+},
+{
+"symbol": "CCM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CCP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CCR",
+"exchange": "HNX"
+},
+{
+"symbol": "CCS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CCT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CCV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CDC",
+"exchange": "HOSE"
+},
+{
+"symbol": "CDG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CDN",
+"exchange": "HNX"
+},
+{
+"symbol": "CDO",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CDP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CDR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CEN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CEO",
+"exchange": "HNX"
+},
+{
+"symbol": "CET",
+"exchange": "HNX"
+},
+{
+"symbol": "CFM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CFV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CGV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CHC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CHP",
+"exchange": "HOSE"
+},
+{
+"symbol": "CHS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CIA",
+"exchange": "HNX"
+},
+{
+"symbol": "CID",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CIG",
+"exchange": "HOSE"
+},
+{
+"symbol": "CII",
+"exchange": "HOSE"
+},
+{
+"symbol": "CIP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CJC",
+"exchange": "HNX"
+},
+{
+"symbol": "CKA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CKD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CKG",
+"exchange": "HOSE"
+},
+{
+"symbol": "CKV",
+"exchange": "HNX"
+},
+{
+"symbol": "CLC",
+"exchange": "HOSE"
+},
+{
+"symbol": "CLH",
+"exchange": "HNX"
+},
+{
+"symbol": "CLI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CLL",
+"exchange": "HOSE"
+},
+{
+"symbol": "CLM",
+"exchange": "HNX"
+},
+{
+"symbol": "CLW",
+"exchange": "HOSE"
+},
+{
+"symbol": "CLX",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CMC",
+"exchange": "HNX"
+},
+{
+"symbol": "CMD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CMF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CMG",
+"exchange": "HOSE"
+},
+{
+"symbol": "CMI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CMK",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CMM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CMN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CMP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CMS",
+"exchange": "HNX"
+},
+{
+"symbol": "CMT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CMV",
+"exchange": "HOSE"
+},
+{
+"symbol": "CMW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CMX",
+"exchange": "HOSE"
+},
+{
+"symbol": "CNA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CNC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CNG",
+"exchange": "HOSE"
+},
+{
+"symbol": "CNN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CNT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "COM",
+"exchange": "HOSE"
+},
+{
+"symbol": "CPA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CPC",
+"exchange": "HNX"
+},
+{
+"symbol": "CPH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CPI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CQN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CQT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CRC",
+"exchange": "HOSE"
+},
+{
+"symbol": "CRE",
+"exchange": "HOSE"
+},
+{
+"symbol": "CRV",
+"exchange": "HOSE"
+},
+{
+"symbol": "CSC",
+"exchange": "HNX"
+},
+{
+"symbol": "CSI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CSM",
+"exchange": "HOSE"
+},
+{
+"symbol": "CST",
+"exchange": "HNX"
+},
+{
+"symbol": "CSV",
+"exchange": "HOSE"
+},
+{
+"symbol": "CTB",
+"exchange": "HNX"
+},
+{
+"symbol": "CTD",
+"exchange": "HOSE"
+},
+{
+"symbol": "CTF",
+"exchange": "HOSE"
+},
+{
+"symbol": "CTG",
+"exchange": "HOSE"
+},
+{
+"symbol": "CTI",
+"exchange": "HOSE"
+},
+{
+"symbol": "CTP",
+"exchange": "HNX"
+},
+{
+"symbol": "CTR",
+"exchange": "HOSE"
+},
+{
+"symbol": "CTS",
+"exchange": "HOSE"
+},
+{
+"symbol": "CTT",
+"exchange": "HNX"
+},
+{
+"symbol": "CTW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CTX",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CVN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "CVT",
+"exchange": "HOSE"
+},
+{
+"symbol": "CYC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DAC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DAD",
+"exchange": "HNX"
+},
+{
+"symbol": "DAE",
+"exchange": "HNX"
+},
+{
+"symbol": "DAG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DAH",
+"exchange": "HOSE"
+},
+{
+"symbol": "DAN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DAS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DAT",
+"exchange": "HOSE"
+},
+{
+"symbol": "DBC",
+"exchange": "HOSE"
+},
+{
+"symbol": "DBD",
+"exchange": "HOSE"
+},
+{
+"symbol": "DBM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DBT",
+"exchange": "HOSE"
+},
+{
+"symbol": "DCF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DCG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DCH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DCL",
+"exchange": "HOSE"
+},
+{
+"symbol": "DCM",
+"exchange": "HOSE"
+},
+{
+"symbol": "DCR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DCS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DCT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DCV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DDB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DDG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DDH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DDM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DDN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DDV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DFC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DFF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DGC",
+"exchange": "HOSE"
+},
+{
+"symbol": "DGT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DGW",
+"exchange": "HOSE"
+},
+{
+"symbol": "DHA",
+"exchange": "HOSE"
+},
+{
+"symbol": "DHB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DHC",
+"exchange": "HOSE"
+},
+{
+"symbol": "DHD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DHG",
+"exchange": "HOSE"
+},
+{
+"symbol": "DHM",
+"exchange": "HOSE"
+},
+{
+"symbol": "DHN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DHP",
+"exchange": "HNX"
+},
+{
+"symbol": "DHT",
+"exchange": "HNX"
+},
+{
+"symbol": "DIC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DID",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DIG",
+"exchange": "HOSE"
+},
+{
+"symbol": "DIH",
+"exchange": "HNX"
+},
+{
+"symbol": "DKC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DKG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DLD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DLG",
+"exchange": "HOSE"
+},
+{
+"symbol": "DLR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DLT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DMC",
+"exchange": "HOSE"
+},
+{
+"symbol": "DMN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DNA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DNC",
+"exchange": "HNX"
+},
+{
+"symbol": "DND",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DNE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DNH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DNL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DNM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DNN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DNP",
+"exchange": "HNX"
+},
+{
+"symbol": "DNT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DNW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DOC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DOP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DPC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DPG",
+"exchange": "HOSE"
+},
+{
+"symbol": "DPH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DPM",
+"exchange": "HOSE"
+},
+{
+"symbol": "DPP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DPR",
+"exchange": "HOSE"
+},
+{
+"symbol": "DQC",
+"exchange": "HOSE"
+},
+{
+"symbol": "DRC",
+"exchange": "HOSE"
+},
+{
+"symbol": "DRG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DRH",
+"exchange": "HOSE"
+},
+{
+"symbol": "DRI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DRL",
+"exchange": "HOSE"
+},
+{
+"symbol": "DSC",
+"exchange": "HOSE"
+},
+{
+"symbol": "DSD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DSE",
+"exchange": "HOSE"
+},
+{
+"symbol": "DSG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DSH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DSN",
+"exchange": "HOSE"
+},
+{
+"symbol": "DSP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DST",
+"exchange": "HNX"
+},
+{
+"symbol": "DTA",
+"exchange": "HOSE"
+},
+{
+"symbol": "DTC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DTD",
+"exchange": "HNX"
+},
+{
+"symbol": "DTG",
+"exchange": "HNX"
+},
+{
+"symbol": "DTH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DTI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DTK",
+"exchange": "HNX"
+},
+{
+"symbol": "DTL",
+"exchange": "HOSE"
+},
+{
+"symbol": "DTP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DTT",
+"exchange": "HOSE"
+},
+{
+"symbol": "DUS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DVC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DVG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DVM",
+"exchange": "HNX"
+},
+{
+"symbol": "DVN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DVP",
+"exchange": "HOSE"
+},
+{
+"symbol": "DVT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DVW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DWC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DWS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DXG",
+"exchange": "HOSE"
+},
+{
+"symbol": "DXL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "DXP",
+"exchange": "HNX"
+},
+{
+"symbol": "DXS",
+"exchange": "HOSE"
+},
+{
+"symbol": "DXV",
+"exchange": "HOSE"
+},
+{
+"symbol": "EBS",
+"exchange": "HNX"
+},
+{
+"symbol": "ECI",
+"exchange": "HNX"
+},
+{
+"symbol": "ECO",
+"exchange": "UPCOM"
+},
+{
+"symbol": "EFI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "EGL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "EIB",
+"exchange": "HOSE"
+},
+{
+"symbol": "EIC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "EID",
+"exchange": "HNX"
+},
+{
+"symbol": "EIN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ELC",
+"exchange": "HOSE"
+},
+{
+"symbol": "EME",
+"exchange": "UPCOM"
+},
+{
+"symbol": "EMG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "EMS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "EVE",
+"exchange": "HOSE"
+},
+{
+"symbol": "EVF",
+"exchange": "HOSE"
+},
+{
+"symbol": "EVG",
+"exchange": "HOSE"
+},
+{
+"symbol": "EVS",
+"exchange": "HNX"
+},
+{
+"symbol": "FBC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "FCC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "FCM",
+"exchange": "HOSE"
+},
+{
+"symbol": "FCN",
+"exchange": "HOSE"
+},
+{
+"symbol": "FCS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "FDC",
+"exchange": "HOSE"
+},
+{
+"symbol": "FGL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "FHN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "FHS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "FIC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "FID",
+"exchange": "HNX"
+},
+{
+"symbol": "FIR",
+"exchange": "HOSE"
+},
+{
+"symbol": "FIT",
+"exchange": "HOSE"
+},
+{
+"symbol": "FMC",
+"exchange": "HOSE"
+},
+{
+"symbol": "FOC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "FOX",
+"exchange": "UPCOM"
+},
+{
+"symbol": "FPT",
+"exchange": "HOSE"
+},
+{
+"symbol": "FRC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "FRM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "FRT",
+"exchange": "HOSE"
+},
+{
+"symbol": "FSO",
+"exchange": "UPCOM"
+},
+{
+"symbol": "FTI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "FTM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "FTS",
+"exchange": "HOSE"
+},
+{
+"symbol": "GAS",
+"exchange": "HOSE"
+},
+{
+"symbol": "GCB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "GCF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "GDA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "GDH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "GDT",
+"exchange": "HOSE"
+},
+{
+"symbol": "GDW",
+"exchange": "HNX"
+},
+{
+"symbol": "GEE",
+"exchange": "HOSE"
+},
+{
+"symbol": "GEG",
+"exchange": "HOSE"
+},
+{
+"symbol": "GEL",
+"exchange": "HOSE"
+},
+{
+"symbol": "GER",
+"exchange": "UPCOM"
+},
+{
+"symbol": "GEX",
+"exchange": "HOSE"
+},
+{
+"symbol": "GGG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "GHC",
+"exchange": "HOSE"
+},
+{
+"symbol": "GIC",
+"exchange": "HNX"
+},
+{
+"symbol": "GIL",
+"exchange": "HOSE"
+},
+{
+"symbol": "GKM",
+"exchange": "HNX"
+},
+{
+"symbol": "GLC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "GLT",
+"exchange": "HNX"
+},
+{
+"symbol": "GLW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "GMA",
+"exchange": "HNX"
+},
+{
+"symbol": "GMC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "GMD",
+"exchange": "HOSE"
+},
+{
+"symbol": "GMH",
+"exchange": "HOSE"
+},
+{
+"symbol": "GMX",
+"exchange": "HNX"
+},
+{
+"symbol": "GND",
+"exchange": "UPCOM"
+},
+{
+"symbol": "GPC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "GSM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "GSP",
+"exchange": "HOSE"
+},
+{
+"symbol": "GTA",
+"exchange": "HOSE"
+},
+{
+"symbol": "GTD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "GTS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "GTT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "GVR",
+"exchange": "HOSE"
+},
+{
+"symbol": "GVT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HAC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HAD",
+"exchange": "HNX"
+},
+{
+"symbol": "HAF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HAG",
+"exchange": "HOSE"
+},
+{
+"symbol": "HAH",
+"exchange": "HOSE"
+},
+{
+"symbol": "HAM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HAN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HAP",
+"exchange": "HOSE"
+},
+{
+"symbol": "HAR",
+"exchange": "HOSE"
+},
+{
+"symbol": "HAS",
+"exchange": "HOSE"
+},
+{
+"symbol": "HAT",
+"exchange": "HNX"
+},
+{
+"symbol": "HAV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HAX",
+"exchange": "HOSE"
+},
+{
+"symbol": "HBC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HBD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HBH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HBS",
+"exchange": "HNX"
+},
+{
+"symbol": "HCC",
+"exchange": "HNX"
+},
+{
+"symbol": "HCD",
+"exchange": "HOSE"
+},
+{
+"symbol": "HCI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HCM",
+"exchange": "HOSE"
+},
+{
+"symbol": "HCT",
+"exchange": "HNX"
+},
+{
+"symbol": "HDA",
+"exchange": "HNX"
+},
+{
+"symbol": "HDB",
+"exchange": "HOSE"
+},
+{
+"symbol": "HDC",
+"exchange": "HOSE"
+},
+{
+"symbol": "HDG",
+"exchange": "HOSE"
+},
+{
+"symbol": "HDM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HDP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HDW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HEC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HEJ",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HEP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HES",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HEV",
+"exchange": "HNX"
+},
+{
+"symbol": "HFB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HFC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HFX",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HGM",
+"exchange": "HNX"
+},
+{
+"symbol": "HGT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HHB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HHC",
+"exchange": "HNX"
+},
+{
+"symbol": "HHG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HHN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HHP",
+"exchange": "HOSE"
+},
+{
+"symbol": "HHS",
+"exchange": "HOSE"
+},
+{
+"symbol": "HHV",
+"exchange": "HOSE"
+},
+{
+"symbol": "HID",
+"exchange": "HOSE"
+},
+{
+"symbol": "HII",
+"exchange": "HOSE"
+},
+{
+"symbol": "HIO",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HJC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HJS",
+"exchange": "HNX"
+},
+{
+"symbol": "HKB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HKT",
+"exchange": "HNX"
+},
+{
+"symbol": "HLA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HLB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HLC",
+"exchange": "HNX"
+},
+{
+"symbol": "HLD",
+"exchange": "HNX"
+},
+{
+"symbol": "HLO",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HLS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HLT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HLY",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HMC",
+"exchange": "HOSE"
+},
+{
+"symbol": "HMD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HMG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HMH",
+"exchange": "HNX"
+},
+{
+"symbol": "HMR",
+"exchange": "HNX"
+},
+{
+"symbol": "HMS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HNA",
+"exchange": "HOSE"
+},
+{
+"symbol": "HNB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HND",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HNF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HNG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HNI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HNM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HNP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HNR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HOM",
+"exchange": "HNX"
+},
+{
+"symbol": "HOT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HPA",
+"exchange": "HOSE"
+},
+{
+"symbol": "HPB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HPD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HPG",
+"exchange": "HOSE"
+},
+{
+"symbol": "HPH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HPI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HPO",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HPP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HPT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HPW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HPX",
+"exchange": "HOSE"
+},
+{
+"symbol": "HQC",
+"exchange": "HOSE"
+},
+{
+"symbol": "HRB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HRC",
+"exchange": "HOSE"
+},
+{
+"symbol": "HSA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HSG",
+"exchange": "HOSE"
+},
+{
+"symbol": "HSL",
+"exchange": "HOSE"
+},
+{
+"symbol": "HSM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HSP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HSV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HTC",
+"exchange": "HNX"
+},
+{
+"symbol": "HTE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HTG",
+"exchange": "HOSE"
+},
+{
+"symbol": "HTI",
+"exchange": "HOSE"
+},
+{
+"symbol": "HTL",
+"exchange": "HOSE"
+},
+{
+"symbol": "HTM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HTN",
+"exchange": "HOSE"
+},
+{
+"symbol": "HTP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HTT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HTV",
+"exchange": "HOSE"
+},
+{
+"symbol": "HUB",
+"exchange": "HOSE"
+},
+{
+"symbol": "HUG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HUT",
+"exchange": "HNX"
+},
+{
+"symbol": "HVA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HVH",
+"exchange": "HOSE"
+},
+{
+"symbol": "HVN",
+"exchange": "HOSE"
+},
+{
+"symbol": "HVT",
+"exchange": "HNX"
+},
+{
+"symbol": "HVX",
+"exchange": "UPCOM"
+},
+{
+"symbol": "HWS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "IBD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ICC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ICF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ICG",
+"exchange": "HNX"
+},
+{
+"symbol": "ICI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ICN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ICT",
+"exchange": "HOSE"
+},
+{
+"symbol": "IDC",
+"exchange": "HNX"
+},
+{
+"symbol": "IDI",
+"exchange": "HOSE"
+},
+{
+"symbol": "IDJ",
+"exchange": "HNX"
+},
+{
+"symbol": "IDP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "IDV",
+"exchange": "HNX"
+},
+{
+"symbol": "IFS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "IJC",
+"exchange": "HOSE"
+},
+{
+"symbol": "ILA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ILB",
+"exchange": "HOSE"
+},
+{
+"symbol": "ILC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ILS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "IME",
+"exchange": "UPCOM"
+},
+{
+"symbol": "IMP",
+"exchange": "HOSE"
+},
+{
+"symbol": "INC",
+"exchange": "HNX"
+},
+{
+"symbol": "INN",
+"exchange": "HNX"
+},
+{
+"symbol": "IPA",
+"exchange": "HNX"
+},
+{
+"symbol": "IRC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ISG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ISH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "IST",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ITA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ITC",
+"exchange": "HOSE"
+},
+{
+"symbol": "ITD",
+"exchange": "HOSE"
+},
+{
+"symbol": "ITQ",
+"exchange": "HNX"
+},
+{
+"symbol": "ITS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "IVS",
+"exchange": "HNX"
+},
+{
+"symbol": "JOS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "JVC",
+"exchange": "HOSE"
+},
+{
+"symbol": "KBC",
+"exchange": "HOSE"
+},
+{
+"symbol": "KCB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "KDC",
+"exchange": "HOSE"
+},
+{
+"symbol": "KDH",
+"exchange": "HOSE"
+},
+{
+"symbol": "KDM",
+"exchange": "HNX"
+},
+{
+"symbol": "KGM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "KHD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "KHG",
+"exchange": "HOSE"
+},
+{
+"symbol": "KHP",
+"exchange": "HOSE"
+},
+{
+"symbol": "KHS",
+"exchange": "HNX"
+},
+{
+"symbol": "KHW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "KHX",
+"exchange": "UPCOM"
+},
+{
+"symbol": "KIP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "KKC",
+"exchange": "HNX"
+},
+{
+"symbol": "KLB",
+"exchange": "HOSE"
+},
+{
+"symbol": "KMR",
+"exchange": "HOSE"
+},
+{
+"symbol": "KMT",
+"exchange": "HNX"
+},
+{
+"symbol": "KOS",
+"exchange": "HOSE"
+},
+{
+"symbol": "KPF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "KSB",
+"exchange": "HOSE"
+},
+{
+"symbol": "KSD",
+"exchange": "HNX"
+},
+{
+"symbol": "KSF",
+"exchange": "HNX"
+},
+{
+"symbol": "KSQ",
+"exchange": "UPCOM"
+},
+{
+"symbol": "KST",
+"exchange": "HNX"
+},
+{
+"symbol": "KSV",
+"exchange": "HNX"
+},
+{
+"symbol": "KTC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "KTL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "KTS",
+"exchange": "HNX"
+},
+{
+"symbol": "KTT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "KVC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LAF",
+"exchange": "HOSE"
+},
+{
+"symbol": "LAI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LAS",
+"exchange": "HNX"
+},
+{
+"symbol": "LAW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LBE",
+"exchange": "HNX"
+},
+{
+"symbol": "LBM",
+"exchange": "HOSE"
+},
+{
+"symbol": "LCD",
+"exchange": "HNX"
+},
+{
+"symbol": "LCG",
+"exchange": "HOSE"
+},
+{
+"symbol": "LCM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LDG",
+"exchange": "HOSE"
+},
+{
+"symbol": "LDP",
+"exchange": "HNX"
+},
+{
+"symbol": "LDW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LEC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LGC",
+"exchange": "HOSE"
+},
+{
+"symbol": "LGL",
+"exchange": "HOSE"
+},
+{
+"symbol": "LHC",
+"exchange": "HNX"
+},
+{
+"symbol": "LHG",
+"exchange": "HOSE"
+},
+{
+"symbol": "LIC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LIG",
+"exchange": "HNX"
+},
+{
+"symbol": "LIX",
+"exchange": "HOSE"
+},
+{
+"symbol": "LKW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LLM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LMC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LMH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LMI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LNC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LPB",
+"exchange": "HOSE"
+},
+{
+"symbol": "LPT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LQN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LSG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LSS",
+"exchange": "HOSE"
+},
+{
+"symbol": "LTC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LTG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "LUT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MAC",
+"exchange": "HNX"
+},
+{
+"symbol": "MAS",
+"exchange": "HNX"
+},
+{
+"symbol": "MBB",
+"exchange": "HOSE"
+},
+{
+"symbol": "MBG",
+"exchange": "HNX"
+},
+{
+"symbol": "MBN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MBS",
+"exchange": "HNX"
+},
+{
+"symbol": "MBT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MCC",
+"exchange": "HNX"
+},
+{
+"symbol": "MCF",
+"exchange": "HNX"
+},
+{
+"symbol": "MCG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MCH",
+"exchange": "HOSE"
+},
+{
+"symbol": "MCM",
+"exchange": "HOSE"
+},
+{
+"symbol": "MCO",
+"exchange": "HNX"
+},
+{
+"symbol": "MCP",
+"exchange": "HOSE"
+},
+{
+"symbol": "MDA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MDC",
+"exchange": "HNX"
+},
+{
+"symbol": "MDF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MDG",
+"exchange": "HOSE"
+},
+{
+"symbol": "MEC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MED",
+"exchange": "HNX"
+},
+{
+"symbol": "MEF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MEL",
+"exchange": "HNX"
+},
+{
+"symbol": "MES",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MFS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MGC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MGG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MGR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MHC",
+"exchange": "HOSE"
+},
+{
+"symbol": "MHL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MIC",
+"exchange": "HNX"
+},
+{
+"symbol": "MIE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MIG",
+"exchange": "HOSE"
+},
+{
+"symbol": "MKP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MKV",
+"exchange": "HNX"
+},
+{
+"symbol": "MLC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MLS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MML",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MNB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MND",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MPC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MPT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MPY",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MQB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MQN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MRF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MSB",
+"exchange": "HOSE"
+},
+{
+"symbol": "MSH",
+"exchange": "HOSE"
+},
+{
+"symbol": "MSN",
+"exchange": "HOSE"
+},
+{
+"symbol": "MSR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MST",
+"exchange": "HNX"
+},
+{
+"symbol": "MTA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MTB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MTG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MTH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MTL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MTP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MTS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MTV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MVB",
+"exchange": "HNX"
+},
+{
+"symbol": "MVC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MVN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "MWG",
+"exchange": "HOSE"
+},
+{
+"symbol": "MZG",
+"exchange": "HOSE"
+},
+{
+"symbol": "NAB",
+"exchange": "HOSE"
+},
+{
+"symbol": "NAC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NAF",
+"exchange": "HOSE"
+},
+{
+"symbol": "NAG",
+"exchange": "HNX"
+},
+{
+"symbol": "NAP",
+"exchange": "HNX"
+},
+{
+"symbol": "NAS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NAU",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NAV",
+"exchange": "HOSE"
+},
+{
+"symbol": "NAW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NBB",
+"exchange": "HOSE"
+},
+{
+"symbol": "NBC",
+"exchange": "HNX"
+},
+{
+"symbol": "NBE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NBP",
+"exchange": "HNX"
+},
+{
+"symbol": "NBT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NBW",
+"exchange": "HNX"
+},
+{
+"symbol": "NCG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NCS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NCT",
+"exchange": "HOSE"
+},
+{
+"symbol": "NDC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NDF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NDN",
+"exchange": "HNX"
+},
+{
+"symbol": "NDP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NDT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NDW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NDX",
+"exchange": "HNX"
+},
+{
+"symbol": "NED",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NET",
+"exchange": "HNX"
+},
+{
+"symbol": "NFC",
+"exchange": "HNX"
+},
+{
+"symbol": "NGC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NHA",
+"exchange": "HOSE"
+},
+{
+"symbol": "NHC",
+"exchange": "HNX"
+},
+{
+"symbol": "NHD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NHH",
+"exchange": "HOSE"
+},
+{
+"symbol": "NHT",
+"exchange": "HOSE"
+},
+{
+"symbol": "NHV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NJC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NKG",
+"exchange": "HOSE"
+},
+{
+"symbol": "NLG",
+"exchange": "HOSE"
+},
+{
+"symbol": "NLS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NNC",
+"exchange": "HOSE"
+},
+{
+"symbol": "NNT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NOS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NQB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NQN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NRC",
+"exchange": "HNX"
+},
+{
+"symbol": "NSC",
+"exchange": "HOSE"
+},
+{
+"symbol": "NSG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NSH",
+"exchange": "HNX"
+},
+{
+"symbol": "NSL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NSS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NST",
+"exchange": "HNX"
+},
+{
+"symbol": "NTC",
+"exchange": "HOSE"
+},
+{
+"symbol": "NTF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NTH",
+"exchange": "HNX"
+},
+{
+"symbol": "NTL",
+"exchange": "HOSE"
+},
+{
+"symbol": "NTP",
+"exchange": "HNX"
+},
+{
+"symbol": "NTT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NTW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NUE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NVB",
+"exchange": "HNX"
+},
+{
+"symbol": "NVL",
+"exchange": "HOSE"
+},
+{
+"symbol": "NVP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NVT",
+"exchange": "HOSE"
+},
+{
+"symbol": "NWT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "NXT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "OCB",
+"exchange": "HOSE"
+},
+{
+"symbol": "OCH",
+"exchange": "HNX"
+},
+{
+"symbol": "ODE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "OGC",
+"exchange": "HOSE"
+},
+{
+"symbol": "OIL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "ONE",
+"exchange": "HNX"
+},
+{
+"symbol": "ONW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "OPC",
+"exchange": "HOSE"
+},
+{
+"symbol": "ORS",
+"exchange": "HOSE"
+},
+{
+"symbol": "PAC",
+"exchange": "HOSE"
+},
+{
+"symbol": "PAI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PAN",
+"exchange": "HOSE"
+},
+{
+"symbol": "PAP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PAS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PAT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PBC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PBP",
+"exchange": "HNX"
+},
+{
+"symbol": "PBT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PCC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PCE",
+"exchange": "HNX"
+},
+{
+"symbol": "PCF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PCG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PCH",
+"exchange": "HNX"
+},
+{
+"symbol": "PCM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PCT",
+"exchange": "HNX"
+},
+{
+"symbol": "PDB",
+"exchange": "HNX"
+},
+{
+"symbol": "PDC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PDN",
+"exchange": "HOSE"
+},
+{
+"symbol": "PDR",
+"exchange": "HOSE"
+},
+{
+"symbol": "PDV",
+"exchange": "HOSE"
+},
+{
+"symbol": "PEG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PEN",
+"exchange": "HNX"
+},
+{
+"symbol": "PEQ",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PET",
+"exchange": "HOSE"
+},
+{
+"symbol": "PFL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PGB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PGC",
+"exchange": "HOSE"
+},
+{
+"symbol": "PGD",
+"exchange": "HOSE"
+},
+{
+"symbol": "PGI",
+"exchange": "HOSE"
+},
+{
+"symbol": "PGN",
+"exchange": "HNX"
+},
+{
+"symbol": "PGS",
+"exchange": "HNX"
+},
+{
+"symbol": "PGT",
+"exchange": "HNX"
+},
+{
+"symbol": "PGV",
+"exchange": "HOSE"
+},
+{
+"symbol": "PHC",
+"exchange": "HOSE"
+},
+{
+"symbol": "PHH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PHN",
+"exchange": "HNX"
+},
+{
+"symbol": "PHP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PHR",
+"exchange": "HOSE"
+},
+{
+"symbol": "PHS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PIA",
+"exchange": "HNX"
+},
+{
+"symbol": "PIC",
+"exchange": "HNX"
+},
+{
+"symbol": "PID",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PIS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PIT",
+"exchange": "HOSE"
+},
+{
+"symbol": "PIV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PJC",
+"exchange": "HNX"
+},
+{
+"symbol": "PJS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PJT",
+"exchange": "HOSE"
+},
+{
+"symbol": "PLA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PLC",
+"exchange": "HNX"
+},
+{
+"symbol": "PLE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PLO",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PLP",
+"exchange": "HOSE"
+},
+{
+"symbol": "PLX",
+"exchange": "HOSE"
+},
+{
+"symbol": "PMB",
+"exchange": "HNX"
+},
+{
+"symbol": "PMC",
+"exchange": "HNX"
+},
+{
+"symbol": "PMG",
+"exchange": "HOSE"
+},
+{
+"symbol": "PMJ",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PMP",
+"exchange": "HNX"
+},
+{
+"symbol": "PMS",
+"exchange": "HNX"
+},
+{
+"symbol": "PMT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PMW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PNC",
+"exchange": "HOSE"
+},
+{
+"symbol": "PND",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PNG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PNJ",
+"exchange": "HOSE"
+},
+{
+"symbol": "PNP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PNT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "POB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "POM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "POS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "POT",
+"exchange": "HNX"
+},
+{
+"symbol": "POV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "POW",
+"exchange": "HOSE"
+},
+{
+"symbol": "PPC",
+"exchange": "HOSE"
+},
+{
+"symbol": "PPE",
+"exchange": "HNX"
+},
+{
+"symbol": "PPH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PPI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PPP",
+"exchange": "HNX"
+},
+{
+"symbol": "PPS",
+"exchange": "HNX"
+},
+{
+"symbol": "PPT",
+"exchange": "HNX"
+},
+{
+"symbol": "PPY",
+"exchange": "HNX"
+},
+{
+"symbol": "PQN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PRC",
+"exchange": "HNX"
+},
+{
+"symbol": "PRE",
+"exchange": "HNX"
+},
+{
+"symbol": "PRO",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PRT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PSB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PSC",
+"exchange": "HNX"
+},
+{
+"symbol": "PSD",
+"exchange": "HNX"
+},
+{
+"symbol": "PSE",
+"exchange": "HNX"
+},
+{
+"symbol": "PSH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PSI",
+"exchange": "HNX"
+},
+{
+"symbol": "PSL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PSN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PSP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PSW",
+"exchange": "HNX"
+},
+{
+"symbol": "PTB",
+"exchange": "HOSE"
+},
+{
+"symbol": "PTC",
+"exchange": "HOSE"
+},
+{
+"symbol": "PTD",
+"exchange": "HNX"
+},
+{
+"symbol": "PTE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PTG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PTH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PTI",
+"exchange": "HNX"
+},
+{
+"symbol": "PTL",
+"exchange": "HOSE"
+},
+{
+"symbol": "PTM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PTO",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PTP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PTS",
+"exchange": "HNX"
+},
+{
+"symbol": "PTT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PTV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PTX",
+"exchange": "HNX"
+},
+{
+"symbol": "PVB",
+"exchange": "HNX"
+},
+{
+"symbol": "PVC",
+"exchange": "HNX"
+},
+{
+"symbol": "PVD",
+"exchange": "HOSE"
+},
+{
+"symbol": "PVE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PVG",
+"exchange": "HNX"
+},
+{
+"symbol": "PVH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PVI",
+"exchange": "HNX"
+},
+{
+"symbol": "PVL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PVM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PVO",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PVP",
+"exchange": "HOSE"
+},
+{
+"symbol": "PVR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PVS",
+"exchange": "HNX"
+},
+{
+"symbol": "PVT",
+"exchange": "HOSE"
+},
+{
+"symbol": "PVV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PVX",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PVY",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PWA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PWS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PXA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PXI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PXL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PXM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PXS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "PXT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "QBS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "QCC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "QCG",
+"exchange": "HOSE"
+},
+{
+"symbol": "QHD",
+"exchange": "HNX"
+},
+{
+"symbol": "QHW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "QNC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "QNP",
+"exchange": "HOSE"
+},
+{
+"symbol": "QNS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "QNT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "QNU",
+"exchange": "UPCOM"
+},
+{
+"symbol": "QNW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "QPH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "QSP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "QST",
+"exchange": "HNX"
+},
+{
+"symbol": "QTC",
+"exchange": "HNX"
+},
+{
+"symbol": "QTP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "RAL",
+"exchange": "HOSE"
+},
+{
+"symbol": "RAT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "RBC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "RCC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "RCD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "RCL",
+"exchange": "HNX"
+},
+{
+"symbol": "REE",
+"exchange": "HOSE"
+},
+{
+"symbol": "RGG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "RIC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "RTB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "RYG",
+"exchange": "HOSE"
+},
+{
+"symbol": "SAB",
+"exchange": "HOSE"
+},
+{
+"symbol": "SAC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SAF",
+"exchange": "HNX"
+},
+{
+"symbol": "SAL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SAM",
+"exchange": "HOSE"
+},
+{
+"symbol": "SAS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SAV",
+"exchange": "HOSE"
+},
+{
+"symbol": "SBA",
+"exchange": "HOSE"
+},
+{
+"symbol": "SBB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SBD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SBG",
+"exchange": "HOSE"
+},
+{
+"symbol": "SBH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SBL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SBM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SBR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SBS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SBT",
+"exchange": "HOSE"
+},
+{
+"symbol": "SBV",
+"exchange": "HOSE"
+},
+{
+"symbol": "SCC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SCD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SCG",
+"exchange": "HNX"
+},
+{
+"symbol": "SCI",
+"exchange": "HNX"
+},
+{
+"symbol": "SCJ",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SCL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SCO",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SCR",
+"exchange": "HOSE"
+},
+{
+"symbol": "SCS",
+"exchange": "HOSE"
+},
+{
+"symbol": "SDA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SDC",
+"exchange": "HNX"
+},
+{
+"symbol": "SDD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SDG",
+"exchange": "HNX"
+},
+{
+"symbol": "SDK",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SDN",
+"exchange": "HNX"
+},
+{
+"symbol": "SDP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SDT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SDU",
+"exchange": "HNX"
+},
+{
+"symbol": "SDV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SDY",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SEA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SEB",
+"exchange": "HNX"
+},
+{
+"symbol": "SED",
+"exchange": "HNX"
+},
+{
+"symbol": "SEP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SFC",
+"exchange": "HOSE"
+},
+{
+"symbol": "SFG",
+"exchange": "HOSE"
+},
+{
+"symbol": "SFI",
+"exchange": "HOSE"
+},
+{
+"symbol": "SFN",
+"exchange": "HNX"
+},
+{
+"symbol": "SGB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SGC",
+"exchange": "HNX"
+},
+{
+"symbol": "SGD",
+"exchange": "HNX"
+},
+{
+"symbol": "SGH",
+"exchange": "HNX"
+},
+{
+"symbol": "SGI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SGN",
+"exchange": "HOSE"
+},
+{
+"symbol": "SGP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SGR",
+"exchange": "HOSE"
+},
+{
+"symbol": "SGS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SGT",
+"exchange": "HOSE"
+},
+{
+"symbol": "SHA",
+"exchange": "HOSE"
+},
+{
+"symbol": "SHB",
+"exchange": "HOSE"
+},
+{
+"symbol": "SHC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SHE",
+"exchange": "HNX"
+},
+{
+"symbol": "SHI",
+"exchange": "HOSE"
+},
+{
+"symbol": "SHN",
+"exchange": "HNX"
+},
+{
+"symbol": "SHP",
+"exchange": "HOSE"
+},
+{
+"symbol": "SHS",
+"exchange": "HNX"
+},
+{
+"symbol": "SID",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SIG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SII",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SIP",
+"exchange": "HOSE"
+},
+{
+"symbol": "SIV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SJD",
+"exchange": "HOSE"
+},
+{
+"symbol": "SJE",
+"exchange": "HNX"
+},
+{
+"symbol": "SJF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SJG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SJM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SJS",
+"exchange": "HOSE"
+},
+{
+"symbol": "SKG",
+"exchange": "HOSE"
+},
+{
+"symbol": "SKH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SKN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SKV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SLD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SLS",
+"exchange": "HNX"
+},
+{
+"symbol": "SMA",
+"exchange": "HOSE"
+},
+{
+"symbol": "SMB",
+"exchange": "HOSE"
+},
+{
+"symbol": "SMC",
+"exchange": "HOSE"
+},
+{
+"symbol": "SMN",
+"exchange": "HNX"
+},
+{
+"symbol": "SMT",
+"exchange": "HNX"
+},
+{
+"symbol": "SNC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SNZ",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SPB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SPC",
+"exchange": "HNX"
+},
+{
+"symbol": "SPD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SPH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SPI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SPM",
+"exchange": "HOSE"
+},
+{
+"symbol": "SPV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SRA",
+"exchange": "HNX"
+},
+{
+"symbol": "SRB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SRC",
+"exchange": "HOSE"
+},
+{
+"symbol": "SRF",
+"exchange": "HOSE"
+},
+{
+"symbol": "SSB",
+"exchange": "HOSE"
+},
+{
+"symbol": "SSC",
+"exchange": "HOSE"
+},
+{
+"symbol": "SSG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SSH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SSI",
+"exchange": "HOSE"
+},
+{
+"symbol": "SSM",
+"exchange": "HNX"
+},
+{
+"symbol": "STB",
+"exchange": "HOSE"
+},
+{
+"symbol": "STC",
+"exchange": "HNX"
+},
+{
+"symbol": "STD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "STG",
+"exchange": "HOSE"
+},
+{
+"symbol": "STH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "STK",
+"exchange": "HOSE"
+},
+{
+"symbol": "STP",
+"exchange": "HNX"
+},
+{
+"symbol": "STS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "STT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "STW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SVC",
+"exchange": "HOSE"
+},
+{
+"symbol": "SVD",
+"exchange": "HOSE"
+},
+{
+"symbol": "SVG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SVH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SVN",
+"exchange": "HNX"
+},
+{
+"symbol": "SVT",
+"exchange": "HOSE"
+},
+{
+"symbol": "SWC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SZB",
+"exchange": "HNX"
+},
+{
+"symbol": "SZC",
+"exchange": "HOSE"
+},
+{
+"symbol": "SZE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SZG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "SZL",
+"exchange": "HOSE"
+},
+{
+"symbol": "TAB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TAL",
+"exchange": "HOSE"
+},
+{
+"symbol": "TAN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TAR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TAW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TBC",
+"exchange": "HOSE"
+},
+{
+"symbol": "TBD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TBR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TBW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TCB",
+"exchange": "HOSE"
+},
+{
+"symbol": "TCH",
+"exchange": "HOSE"
+},
+{
+"symbol": "TCI",
+"exchange": "HOSE"
+},
+{
+"symbol": "TCJ",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TCK",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TCL",
+"exchange": "HOSE"
+},
+{
+"symbol": "TCM",
+"exchange": "HOSE"
+},
+{
+"symbol": "TCO",
+"exchange": "HOSE"
+},
+{
+"symbol": "TCR",
+"exchange": "HOSE"
+},
+{
+"symbol": "TCT",
+"exchange": "HOSE"
+},
+{
+"symbol": "TCW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TCX",
+"exchange": "HOSE"
+},
+{
+"symbol": "TDB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TDC",
+"exchange": "HOSE"
+},
+{
+"symbol": "TDF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TDG",
+"exchange": "HOSE"
+},
+{
+"symbol": "TDH",
+"exchange": "HOSE"
+},
+{
+"symbol": "TDM",
+"exchange": "HOSE"
+},
+{
+"symbol": "TDP",
+"exchange": "HOSE"
+},
+{
+"symbol": "TDS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TDT",
+"exchange": "HNX"
+},
+{
+"symbol": "TDW",
+"exchange": "HOSE"
+},
+{
+"symbol": "TED",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TEG",
+"exchange": "HOSE"
+},
+{
+"symbol": "TET",
+"exchange": "HNX"
+},
+{
+"symbol": "TFC",
+"exchange": "HNX"
+},
+{
+"symbol": "TGG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TGP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "THB",
+"exchange": "HNX"
+},
+{
+"symbol": "THD",
+"exchange": "HNX"
+},
+{
+"symbol": "THG",
+"exchange": "HOSE"
+},
+{
+"symbol": "THM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "THN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "THP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "THS",
+"exchange": "HNX"
+},
+{
+"symbol": "THT",
+"exchange": "HNX"
+},
+{
+"symbol": "THU",
+"exchange": "UPCOM"
+},
+{
+"symbol": "THW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TID",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TIE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TIG",
+"exchange": "HNX"
+},
+{
+"symbol": "TIN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TIP",
+"exchange": "HOSE"
+},
+{
+"symbol": "TIS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TIX",
+"exchange": "HOSE"
+},
+{
+"symbol": "TJC",
+"exchange": "HNX"
+},
+{
+"symbol": "TKA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TKU",
+"exchange": "HNX"
+},
+{
+"symbol": "TLD",
+"exchange": "HOSE"
+},
+{
+"symbol": "TLG",
+"exchange": "HOSE"
+},
+{
+"symbol": "TLH",
+"exchange": "HOSE"
+},
+{
+"symbol": "TLP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TMB",
+"exchange": "HNX"
+},
+{
+"symbol": "TMC",
+"exchange": "HNX"
+},
+{
+"symbol": "TMG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TMP",
+"exchange": "HOSE"
+},
+{
+"symbol": "TMS",
+"exchange": "HOSE"
+},
+{
+"symbol": "TMT",
+"exchange": "HOSE"
+},
+{
+"symbol": "TMW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TMX",
+"exchange": "HNX"
+},
+{
+"symbol": "TNA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TNB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TNC",
+"exchange": "HOSE"
+},
+{
+"symbol": "TNG",
+"exchange": "HNX"
+},
+{
+"symbol": "TNH",
+"exchange": "HOSE"
+},
+{
+"symbol": "TNI",
+"exchange": "HOSE"
+},
+{
+"symbol": "TNP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TNS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TNT",
+"exchange": "HOSE"
+},
+{
+"symbol": "TNW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TOP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TOS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TOT",
+"exchange": "HNX"
+},
+{
+"symbol": "TOW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TPB",
+"exchange": "HOSE"
+},
+{
+"symbol": "TPC",
+"exchange": "HOSE"
+},
+{
+"symbol": "TPP",
+"exchange": "HNX"
+},
+{
+"symbol": "TPS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TQW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TRA",
+"exchange": "HOSE"
+},
+{
+"symbol": "TRC",
+"exchange": "HOSE"
+},
+{
+"symbol": "TRS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TRT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TRV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TSA",
+"exchange": "HOSE"
+},
+{
+"symbol": "TSB",
+"exchange": "HNX"
+},
+{
+"symbol": "TSC",
+"exchange": "HOSE"
+},
+{
+"symbol": "TSD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TSG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TSJ",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TST",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TTA",
+"exchange": "HOSE"
+},
+{
+"symbol": "TTB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TTC",
+"exchange": "HNX"
+},
+{
+"symbol": "TTD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TTE",
+"exchange": "HOSE"
+},
+{
+"symbol": "TTF",
+"exchange": "HOSE"
+},
+{
+"symbol": "TTG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TTH",
+"exchange": "HNX"
+},
+{
+"symbol": "TTL",
+"exchange": "HNX"
+},
+{
+"symbol": "TTN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TTS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TTT",
+"exchange": "HNX"
+},
+{
+"symbol": "TTZ",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TUG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TVA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TVB",
+"exchange": "HOSE"
+},
+{
+"symbol": "TVC",
+"exchange": "HNX"
+},
+{
+"symbol": "TVD",
+"exchange": "HNX"
+},
+{
+"symbol": "TVG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TVH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TVM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TVN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "TVS",
+"exchange": "HOSE"
+},
+{
+"symbol": "TVT",
+"exchange": "HOSE"
+},
+{
+"symbol": "TXM",
+"exchange": "HNX"
+},
+{
+"symbol": "TYA",
+"exchange": "HOSE"
+},
+{
+"symbol": "UCT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "UDC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "UDJ",
+"exchange": "UPCOM"
+},
+{
+"symbol": "UDL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "UEM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "UIC",
+"exchange": "HOSE"
+},
+{
+"symbol": "UMC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "UNI",
+"exchange": "HNX"
+},
+{
+"symbol": "UPC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "UPH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "UPS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "USC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "USD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "UTT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "UXC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VAB",
+"exchange": "HOSE"
+},
+{
+"symbol": "VAF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VAV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VBB",
+"exchange": "HOSE"
+},
+{
+"symbol": "VBC",
+"exchange": "HNX"
+},
+{
+"symbol": "VBG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VBH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VBT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VCA",
+"exchange": "HOSE"
+},
+{
+"symbol": "VCB",
+"exchange": "HOSE"
+},
+{
+"symbol": "VCC",
+"exchange": "HNX"
+},
+{
+"symbol": "VCE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VCF",
+"exchange": "HOSE"
+},
+{
+"symbol": "VCG",
+"exchange": "HOSE"
+},
+{
+"symbol": "VCI",
+"exchange": "HOSE"
+},
+{
+"symbol": "VCK",
+"exchange": "HOSE"
+},
+{
+"symbol": "VCM",
+"exchange": "HNX"
+},
+{
+"symbol": "VCP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VCR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VCS",
+"exchange": "HNX"
+},
+{
+"symbol": "VCT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VCX",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VDB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VDG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VDL",
+"exchange": "HNX"
+},
+{
+"symbol": "VDN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VDP",
+"exchange": "HOSE"
+},
+{
+"symbol": "VDS",
+"exchange": "HOSE"
+},
+{
+"symbol": "VDT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VEA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VEC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VEF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VES",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VET",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VFC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VFG",
+"exchange": "HOSE"
+},
+{
+"symbol": "VFR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VFS",
+"exchange": "HNX"
+},
+{
+"symbol": "VGC",
+"exchange": "HOSE"
+},
+{
+"symbol": "VGG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VGI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VGL",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VGP",
+"exchange": "HNX"
+},
+{
+"symbol": "VGR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VGS",
+"exchange": "HNX"
+},
+{
+"symbol": "VGT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VGV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VHC",
+"exchange": "HOSE"
+},
+{
+"symbol": "VHD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VHE",
+"exchange": "HNX"
+},
+{
+"symbol": "VHF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VHG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VHH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VHL",
+"exchange": "HNX"
+},
+{
+"symbol": "VHM",
+"exchange": "HOSE"
+},
+{
+"symbol": "VIB",
+"exchange": "HOSE"
+},
+{
+"symbol": "VIC",
+"exchange": "HOSE"
+},
+{
+"symbol": "VID",
+"exchange": "HOSE"
+},
+{
+"symbol": "VIE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VIF",
+"exchange": "HNX"
+},
+{
+"symbol": "VIG",
+"exchange": "HNX"
+},
+{
+"symbol": "VIM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VIN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VIP",
+"exchange": "HOSE"
+},
+{
+"symbol": "VIR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VIT",
+"exchange": "HNX"
+},
+{
+"symbol": "VIW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VIX",
+"exchange": "HOSE"
+},
+{
+"symbol": "VJC",
+"exchange": "HOSE"
+},
+{
+"symbol": "VKC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VLA",
+"exchange": "HNX"
+},
+{
+"symbol": "VLB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VLC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VLG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VLP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VLS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VLW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VMA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VMC",
+"exchange": "HNX"
+},
+{
+"symbol": "VMD",
+"exchange": "HOSE"
+},
+{
+"symbol": "VMG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VMK",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VMS",
+"exchange": "HNX"
+},
+{
+"symbol": "VMT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VNA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VNB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VNC",
+"exchange": "HNX"
+},
+{
+"symbol": "VND",
+"exchange": "HOSE"
+},
+{
+"symbol": "VNE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VNF",
+"exchange": "HNX"
+},
+{
+"symbol": "VNG",
+"exchange": "HOSE"
+},
+{
+"symbol": "VNH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VNI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VNL",
+"exchange": "HOSE"
+},
+{
+"symbol": "VNM",
+"exchange": "HOSE"
+},
+{
+"symbol": "VNP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VNR",
+"exchange": "HNX"
+},
+{
+"symbol": "VNS",
+"exchange": "HOSE"
+},
+{
+"symbol": "VNT",
+"exchange": "HNX"
+},
+{
+"symbol": "VNX",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VNY",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VNZ",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VOS",
+"exchange": "HOSE"
+},
+{
+"symbol": "VPA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VPB",
+"exchange": "HOSE"
+},
+{
+"symbol": "VPC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VPD",
+"exchange": "HOSE"
+},
+{
+"symbol": "VPG",
+"exchange": "HOSE"
+},
+{
+"symbol": "VPH",
+"exchange": "HOSE"
+},
+{
+"symbol": "VPI",
+"exchange": "HOSE"
+},
+{
+"symbol": "VPL",
+"exchange": "HOSE"
+},
+{
+"symbol": "VPR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VPS",
+"exchange": "HOSE"
+},
+{
+"symbol": "VPW",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VPX",
+"exchange": "HOSE"
+},
+{
+"symbol": "VQC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VRC",
+"exchange": "HOSE"
+},
+{
+"symbol": "VRE",
+"exchange": "HOSE"
+},
+{
+"symbol": "VRG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VSA",
+"exchange": "HNX"
+},
+{
+"symbol": "VSC",
+"exchange": "HOSE"
+},
+{
+"symbol": "VSE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VSF",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VSG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VSH",
+"exchange": "HOSE"
+},
+{
+"symbol": "VSI",
+"exchange": "HOSE"
+},
+{
+"symbol": "VSM",
+"exchange": "HNX"
+},
+{
+"symbol": "VSN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VST",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VTA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VTB",
+"exchange": "HOSE"
+},
+{
+"symbol": "VTC",
+"exchange": "HNX"
+},
+{
+"symbol": "VTD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VTE",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VTG",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VTH",
+"exchange": "HNX"
+},
+{
+"symbol": "VTI",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VTJ",
+"exchange": "HNX"
+},
+{
+"symbol": "VTK",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VTM",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VTO",
+"exchange": "HOSE"
+},
+{
+"symbol": "VTP",
+"exchange": "HOSE"
+},
+{
+"symbol": "VTQ",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VTR",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VTS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VTV",
+"exchange": "HNX"
+},
+{
+"symbol": "VTX",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VTZ",
+"exchange": "HNX"
+},
+{
+"symbol": "VUA",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VVN",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VVS",
+"exchange": "HOSE"
+},
+{
+"symbol": "VWS",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VXB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VXP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "VXT",
+"exchange": "UPCOM"
+},
+{
+"symbol": "WCS",
+"exchange": "HNX"
+},
+{
+"symbol": "WSB",
+"exchange": "UPCOM"
+},
+{
+"symbol": "WSS",
+"exchange": "HNX"
+},
+{
+"symbol": "WTC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "XDH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "XHC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "XLV",
+"exchange": "UPCOM"
+},
+{
+"symbol": "XMC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "XMD",
+"exchange": "UPCOM"
+},
+{
+"symbol": "XMP",
+"exchange": "UPCOM"
+},
+{
+"symbol": "XPH",
+"exchange": "UPCOM"
+},
+{
+"symbol": "YBC",
+"exchange": "UPCOM"
+},
+{
+"symbol": "YBM",
+"exchange": "HOSE"
+},
+{
+"symbol": "YEG",
+"exchange": "HOSE"
+},
+{
+"symbol": "YTC",
+"exchange": "UPCOM"
+}
+]

@@ -532,6 +532,7 @@ def market_snapshot(symbol="VNINDEX", days=250):
 
     return {
         "price": price, "change_pct": round(change_pct, 2),
+        "date": last.get('time'),
         "ma20": ma20, "ma50": ma50, "ma200": ma200,
         "trend_text": trend_text, "ma20_text": ma20_text,
         "support": support, "resistance": resistance,

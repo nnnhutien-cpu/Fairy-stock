@@ -344,7 +344,28 @@ def _get_tickers_csv() -> list:
         _log_err("_get_tickers_csv", e)
     return []
 
+def _get_hose_tickers_json() -> list:
+    """Danh sách mã HOSE tĩnh trong repo (tickers.json) — nguồn chính, không phụ thuộc API."""
+    try:
+        with open("tickers.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+        out = sorted({str(i.get("symbol", "")).strip().upper() for i in data
+                      if isinstance(i, dict) and str(i.get("exchange", "")).upper() in ("HOSE", "HSX")})
+        out = [t for t in out if t]
+        if len(out) >= 100:
+            _log(f"✅ [tickers.json] {len(out)} mã HOSE")
+            return out
+    except Exception as e:
+        _log_err("_get_hose_tickers_json", e)
+    return []
+
+
 def get_hose_tickers() -> list:
+    # SỬA: vnstock/DNSE/FireAnt listing đều lỗi trên GitHub Actions -> trước đây rơi về
+    # data/stock_prices.csv chỉ có 60 mã (breadth.json n_total=57, không phải ~400 mã HOSE).
+    tickers = _get_hose_tickers_json()
+    if tickers:
+        return tickers
     tickers = _get_hose_tickers_vnstock()
     if tickers:
         return tickers
@@ -554,9 +575,20 @@ if __name__ == "__main__":
             _log("⚠️ Không lấy được VNINDEX từ TCBS — dùng lịch T2-T6 để suy ra ngày kỳ vọng.")
 
         old = _load_existing()
+        # SỬA: chỉ bỏ qua khi file cũ được quét SAU giờ đóng cửa của chính phiên đó.
+        # Trước đây 1 lần chạy tay (force) lúc 14:29 ghi data_date=hôm nay bằng giá giữa phiên,
+        # rồi các lượt 17:30/18:30/20:00 thấy "đã là phiên hôm nay" nên bỏ qua -> kẹt số liệu giữa phiên.
+        old_is_eod = False
+        try:
+            upd = datetime.strptime(str(old.get("updated_at")), "%Y-%m-%d %H:%M:%S")
+            old_is_eod = (upd.strftime("%Y-%m-%d") > str(old.get("data_date"))
+                          or upd.strftime("%H:%M") >= MARKET_CLOSE_CUTOFF)
+        except Exception:
+            pass
         if (not force and latest and old.get("data_date") == latest.strftime("%Y-%m-%d")
-                and old.get("coverage", 0) >= MIN_COVERAGE):
-            _log(f"✅ breadth.json đã là phiên {latest} — không cần quét lại.")
+                and old.get("coverage", 0) >= MIN_COVERAGE and old_is_eod
+                and old.get("n_total", 0) >= 100):
+            _log(f"✅ breadth.json đã là phiên {latest} (quét sau đóng cửa) — không cần quét lại.")
             sys.exit(0)
 
         api_key = os.environ.get("VNSTOCK_API_KEY", "").strip()

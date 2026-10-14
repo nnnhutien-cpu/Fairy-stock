@@ -52,7 +52,10 @@ def expected_session(now):
 
 def fetch_tcbs_latest(ticker, http, now, retries=3):
     """Lấy nến ngày mới nhất đã chốt của 1 mã từ TCBS. Trả về dict hoặc None."""
-    to_ts = int(now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+    # SỬA: bản cũ dùng 00:00 hôm nay làm mốc `to` -> nến của chính hôm nay bị loại, bot chạy
+    # 17:30 vẫn chỉ lấy được phiên HÔM QUA (luôn trễ 1 phiên). Lấy tới hết ngày mai cho chắc;
+    # trước 15:00 nến đang chạy dở đã được bỏ ở bên dưới.
+    to_ts = int(now.timestamp()) + 86400
     params = {"ticker": ticker, "type": "stock", "resolution": "D",
               "to": to_ts, "countBack": 5}  # 5 nến lùi lại -> luôn trúng phiên gần nhất
     for attempt in range(retries):

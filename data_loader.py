@@ -11,28 +11,34 @@ import tcbs_data  # nguồn giá trực tiếp từ TCBS (thay cho vnstock)
 
 
 def _fetch_dnse(symbol, days_back=350):
-    """DNSE Chart API — public, không cần auth."""
-    import requests
-    from datetime import datetime, timedelta
-    end_ts   = int(datetime.now().timestamp())
-    start_ts = int((datetime.now() - timedelta(days=days_back)).timestamp())
+    """DNSE Chart API v2 — public, không cần auth.
+    SỬA: endpoint cũ /chart/history đã ngừng; chỉ số (VNINDEX...) phải gọi /ohlcs/index;
+    timestamp đổi về giờ VN rồi bỏ giờ (nến ngày)."""
+    sym = symbol.upper()
+    kind = "index" if sym in tcbs_data.INDEX_SYMBOLS else "stock"
+    end_ts = int(time.time()) + 86400
+    start_ts = end_ts - int(days_back) * 86400
     try:
-        resp = requests.get(
-            "https://services.entrade.com.vn/chart/history",
-            params={"symbol": symbol.upper(), "resolution": "D",
-                    "from": start_ts, "to": end_ts},
-            timeout=10
+        resp = _requests.get(
+            f"https://services.entrade.com.vn/chart-api/v2/ohlcs/{kind}",
+            params={"symbol": sym, "resolution": "1D", "from": start_ts, "to": end_ts},
+            headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
+            timeout=10,
         )
-        data = resp.json()
-        if data.get("s") != "ok" or not data.get("t"):
+        resp.raise_for_status()
+        data = resp.json() or {}
+        if not data.get("t"):
             return pd.DataFrame()
+        t = (pd.to_datetime(data["t"], unit="s", utc=True)
+               .tz_convert("Asia/Ho_Chi_Minh").tz_localize(None).normalize())
         df = pd.DataFrame({
-            "time":   pd.to_datetime(data["t"], unit="s"),
-            "open":   data["o"], "high": data["h"],
-            "low":    data["l"], "close": data["c"],
-            "volume": data["v"],
+            "time": t,
+            "open": data.get("o"), "high": data.get("h"),
+            "low": data.get("l"), "close": data.get("c"),
+            "volume": data.get("v") or [0] * len(t),
         })
-        return _normalize(df.sort_values("time").reset_index(drop=True))
+        df = _normalize(df).drop_duplicates("time", keep="last").reset_index(drop=True)
+        return tcbs_data.scale_to_thousand(df, sym)
     except Exception:
         return pd.DataFrame()
 
@@ -548,7 +554,8 @@ def _fetch_intraday_stock_dnse(symbol: str, day_str: str) -> pd.DataFrame:
         LAST_ERRORS[key] = f"{type(e).__name__}: {e}"
         return pd.DataFrame()
 
-def _fetch_intraday_day(symbol: str, day_str: str, require_fresh: bool = False) -> pd.DataFrame:
+def _fetch_intraday_day(symbol: str, day_str: str, require_fresh: bool = False,
+                        timeout: float = 8) -> pd.DataFrame:
     """
     Lấy dữ liệu 1 phút cho 1 ngày.
       VNINDEX : DNSE -> SSI -> Wifeed -> TCBS(index/intraday) -> VNDirect -> TCBS bars
@@ -556,14 +563,16 @@ def _fetch_intraday_day(symbol: str, day_str: str, require_fresh: bool = False) 
     Khi require_fresh=True mà không nguồn nào đủ mới, trả về bản có timestamp
     mới nhất tìm được (thay vì kẹt ở nguồn đầu tiên trả dữ liệu cũ).
     """
+    # SỬA: bản cũ gọi TUẦN TỰ 6 nguồn x 6 ngày, mỗi nguồn timeout 10s -> khi các nguồn bị chặn,
+    # tab Thị Trường treo vài phút và fragment tự làm mới 60s lại treo tiếp.
+    # Nay ĐUA SONG SONG các nguồn (tối đa `timeout` giây/ngày), rồi chọn theo thứ tự ưu tiên.
+    # Bỏ WIFEED/VNDIRECT: không trả nến 1 phút (VNDirect trả nến NGÀY -> làm hỏng biểu đồ).
     if symbol == "VNINDEX":
         fetchers = [
             ("DNSE", _fetch_intraday_dnse),
-            ("SSI", _fetch_intraday_ssi),
-            ("WIFEED", _fetch_intraday_wifeed),
-            ("TCBS", _fetch_intraday_tcbs),
-            ("VNDIRECT", _fetch_intraday_vndirect),
             ("TCBS_BARS", lambda d: _fetch_intraday_tcbs_bars("VNINDEX", d)),
+            ("SSI", _fetch_intraday_ssi),
+            ("TCBS", _fetch_intraday_tcbs),
         ]
     else:
         fetchers = [
@@ -571,13 +580,22 @@ def _fetch_intraday_day(symbol: str, day_str: str, require_fresh: bool = False) 
             ("TCBS_BARS", lambda d: _fetch_intraday_tcbs_bars(symbol, d)),
         ]
 
+    tasks = {name: (lambda fn=fn: fn(day_str)) for name, fn in fetchers}
+    got = {}
+    for name, res in _race(tasks, timeout=timeout):
+        if isinstance(res, Exception) or res is None or res.empty or "time" not in res.columns:
+            continue
+        res = res[res["time"].dt.strftime("%Y-%m-%d") == day_str]  # chỉ giữ đúng ngày
+        if not res.empty:
+            got[name] = res.reset_index(drop=True)
+
     best_df = pd.DataFrame()
     best_last_time = None
     best_source_name = None
 
-    for name, fn in fetchers:
-        df = fn(day_str)
-        if df is None or df.empty:
+    for name, _ in fetchers:  # duyệt theo thứ tự ưu tiên để hôm nay/hôm qua cùng 1 nguồn
+        df = got.get(name)
+        if df is None:
             continue
         if not require_fresh or _is_fresh(df):
             return df
@@ -629,7 +647,21 @@ def _get_all_tickers_cached(exchange='all'):
         raise RuntimeError("Danh sách mã trả về rỗng.")
     return lst
 
+def _listing_tickers_json(exchange):
+    """Danh sách mã TĨNH trong repo (tickers.json) — không phụ thuộc API, luôn có."""
+    import tcbs_client
+    return tcbs_client.list_symbols(exchange)
+
+
 def get_all_tickers(exchange='all'):
+    # SỬA: VNDirect finfo chặn IP Streamlit Cloud / GitHub Actions -> trước đây luôn rơi về
+    # screener_cache.xlsx (chỉ 10 mã) hoặc FALLBACK_TICKERS. Nay đọc tickers.json trước.
+    try:
+        lst = _listing_tickers_json(exchange)
+        if len(lst) >= 50:
+            return lst
+    except Exception as e:
+        LAST_ERRORS["get_all_tickers|tickers.json"] = f"{type(e).__name__}: {e}"
     try:
         return _get_all_tickers_cached(exchange)
     except Exception as e:
@@ -688,21 +720,34 @@ get_stock_data.clear = _cached_stock.clear
 get_vnindex_data.clear = _cached_vnindex.clear
 
 
+def _collect_intraday_days(symbol: str, need: int, max_lookback: int, budget: float):
+    """Gom `need` phiên gần nhất (giờ VN), bỏ qua T7/CN, dừng khi hết `budget` giây
+    để tab không bao giờ treo lâu khi mọi nguồn bị chặn."""
+    frames, t0, now = [], time.time(), _vn_now()
+    for offset in range(max_lookback):
+        d = now - timedelta(days=offset)
+        if d.weekday() >= 5:
+            continue
+        if time.time() - t0 > budget:
+            LAST_ERRORS[f"{symbol}|1m|budget"] = f"Hết {budget:.0f}s, dừng ở {d:%Y-%m-%d}."
+            break
+        if offset == 0 and d.time() < datetime.strptime("09:00", "%H:%M").time():
+            continue  # chưa mở phiên hôm nay
+        df_day = _fetch_intraday_day(symbol, d.strftime('%Y-%m-%d'), require_fresh=(offset == 0))
+        if not df_day.empty:
+            frames.append(df_day)
+        if len(frames) >= need:
+            break
+    return frames
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def get_intraday_vnindex(_cache_bust: int = 0):
     """
     LƯU Ý: tham số bắt đầu bằng "_" bị Streamlit BỎ QUA khi tính cache key,
     nên ttl=60 mới là cơ chế làm mới thật sự.
     """
-    frames = []
-    for offset in range(6):
-        # [VÁ 3] dùng giờ VN thay vì datetime.now() (UTC trên Streamlit Cloud)
-        day = (_vn_now() - timedelta(days=offset)).strftime('%Y-%m-%d')
-        df_day = _fetch_intraday_day('VNINDEX', day, require_fresh=(offset == 0))
-        if not df_day.empty:
-            frames.append(df_day)
-        if len(frames) >= 2:
-            break
+    frames = _collect_intraday_days('VNINDEX', need=2, max_lookback=8, budget=25)
 
     if not frames:
         return pd.DataFrame()
@@ -718,15 +763,7 @@ def get_intraday_stock(ticker: str, days: int = 3, _cache_bust: int = 0):
     Dữ liệu 1 phút của MỘT MÃ cổ phiếu, gộp nhiều phiên gần nhất để đủ số nến
     cho chỉ báo cần lookback dài (vd Ichimoku Senkou B = 52 nến).
     """
-    frames = []
-    for offset in range(15):
-        # [VÁ 3] dùng giờ VN thay vì datetime.now() (UTC trên Streamlit Cloud)
-        day = (_vn_now() - timedelta(days=offset)).strftime('%Y-%m-%d')
-        df_day = _fetch_intraday_day(ticker, day, require_fresh=(offset == 0))
-        if not df_day.empty:
-            frames.append(df_day)
-        if len(frames) >= days:
-            break
+    frames = _collect_intraday_days(ticker, need=days, max_lookback=15, budget=40)
 
     if not frames:
         return pd.DataFrame()

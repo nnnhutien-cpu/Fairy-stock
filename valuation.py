@@ -43,7 +43,10 @@ _EPS_POINTS = {
         2017: ( 984.2, 18.2), 2018: ( 892.5, 15.8), 2019: (1007.1, 16.5),
         2020: (1103.9, 16.8), 2021: (1498.3, 18.3), 2022: ( 998.7, 10.3),
         2023: (1129.9, 13.1), 2024: (1266.8, 13.9),
-        # 2025 chưa chốt EOY → không hard-code, dùng EPS 2024 làm trailing
+        # SỬA: thiếu 2025 -> năm 2026 dùng EPS 2024 làm trailing, P/E dự phòng bị thổi lên ~18-19x
+        # (VNINDEX ~1.700) và bị xếp "ĐẮT" sai. Giá đóng cửa 31/12/2025 = 1784.49 (TCBS),
+        # P/E 2025 lấy theo bảng _PE_YEARLY (đang ghi "ước tính") -> cập nhật khi có số chính thức.
+        2025: (1784.5, 13.4),
     }.items()
 }
 
@@ -140,6 +143,14 @@ def scrape_vnindex_pe() -> "dict | None":
         return None
 
 
+_PE_SOURCE = {"name": None}
+
+
+def get_current_pe_source():
+    """Nguồn của giá trị P/E mà get_current_pe() trả về lần gần nhất (main.py hiển thị)."""
+    return _PE_SOURCE["name"]
+
+
 def get_current_pe(vnindex_price=None):
     """
     Lấy P/E VN-INDEX hiện tại theo thứ tự ưu tiên:
@@ -152,9 +163,11 @@ def get_current_pe(vnindex_price=None):
     # Ưu tiên 1: scrape 24hmoney
     live = scrape_vnindex_pe()
     if live and live.get("pe"):
+        _PE_SOURCE["name"] = "24hmoney.vn"
         return live["pe"]
 
     # Fallback: tính xấp xỉ từ EPS trailing
+    _PE_SOURCE["name"] = None
     if vnindex_price is None:
         return None
     try:
@@ -166,8 +179,10 @@ def get_current_pe(vnindex_price=None):
     try:
         year = _dt.date.today().year
         # Dùng EPS năm trước (đã chốt), fallback năm kia
-        eps = _EPS_POINTS.get(year - 1) or _EPS_POINTS.get(year - 2)
+        eps_year = year - 1 if _EPS_POINTS.get(year - 1) else year - 2
+        eps = _EPS_POINTS.get(eps_year)
         if eps and eps > 0:
+            _PE_SOURCE["name"] = f"ước tính từ EPS {eps_year} (24hmoney không phản hồi)"
             return round(price / eps, 2)
     except Exception:
         pass

@@ -77,7 +77,7 @@ def fetch_tcbs_vnindex(days=300, timeout=10):
         "type": "index",
         "resolution": "D",
         "to": int(time.time()),
-        "countBack": int(days),
+        "countBack": min(int(days), 250),  # TCBS giới hạn ~250 nến/lần
     }
     headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
     r = requests.get(TCBS_BARS_URL, params=params, headers=headers, timeout=timeout)
@@ -130,16 +130,21 @@ def compute_snapshot(df):
     vol_ratio = (vol_today / vol_avg) if vol_avg else 0.0
 
     # --- Nhãn tiếng Việt ---
+    # SỬA: dùng cùng câu chữ với indicators.market_snapshot() vì trend_engine.market_recommendation()
+    # chấm điểm xu hướng bằng cách tìm "tăng mạnh" / "chậm lại" / "gãy MA20" trong trend_text.
+    ma20_series = c.rolling(20).mean()
+    ma20_prev = _num(ma20_series.iloc[-6]) if len(ma20_series) >= 26 else ma20
+    slope_up = ma20 is not None and ma20_prev is not None and ma20 > ma20_prev
     if ma20 is None:
-        trend_text = "—"
-    elif ma50 is not None and price > ma20 > ma50:
-        trend_text = "Xu hướng TĂNG (giá > MA20 > MA50)"
-    elif ma50 is not None and price < ma20 < ma50:
-        trend_text = "Xu hướng GIẢM (giá < MA20 < MA50)"
-    elif price >= ma20:
-        trend_text = "Hồi phục / đi ngang phía trên MA20"
+        trend_text = "— (chưa đủ dữ liệu MA20)"
+    elif price > ma20 and slope_up:
+        trend_text = "📈 Xu hướng tăng mạnh (giá trên MA20, MA20 dốc lên)"
+    elif price > ma20:
+        trend_text = "↗️ Tăng nhưng đà chậm lại (MA20 đi ngang/xuống)"
+    elif slope_up:
+        trend_text = "⚠️ Vừa gãy MA20 (MA20 còn dốc lên)"
     else:
-        trend_text = "Yếu / đi ngang phía dưới MA20"
+        trend_text = "📉 Xu hướng giảm (giá dưới MA20, MA20 đi xuống)"
 
     ma20_text = ""
     if ma20:

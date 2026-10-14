@@ -18,7 +18,7 @@ from ui_layout import render_sidebar, render_market_tab, render_screener_results
 from ux_components import setup_cache_clear_button, render_search_and_export
 import backtester as bt
 import valuation
-from market_breadth import get_market_breadth, render_breadth_panel
+from market_breadth import get_market_breadth, render_breadth_panel, breadth_freshness
 from tab_khuyen_nghi import render_recommendation_tab
 from screener_suc_bat import render_suc_bat_tab
 
@@ -571,10 +571,25 @@ def _render_market_body():
         pass
 
     # Khuyến nghị: trend_engine trước, lỗi/rỗng thì dùng bản dự phòng
+    # SỬA: bản cũ KHÔNG truyền breadth -> lớp Breadth (±5 điểm) của trend_engine luôn bị bỏ qua.
+    #      Đồng thời chặn None ở rsi/vol_ratio (snapshot dự phòng) gây TypeError -> rơi về fallback.
     reco = None
     if snap_ok:
+        snap_for_reco = dict(snap)
+        if _num(snap_for_reco.get("rsi")) is None:
+            snap_for_reco["rsi"] = 50.0
+        if _num(snap_for_reco.get("vol_ratio")) is None:
+            snap_for_reco["vol_ratio"] = 1.0
         try:
-            reco = market_recommendation(snap, pe_stats=pe_stats_data)
+            # breadth quá cũ (> 4 ngày lịch) thì không cho vào điểm khuyến nghị
+            breadth_for_reco = breadth
+            try:
+                lag = breadth_freshness(breadth).get("lag_days") if breadth else None
+                if lag is not None and lag > 4:
+                    breadth_for_reco = None
+            except Exception:
+                pass
+            reco = market_recommendation(snap_for_reco, pe_stats=pe_stats_data, breadth=breadth_for_reco)
         except Exception:
             reco = None
         if not reco or not reco.get("action"):
@@ -637,6 +652,21 @@ def _render_market_body():
             chart_df['Vol_Hôm_Qua'] = float('nan')
 
         chart_df = chart_df[['Vol_Hôm_Qua', 'Vol_Hôm_Nay']].astype('float64')
+
+    elif snap_ok:
+        # SỬA: không có intraday (ngoài giờ / nguồn 1 phút bị chặn) thì trước đây không hiện
+        # điểm VN-Index nào cả. Nay dùng giá đóng cửa phiên gần nhất.
+        m1, m2, m3 = st.columns(3)
+        chg = _num(snap.get("change_pct"))
+        m1.metric("📊 VN-INDEX (đóng cửa)", _fmt(snap.get("price"), ",.2f"),
+                  f"{chg:+.2f}%" if chg is not None else None)
+        m2.metric("💰 KL phiên gần nhất",
+                  f"{_num(snap.get('vol_today'), 0)/1e6:,.1f}M CP" if _num(snap.get('vol_today')) else "—")
+        m3.metric("📏 TB 20 phiên",
+                  f"{_num(snap.get('vol_avg'), 0)/1e6:,.1f}M CP" if _num(snap.get('vol_avg')) else "—")
+        _d = snap.get("date")
+        st.caption("🕒 Chưa có dữ liệu trong phiên — hiển thị số liệu phiên gần nhất"
+                   + (f" ({pd.to_datetime(_d):%d/%m/%Y})" if _d is not None else ""))
 
     sb_header("💓 Nhịp đập thị trường")
     try:
@@ -715,7 +745,7 @@ def _render_market_body():
                 try:
                     src = valuation.get_current_pe_source()
                     if src:
-                        st.caption(f"🔗 Nguồn: **{src}** — delay ~1 ngày GD")
+                        st.caption(f"🔗 Nguồn: **{src}**")
                 except Exception:
                     pass
 
@@ -767,7 +797,8 @@ def _render_market_body():
                 st.caption("Chưa có dữ liệu volume phiên")
 
     # ---------- Breadth ----------
-    sb_header("🏥 Sức khoẻ thị trường (400 mã HOSE)")
+    _n = (breadth or {}).get("n_total")
+    sb_header(f"🏥 Sức khoẻ thị trường ({_n} mã HOSE)" if _n else "🏥 Sức khoẻ thị trường (HOSE)")
     try:
         render_breadth_panel(breadth)
     except Exception as e:
@@ -798,10 +829,14 @@ def _render_market_body():
         cash_pct = int(min(max(cash_pct, 0), 100))
         cur_score = int(_num(reco.get("score"), 0))
 
+        action_txt = str(reco.get('action', '—'))
+        # trend_engine đã gắn emoji sẵn trong action -> không gắn thêm (tránh "🟢 🟢 MUA/GIỮ")
+        if action_txt[:1].isalnum():
+            action_txt = f"{action_emoji} {action_txt}"
         with st.container(border=True):
             ka, kb, kc, kd = st.columns([2.5, 1, 1, 1])
             with ka:
-                st.markdown(f"## {action_emoji} :{st_color}[{reco.get('action', '—')}]")
+                st.markdown(f"## :{st_color}[{action_txt}]")
             kb.metric("🎯 Score", f"{cur_score:+d}")
             kc.metric("📈 Tỷ trọng CP", f"{stock_pct}%")
             kd.metric("💵 Tiền mặt", f"{cash_pct}%")
@@ -811,6 +846,13 @@ def _render_market_body():
             )
             if reco.get("source") == "fallback":
                 st.caption("ℹ️ Khuyến nghị tính theo quy tắc đơn giản (MA, RSI, MACD, P/E) vì bộ phân tích chính chưa trả kết quả.")
+            elif reco.get("ad_pct") is None:
+                st.caption("ℹ️ Chưa tính lớp Breadth (dữ liệu độ rộng thị trường chưa có hoặc đã quá cũ).")
+            reasons = reco.get("reasons") or []
+            if reasons:
+                with st.expander("🔎 Vì sao ra khuyến nghị này?", expanded=False):
+                    for r in reasons:
+                        st.markdown(f"- {r}")
 
         st.caption("⚠️ Khuyến nghị dựa trên PTKT + định giá, không phải tư vấn đầu tư chính thức.")
 
@@ -820,7 +862,7 @@ with tab_market:
     with col_title:
         sb_header("🌟 Tổng quan thị trường real-time")
     with col_btn:
-        if st.button("🔄 CẬP NHẬT DỮ LIỆU", type="primary", use_container_width=True, key="btn_refresh_market"):
+        if st.button("🔄 CẬP NHẬT DỮ LIỆU", type="primary", width="stretch", key="btn_refresh_market"):
             for fn in (get_intraday_vnindex, get_vnindex_data, market_snapshot,
                        get_market_breadth, _load_vnindex_daily):
                 try:
@@ -839,15 +881,22 @@ with tab_market:
             label_visibility="collapsed",
         )
 
-    if refresh_interval > 0:
-        st.caption(f"🔁 Tự động làm mới mỗi **{refresh_interval}s**")
+    # SỬA: chỉ tự làm mới trong giờ giao dịch (9:00-15:05, T2-T6 giờ VN); ngoài giờ dữ liệu
+    # không đổi, rerun mỗi 60s chỉ làm app chậm và tốn lượt gọi API.
+    _now_vn = pd.Timestamp.now(tz="Asia/Ho_Chi_Minh")
+    _in_session = _now_vn.weekday() < 5 and "09:00" <= _now_vn.strftime("%H:%M") <= "15:05"
+    effective_interval = refresh_interval if _in_session else 0
+    if effective_interval > 0:
+        st.caption(f"🔁 Tự động làm mới mỗi **{effective_interval}s** (trong phiên)")
+    elif refresh_interval > 0:
+        st.caption("⏸️ Ngoài giờ giao dịch — tạm dừng tự làm mới")
     st.divider()
 
     def _market_fragment_body():
         # Khi chạy theo timer: chỉ xoá cache intraday (nhẹ), KHÔNG xoá breadth 400 mã
-        if refresh_interval > 0:
+        if effective_interval > 0:
             last = st.session_state.get('_t1_last_clear', 0)
-            if time.time() - last >= refresh_interval - 1:
+            if time.time() - last >= effective_interval - 1:
                 try:
                     get_intraday_vnindex.clear()
                 except Exception:
@@ -856,7 +905,7 @@ with tab_market:
         _render_market_body()
 
     # Fragment tự chạy lại theo chu kỳ, KHÔNG rerun các tab khác
-    st.fragment(_market_fragment_body, run_every=(refresh_interval or None))()
+    st.fragment(_market_fragment_body, run_every=(effective_interval or None))()
 
 
 # ==========================================

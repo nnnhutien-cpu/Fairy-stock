@@ -60,17 +60,9 @@ def run_full_scan(exchange="all", days_back=200, params=None):
 
 
 def main():
-    # Có API key trong biến môi trường -> quét nhanh hơn (60/phút thay vì 20/phút)
-    api_key = os.environ.get("VNSTOCK_API_KEY", "")
-    if api_key:
-        try:
-            import vnai
-            vnai.setup_api_key(api_key)
-            set_rate_limit(55)
-        except Exception:
-            set_rate_limit(18)
-    else:
-        set_rate_limit(18)
+    # SỬA: giá giờ lấy từ TCBS/DNSE (không còn qua vnstock) nên giới hạn 18 lệnh/phút của vnstock
+    # không còn áp dụng. Với ~1.400 mã trong tickers.json, 18/phút mất ~78 phút -> vượt timeout.
+    set_rate_limit(int(os.environ.get("SCAN_RATE_LIMIT", "100")))
 
     print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] Bắt đầu quét toàn sàn...")
     df_result, errors = run_full_scan()
