@@ -27,6 +27,23 @@ from tab_ichimoku import render_ichimoku_tab
 # thay dòng import tab 5 phút
 from tab_tin_hieu_ngay import render_tin_hieu_ngay_tab
 
+# --- 0. ÉP GIAO DIỆN SÁNG (nền trắng) ---
+# Không phụ thuộc file .streamlit/config.toml (thư mục ẩn, hay bị sót khi upload lên GitHub):
+# nếu theme chưa sáng thì đặt lại và chạy lại 1 lần -> bảng, ô nhập, ô chọn đều trắng
+# kể cả khi máy người xem đang để chế độ tối.
+from streamlit import config as _st_config
+_LIGHT_THEME = {
+    "theme.base": "light",
+    "theme.primaryColor": "#7c3aed",
+    "theme.backgroundColor": "#ffffff",
+    "theme.secondaryBackgroundColor": "#f7f6fb",
+    "theme.textColor": "#1f1a33",
+}
+if any(_st_config.get_option(k) != v for k, v in _LIGHT_THEME.items()):
+    for _k, _v in _LIGHT_THEME.items():
+        _st_config.set_option(_k, _v)
+    st.rerun()
+
 # --- 1. CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="auto")
 
