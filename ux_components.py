@@ -3,9 +3,9 @@ import pandas as pd
 
 
 def setup_cache_clear_button():
-    if st.sidebar.button("🧹 XÓA BỘ NHỚ CACHE", width="stretch"):
+    if st.sidebar.button("🧹 Xoá bộ nhớ đệm", width="stretch"):
         st.cache_data.clear()
-        st.sidebar.success("Đã làm sạch toàn bộ hệ thống!")
+        st.sidebar.success("Đã xoá bộ nhớ đệm — dữ liệu sẽ tải lại.")
 
 
 @st.cache_data(show_spinner=False)
@@ -23,13 +23,13 @@ def render_search_and_export(results_df):
         return results_df
 
     # 2. UI thanh tìm kiếm + nút tải CSV
-    col1, col2 = st.columns([3, 1])
+    col1, col2 = st.columns([3, 1], vertical_alignment="bottom")
     with col1:
-        search_query = st.text_input("🔍 Nhập mã cổ phiếu cần tìm (VD: SSI, HPG):", "").upper().strip()
+        search_query = st.text_input("Tìm mã cổ phiếu", "", placeholder="VD: SSI, HPG").upper().strip()
     with col2:
         csv_data = convert_df_to_csv(results_df)
         st.download_button(
-            label="📥 Tải file (CSV)",
+            label="📥 Tải CSV",
             data=csv_data,
             file_name="Danh_Sach_Sieu_Co_Phieu.csv",
             mime="text/csv",

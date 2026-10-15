@@ -6,4 +6,4 @@ google-auth
 yfinance
 requests
 plotly
-streamlit
+streamlit>=1.50

@@ -411,17 +411,18 @@ def _render_scoreboard(sc, regime):
 # ENTRY
 # ════════════════════════════════════════════════════════════════════
 def render_market():
-    c_title, c_btn, c_auto = st.columns([3, 1, 1])
+    c_title, c_btn, c_auto = st.columns([3, 1, 1], vertical_alignment="center")
     with c_title:
         _header("🌟 Tổng quan thị trường", "Pha thị trường · độ rộng · dòng tiền · định giá → tỷ trọng gợi ý")
     with c_btn:
-        if st.button("🔄 CẬP NHẬT", type="primary", width="stretch", key="btn_refresh_market"):
+        if st.button("🔄 Cập nhật", type="primary", width="stretch", key="btn_refresh_market"):
             _clear_caches()
             st.rerun()
     with c_auto:
         refresh = st.selectbox("⏱️ Tự làm mới (trong phiên)", [0, 30, 60, 120, 300], index=2,
                                format_func=lambda x: "Tắt" if x == 0 else f"{x}s",
-                               key="refresh_interval_select", label_visibility="collapsed")
+                               key="refresh_interval_select", label_visibility="collapsed",
+                               help="Tự làm mới phần trong phiên")
 
     with st.spinner("Đang tải dữ liệu thị trường…"):
         vni = _try_index("VNINDEX")
@@ -434,7 +435,7 @@ def render_market():
 
     if m is None:
         st.error("⚠️ Không tải được giá ngày VN-Index từ TCBS / DNSE / Yahoo nên chưa phân tích được. "
-                 "Bấm **🔄 CẬP NHẬT** để thử lại sau ít phút.")
+                 "Bấm **🔄 Cập nhật** để thử lại sau ít phút.")
         st.markdown("#### 💓 Trong phiên")
         _render_intraday_body(None)
         return

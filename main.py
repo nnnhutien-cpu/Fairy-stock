@@ -29,7 +29,7 @@ from tab_portfolio_v2 import render_portfolio_v2_tab
 from tab_tin_hieu_ngay import render_tin_hieu_ngay_tab
 
 # --- 1. CẤU HÌNH TRANG ---
-st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Cô Tiên Stock", layout="wide", initial_sidebar_state="auto")
 
 # --- 1b. GIAO DIỆN: CSS dùng chung nằm ở ui_kit.py ---
 import ui_kit
@@ -73,14 +73,13 @@ if 'scan_results' not in st.session_state:
 if 'scan_mode' not in st.session_state:
     st.session_state['scan_mode'] = None
 
-exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift, vnstock_api_key, fast_mode = render_sidebar()
+exchange_choice, signal_filter, max_scan, p_tenkan, p_kijun, p_senkou_b, p_shift, fast_mode = render_sidebar()
 
-active_api_key = vnstock_api_key.strip()
-if not active_api_key:
-    try:
-        active_api_key = st.secrets.get("VNSTOCK_API_KEY", "")
-    except Exception:
-        active_api_key = ""
+# Ô nhập API key vnstock đã bỏ khỏi giao diện; nếu có key trong Secrets thì vẫn dùng.
+try:
+    active_api_key = str(st.secrets.get("VNSTOCK_API_KEY", "")).strip()
+except Exception:
+    active_api_key = ""
 
 # TĂNG TỐC ĐỘ LẤY DỮ LIỆU LÊN MỨC TỐI ĐA
 if active_api_key:
@@ -272,9 +271,9 @@ def render_tab_eod():
     if True:
         sb_header("🔍 Lọc Cổ Phiếu Cuối Ngày", "Quét toàn bộ danh sách mã, bỏ qua giới hạn Fast Mode. Nên chạy sau 15:00")
 
-        col_eod_btn, col_cache_info = st.columns([1, 2])
+        col_eod_btn, col_cache_info = st.columns([1, 2], vertical_alignment="center")
         with col_eod_btn:
-            eod_scan_button = st.button("🌙 KÍCH HOẠT QUÉT CUỐI NGÀY (Quét toàn bộ)", width="stretch", type="primary")
+            eod_scan_button = st.button("🌙 Quét cuối ngày · toàn thị trường", width="stretch", type="primary")
 
         if eod_scan_button:
             results = execute_scan(force_full=True)
@@ -298,31 +297,30 @@ def render_tab_eod():
                 st.session_state['scan_cache_at'] = scanned_at
             else:
                 with col_cache_info:
-                    st.caption("Chưa có cache. Bấm 'QUÉT CUỐI NGÀY' để quét lần đầu, hoặc đợi bot nền GitHub Actions chạy.")
+                    st.caption("Chưa có cache. Bấm 'Quét cuối ngày' để quét lần đầu, hoặc đợi bot nền GitHub Actions chạy.")
 
         if st.session_state.get('scan_from_cache'):
             _at = st.session_state.get('scan_cache_at')
             with col_cache_info:
                 try:
                     if pd.to_datetime(_at).date() < get_expected_latest_trading_date():
-                        st.warning(f"⚠️ Cache quét lúc **{_at}** đã cũ so với phiên gần nhất. Bấm 'QUÉT CUỐI NGÀY' để lấy mới.")
+                        st.warning(f"⚠️ Cache quét lúc **{_at}** đã cũ so với phiên gần nhất. Bấm 'Quét cuối ngày' để lấy mới.")
                     else:
                         st.info(f"⚡ Hiển thị {len(st.session_state['scan_results'])} mã từ lần quét lúc **{_at}**.")
                 except Exception:
                     st.info(f"⚡ Hiển thị cache quét lúc **{_at}**.")
 
         if st.session_state.get('scan_mode') == 'EOD' and st.session_state.get('scan_results'):
-            st.success(f"✅ Bảng kết quả Quét Cuối Ngày ({len(st.session_state['scan_results'])} mã hợp lệ):")
             raw_df = pd.DataFrame(st.session_state['scan_results'])
             df_display = render_search_and_export(raw_df)
             st.session_state['df_display_cached'] = df_display
             render_screener_results(df_display, signal_filter)
             
         elif st.session_state.get('scan_mode') == 'INTRADAY':
-            st.info("⚠️ Bộ nhớ đang lưu kết quả **Quét Trong Phiên**. Hãy chuyển sang tab **Tín Hiệu Trong Phiên** để xem, hoặc bấm Quét Cuối Ngày để lấy lại dữ liệu toàn thị trường.")
+            st.info("⚠️ Bộ nhớ đang lưu kết quả **Quét Trong Phiên**. Hãy chuyển sang tab **Tín Hiệu Trong Phiên** để xem, hoặc bấm Quét cuối ngày để lấy lại dữ liệu toàn thị trường.")
         else:
             st.markdown(
-                '<div class="sb-note">Hãy bấm <b>🌙 KÍCH HOẠT QUÉT CUỐI NGÀY</b> để bắt đầu lọc dữ liệu toàn bộ thị trường.</div>',
+                '<div class="sb-note">Hãy bấm <b>🌙 Quét cuối ngày</b> để bắt đầu lọc dữ liệu toàn bộ thị trường.</div>',
                 unsafe_allow_html=True,
             )
 
@@ -334,7 +332,7 @@ def render_tab_intraday():
     if True:
         sb_header("📡 Tín Hiệu & Cảnh Báo (Trong Phiên)", "Quét nhanh các mã thanh khoản/VN30 (Fast Mode) để theo dõi Volume và Ichimoku realtime")
         
-        intraday_scan_button = st.button("⚡ QUÉT TÍN HIỆU TRONG PHIÊN (Chế độ Nhanh)", width="stretch", type="primary")
+        intraday_scan_button = st.button("⚡ Quét tín hiệu trong phiên", width="stretch", type="primary")
 
         if intraday_scan_button:
             results = execute_scan(force_full=False)
@@ -343,17 +341,16 @@ def render_tab_intraday():
             st.rerun()
 
         if st.session_state.get('scan_mode') == 'INTRADAY' and st.session_state.get('scan_results'):
-            st.success(f"✅ Bảng Tín Hiệu Trong Phiên ({len(st.session_state['scan_results'])} mã ưu tiên):")
             raw_df = pd.DataFrame(st.session_state['scan_results'])
             df_display = render_search_and_export(raw_df)
             st.session_state['df_display_cached'] = df_display
             render_screener_signals(df_display, signal_filter)
             
         elif st.session_state.get('scan_mode') == 'EOD':
-            st.info("⚠️ Bộ nhớ đang lưu kết quả **Quét Cuối Ngày**. Hãy bấm 'Quét Tín Hiệu Trong Phiên' để lấy dữ liệu realtime mới nhất.")
+            st.info("⚠️ Bộ nhớ đang lưu kết quả **Quét Cuối Ngày**. Hãy bấm 'Quét tín hiệu trong phiên' để lấy dữ liệu realtime mới nhất.")
         else:
             st.markdown(
-                '<div class="sb-note">Bấm <b>⚡ QUÉT TÍN HIỆU TRONG PHIÊN</b> để cập nhật biến động Volume, dòng tiền và Ichimoku ngay bây giờ.</div>',
+                '<div class="sb-note">Bấm <b>⚡ Quét tín hiệu trong phiên</b> để cập nhật biến động Volume, dòng tiền và Ichimoku ngay bây giờ.</div>',
                 unsafe_allow_html=True,
             )
 
