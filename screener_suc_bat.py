@@ -423,7 +423,7 @@ def compute_metrics(df) -> dict:
 # ─────────────────────────────────────────────────────────────
 
 _SRC_BADGE = {
-    "DNSE":    '<span class="src-badge" style="background:#1a2a1a;color:#69db7c;">DNSE</span>',
+    "DNSE":    '<span class="src-badge" style="background:#e7f6ec;color:#15803d;">DNSE</span>',
     "VCI":     '<span class="src-badge src-vci">vnstock VCI</span>',
     "FireAnt": '<span class="src-badge src-fireant">FireAnt</span>',
     "Yahoo":   '<span class="src-badge src-yahoo">Nguồn dự phòng</span>',
@@ -457,7 +457,7 @@ def _render_fib_table(m: dict):
 
         # Highlight dòng gần giá hiện tại nhất (trong vòng 2%)
         is_near = abs(kc - price_now) / price_now < 0.02 or abs(ht - price_now) / price_now < 0.02
-        row_style = "background:#1a1a3a;" if is_near else ""
+        row_style = "background:#f3f0ff;" if is_near else ""
 
         # Cùng tông màu với tiêu đề cột (đỏ = Kháng cự, xanh = Hỗ trợ).
         # Mức CHƯA bị giá vượt qua: giữ nguyên màu đậm, không gạch ngang.
@@ -465,14 +465,14 @@ def _render_fib_table(m: dict):
         kc_active = kc > price_now      # còn là kháng cự thật (giá chưa vượt qua)
         ht_active = ht < price_now      # còn là hỗ trợ thật (giá chưa thủng qua)
 
-        kc_color = "#ef4444" if kc_active else "#7a4444"
-        ht_color = "#22c55e" if ht_active else "#3f7a5c"
+        kc_color = "#dc2626" if kc_active else "#e8a1a1"
+        ht_color = "#16a34a" if ht_active else "#9cc9b0"
 
         kc_strike = "" if kc_active else "text-decoration:line-through;"
         ht_strike = "" if ht_active else "text-decoration:line-through;"
 
-        kc_badge = "<span style='color:#ef4444;font-size:9px;margin-left:4px;'>▲ KC</span>" if kc_active else ""
-        ht_badge = "<span style='color:#22c55e;font-size:9px;margin-left:4px;'>▼ HT</span>" if ht_active else ""
+        kc_badge = "<span style='color:#dc2626;font-size:9px;margin-left:4px;'>▲ KC</span>" if kc_active else ""
+        ht_badge = "<span style='color:#16a34a;font-size:9px;margin-left:4px;'>▼ HT</span>" if ht_active else ""
 
         # QUAN TRỌNG: không được thụt lề các dòng HTML này. Markdown coi dòng
         # thụt lề ≥4 space là code block, làm "bể mạch" render HTML giữa chừng
@@ -495,15 +495,15 @@ def _render_fib_table(m: dict):
         '<table class="sr-table" style="width:100%;border-collapse:collapse;">'
         '<thead><tr>'
         '<th style="color:var(--dim);font-size:.72rem;padding:4px 8px;text-align:left;">Mức Fibo</th>'
-        '<th style="color:#ef4444;font-size:.72rem;padding:4px 8px;text-align:left;font-weight:700;">🔴 KHÁNG CỰ</th>'
-        '<th style="color:#22c55e;font-size:.72rem;padding:4px 8px;text-align:left;font-weight:700;">🟢 HỖ TRỢ</th>'
+        '<th style="color:#dc2626;font-size:.72rem;padding:4px 8px;text-align:left;font-weight:700;">🔴 KHÁNG CỰ</th>'
+        '<th style="color:#16a34a;font-size:.72rem;padding:4px 8px;text-align:left;font-weight:700;">🟢 HỖ TRỢ</th>'
         '</tr></thead>'
         f'<tbody>{rows_html}</tbody>'
         '</table>'
         '<div style="font-size:.68rem;color:var(--dim);margin-top:6px;padding:0 8px;">'
         f'Giá hiện tại: <b style="color:var(--ink);">{price_now:,.2f}</b> &nbsp;|&nbsp; '
-        f'Đỉnh pha: <b style="color:#ef4444;">{m["phase_high"]:,.2f}</b> &nbsp;|&nbsp; '
-        f'Đáy pha: <b style="color:#22c55e;">{m["phase_low"]:,.2f}</b>'
+        f'Đỉnh pha: <b style="color:#dc2626;">{m["phase_high"]:,.2f}</b> &nbsp;|&nbsp; '
+        f'Đáy pha: <b style="color:#16a34a;">{m["phase_low"]:,.2f}</b>'
         '</div>'
     )
     st.markdown(table_html, unsafe_allow_html=True)
@@ -520,8 +520,8 @@ def _render_lookup_card(symbol: str, company: str, m: dict, source: str, elapsed
 
     speed_html = ""
     if elapsed is not None:
-        speed_color = "#22c55e" if elapsed <= 2 else ("#f5a524" if elapsed <= 4 else "#ef4444")
-        speed_html = (f'<span class="src-badge" style="background:#12102a;color:{speed_color};">'
+        speed_color = "#16a34a" if elapsed <= 2 else ("#d97706" if elapsed <= 4 else "#dc2626")
+        speed_html = (f'<span class="src-badge" style="background:#f7f6fb;color:{speed_color};">'
                       f'⚡ {elapsed:.1f}s</span>')
 
     # header
@@ -901,19 +901,19 @@ def render_scan_section():
         </div>
         <div class="sb-stat">
             <div class="sb-stat-label">DD TB top 10</div>
-            <div class="sb-stat-value" style="color:#ef4444">
+            <div class="sb-stat-value" style="color:#dc2626">
                 {df_show['drawdown_pct'].head(10).mean():.1f}%
             </div>
         </div>
         <div class="sb-stat">
             <div class="sb-stat-label">Hồi TB top 10</div>
-            <div class="sb-stat-value" style="color:#22c55e">
+            <div class="sb-stat-value" style="color:#16a34a">
                 +{df_show['recovery_pct'].head(10).mean():.1f}%
             </div>
         </div>
         <div class="sb-stat">
             <div class="sb-stat-label">Beta DD TB top 10</div>
-            <div class="sb-stat-value" style="color:#f5a524">
+            <div class="sb-stat-value" style="color:#d97706">
                 {df_show['beta_dd'].head(10).mean():.2f}x
             </div>
         </div>
@@ -939,20 +939,20 @@ def render_scan_section():
         styles = pd.DataFrame("", index=df_s.index, columns=df_s.columns)
         if "Độ giãn%" in df_s.columns:
             styles["Độ giãn%"] = df_s["Độ giãn%"].apply(
-                lambda v: "color:#ef4444;font-weight:700" if v < -30
-                else ("color:#ff8a65" if v < -20 else "color:#ffcc80"))
+                lambda v: "color:#dc2626;font-weight:700" if v < -30
+                else ("color:#ea580c" if v < -20 else "color:#d97706"))
         if "Sức bật" in df_s.columns:
             styles["Sức bật"] = df_s["Sức bật"].apply(
-                lambda v: "color:#22c55e;font-weight:800" if v >= 2
-                else ("color:#f5a524;font-weight:700" if v >= 1 else "color:#ef4444"))
+                lambda v: "color:#16a34a;font-weight:800" if v >= 2
+                else ("color:#d97706;font-weight:700" if v >= 1 else "color:#dc2626"))
         if "Hồi%" in df_s.columns:
             styles["Hồi%"] = df_s["Hồi%"].apply(
-                lambda v: "color:#22c55e;font-weight:700" if v > 10
-                else ("color:#69db7c" if v > 5 else "color:#aaa"))
+                lambda v: "color:#16a34a;font-weight:700" if v > 10
+                else ("color:#15803d" if v > 5 else "color:#6b6585"))
         if "⭐ Score" in df_s.columns:
             styles["⭐ Score"] = df_s["⭐ Score"].apply(
-                lambda v: "color:#22c55e;font-weight:800" if v >= 70
-                else ("color:#f5a524;font-weight:700" if v >= 40 else "color:#ef4444"))
+                lambda v: "color:#16a34a;font-weight:800" if v >= 70
+                else ("color:#d97706;font-weight:700" if v >= 40 else "color:#dc2626"))
         return styles
 
     styled = df_table.style.apply(_style, axis=None).format({
@@ -982,15 +982,15 @@ def render_scan_section():
                 st.markdown("**🔴 Kháng cự**")
                 for p, v in kc_list:
                     st.markdown(
-                        f"<span style='color:#ef4444;font-weight:700'>{p:,.2f}</span>"
-                        f" &nbsp; vol: <span style='color:#aaa'>{v:.1f}%</span>",
+                        f"<span style='color:#dc2626;font-weight:700'>{p:,.2f}</span>"
+                        f" &nbsp; vol: <span style='color:#6b6585'>{v:.1f}%</span>",
                         unsafe_allow_html=True)
             with c2:
                 st.markdown("**🟢 Hỗ trợ**")
                 for p, v in ht_list:
                     st.markdown(
-                        f"<span style='color:#22c55e;font-weight:700'>{p:,.2f}</span>"
-                        f" &nbsp; vol: <span style='color:#aaa'>{v:.1f}%</span>",
+                        f"<span style='color:#16a34a;font-weight:700'>{p:,.2f}</span>"
+                        f" &nbsp; vol: <span style='color:#6b6585'>{v:.1f}%</span>",
                         unsafe_allow_html=True)
         else:
             st.info("Không có dữ liệu KC/HT cho mã này.")

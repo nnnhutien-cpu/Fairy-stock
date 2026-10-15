@@ -181,7 +181,7 @@ def build_chart(res, n_bars=110):
         x=x, y=d["line"], mode="lines", line=dict(color=ui_kit.SERIES[4], width=2, shape="hv"),
         name="Đường 129"), row=1, col=1)
 
-    vcol = np.where(d["close"] >= d["open"], "rgba(34,197,94,.65)", "rgba(239,68,68,.65)")
+    vcol = np.where(d["close"] >= d["open"], "rgba(22,163,74,.6)", "rgba(220,38,38,.6)")
     fig.add_trace(go.Bar(x=x, y=d["volume"], marker_color=vcol, name="Volume",
                          showlegend=False), row=2, col=1)
     fig.add_trace(go.Scatter(x=x, y=d["vol_ma"], mode="lines",
@@ -191,16 +191,16 @@ def build_chart(res, n_bars=110):
     if res["status"] == "BUY":
         k = res["entry_i"] - off
         k0 = max(k, 0)
-        fig.add_vrect(x0=x.iloc[k0], x1=x.iloc[-1], fillcolor="rgba(34,197,94,.10)",
+        fig.add_vrect(x0=x.iloc[k0], x1=x.iloc[-1], fillcolor="rgba(22,163,74,.08)",
                       line_width=0, row=1, col=1)
         if k >= 0:
             fig.add_annotation(
                 x=x.iloc[k], y=float(d["low"].iloc[k]), ax=0, ay=45,
                 text=f"Điểm vào<br>{res['entry_date']:%d/%m/%y} {res['entry_price']:.2f}",
-                showarrow=True, arrowhead=2, arrowwidth=2, arrowcolor="#22c55e",
-                font=dict(color="#22c55e", size=11), row=1, col=1)
-        for lvl, dash, col in ((res["lvl1"], "dash", "#f59e0b"),
-                               (res["lvl2"], "dot", "#fbbf24")):
+                showarrow=True, arrowhead=2, arrowwidth=2, arrowcolor="#16a34a",
+                font=dict(color="#16a34a", size=11), row=1, col=1)
+        for lvl, dash, col in ((res["lvl1"], "dash", "#d97706"),
+                               (res["lvl2"], "dot", "#b45309")):
             fig.add_shape(type="line", x0=x.iloc[k0], x1=x.iloc[-1], y0=lvl, y1=lvl,
                           line=dict(color=col, width=1.4, dash=dash), row=1, col=1)
 

@@ -355,40 +355,70 @@ def render_tab_intraday():
 
 # ==========================================
 # ĐIỀU HƯỚNG — chỉ chạy code của trang đang mở
-# SỬA HIỆU NĂNG: st.tabs chạy code của CẢ 7 tab ở mỗi lần tải/tương tác (tab Tín Hiệu Ngày tự
+# SỬA HIỆU NĂNG: st.tabs chạy code của MỌI tab ở mỗi lần tải/tương tác (tab Tín Hiệu Ngày tự
 # quét 60 mã, tab Thị Trường tải 4 chỉ số...) dù người dùng chỉ xem 1 tab. Thanh điều hướng
 # bên dưới chỉ chạy trang được chọn -> mở app và chuyển trang nhanh hơn nhiều lần.
 # ==========================================
 from tab_watchlist import render_watchlist
 
 
-def render_danh_muc():
-    ui_kit.page_header("💼 Danh mục", "Bộ lọc 3–5 mã tiềm năng")
-    render_watchlist(PRIORITY_TICKERS, p_tenkan, p_kijun, p_senkou_b, p_shift)
+def _sub_nav(key, options):
+    """Thanh chọn phụ trong 1 trang (bấm lại vào mục đang chọn vẫn giữ nguyên)."""
+    choice = st.segmented_control("Mục", options, default=options[0], key=key,
+                                  label_visibility="collapsed")
+    return choice or options[0]
+
+
+# ── 5 trang (gộp các trang trùng chức năng) ──
+def page_khuyen_nghi():
+    sub = _sub_nav("sub_kn", ["✨ Mã tiềm năng", "🔎 Tra cứu 1 mã"])
+    if sub == "✨ Mã tiềm năng":
+        render_watchlist(PRIORITY_TICKERS, p_tenkan, p_kijun, p_senkou_b, p_shift)
+    else:
+        render_recommendation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift)
+
+
+def page_diem_vao_ra():
+    sub = _sub_nav("sub_vr", ["☁️ Ichimoku", "🕯️ Đường 129 (thoát 3 tầng)"])
+    if sub == "☁️ Ichimoku":
+        render_ichimoku_tab(get_stock_data, PRIORITY_TICKERS, p_tenkan, p_kijun, p_senkou_b, p_shift)
+    else:
+        render_tin_hieu_ngay_tab(PRIORITY_TICKERS)
+
+
+def page_bo_loc():
+    sub = _sub_nav("sub_bl", ["🌙 Cuối ngày (toàn thị trường)", "⚡ Trong phiên (mã thanh khoản)"])
+    if sub.startswith("🌙"):
+        render_tab_eod()
+    else:
+        render_tab_intraday()
 
 
 PAGES = {
     "🌟 Thị Trường": ("thi-truong", render_market),
-    "🔍 Lọc Cuối Ngày": ("loc-cuoi-ngay", render_tab_eod),
-    "📡 Tín Hiệu Realtime": ("tin-hieu-realtime", render_tab_intraday),
-    "💡 Khuyến Nghị": ("khuyen-nghi",
-                      lambda: render_recommendation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift)),
-    "☁️ Ichimoku": ("ichimoku",
-                    lambda: render_ichimoku_tab(get_stock_data, PRIORITY_TICKERS, p_tenkan, p_kijun, p_senkou_b, p_shift)),
+    "💡 Khuyến Nghị": ("khuyen-nghi", page_khuyen_nghi),
+    "🎯 Điểm Vào/Ra": ("diem-vao-ra", page_diem_vao_ra),
+    "🔍 Bộ Lọc": ("bo-loc", page_bo_loc),
     "🚀 Sức Bật": ("suc-bat", render_suc_bat_tab),
-    "💼 Danh mục": ("danh-muc", lambda: render_danh_muc()),
-    "🕯️ Tín Hiệu Ngày": ("tin-hieu-ngay", lambda: render_tin_hieu_ngay_tab(PRIORITY_TICKERS)),
 }
+# Link cũ (?trang=...) vẫn mở đúng trang mới
+OLD_SLUGS = {"danh-muc": "khuyen-nghi", "ichimoku": "diem-vao-ra", "tin-hieu-ngay": "diem-vao-ra",
+             "loc-cuoi-ngay": "bo-loc", "tin-hieu-realtime": "bo-loc"}
 _slug_to_name = {slug: name for name, (slug, _) in PAGES.items()}
 if "nav_page" not in st.session_state:
     # mở đúng trang theo link chia sẻ ?trang=khuyen-nghi
-    st.session_state["nav_page"] = _slug_to_name.get(st.query_params.get("trang", ""), "🌟 Thị Trường")
+    _q = st.query_params.get("trang", "")
+    st.session_state["nav_page"] = _slug_to_name.get(OLD_SLUGS.get(_q, _q), "🌟 Thị Trường")
+elif st.session_state["nav_page"] is not None and st.session_state["nav_page"] not in PAGES:
+    st.session_state["nav_page"] = "🌟 Thị Trường"
 
 with st.container(key="ct_nav"):
     page = st.segmented_control("Trang", list(PAGES), key="nav_page", selection_mode="single",
                                 label_visibility="collapsed")
-if page is None:  # bấm lại vào trang đang chọn sẽ bỏ chọn -> giữ trang cũ
-    page = st.session_state.get("_nav_last", "🌟 Thị Trường")
+if page not in PAGES:  # bấm lại vào trang đang chọn sẽ bỏ chọn -> giữ trang cũ
+    page = st.session_state.get("_nav_last")
+if page not in PAGES:  # tên trang cũ (trước khi gộp còn 5 trang) còn lưu trong phiên
+    page = "🌟 Thị Trường"
 st.session_state["_nav_last"] = page
 if st.query_params.get("trang") != PAGES[page][0]:
     st.query_params["trang"] = PAGES[page][0]

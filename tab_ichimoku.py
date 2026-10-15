@@ -172,7 +172,7 @@ def _color(label):
     if "BÁN" in up or "TRÁNH" in up:
         return ui_kit.DOWN
     if "GIẢM TỶ TRỌNG" in up:
-        return "#f97316"
+        return "#ea580c"
     if "CHỜ VOL" in up or "THEO DÕI" in up:
         return ui_kit.WARN
     return ui_kit.MUTED
@@ -195,10 +195,10 @@ def _render_chart(r, p_shift=26, bars=120):
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03,
                         row_heights=[0.78, 0.22], subplot_titles=["Ichimoku", "Volume vs MA20"])
 
-    fig.add_trace(go.Scatter(x=x_all, y=span_a, line=dict(color='rgba(34,197,94,.55)', width=1),
+    fig.add_trace(go.Scatter(x=x_all, y=span_a, line=dict(color='rgba(22,163,74,.6)', width=1),
                              name='Senkou A'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=x_all, y=span_b, line=dict(color='rgba(239,68,68,.55)', width=1),
-                             fill='tonexty', fillcolor='rgba(139,132,168,.14)', name='Senkou B'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=x_all, y=span_b, line=dict(color='rgba(220,38,38,.6)', width=1),
+                             fill='tonexty', fillcolor='rgba(124,58,237,.07)', name='Senkou B'), row=1, col=1)
     fig.add_trace(go.Candlestick(
         x=x, open=hist['open'], high=hist['high'], low=hist['low'], close=hist['close'],
         increasing_line_color=ui_kit.UP, increasing_fillcolor=ui_kit.UP,
@@ -236,7 +236,7 @@ def _render_single(r):
     <div class="lk-card" style="border-left:4px solid {color};">
         <div class="lk-label">Ichimoku · {r['ticker']} · giá {r['close']:,.2f} · {r['date']}</div>
         <div style="font-size:1.6rem;font-weight:800;color:{color};margin-top:4px;">{r['label']}</div>
-        <div style="font-size:0.92rem;color:#dcd6ec;margin-top:6px;">{r['desc']}</div>
+        <div style="font-size:0.92rem;color:var(--text);margin-top:6px;">{r['desc']}</div>
     </div>
     """, unsafe_allow_html=True)
 

@@ -6,16 +6,16 @@ ui_kit.py — Bộ giao diện dùng chung cho MỌI tab của Cô Tiên Stock.
   section(title)          : tiêu đề mục nhỏ
   note(html)              : ô ghi chú viền trái
   style_fig(fig, height)  : khoác cùng 1 "theme" cho mọi biểu đồ plotly
-Bảng màu biểu đồ đã kiểm tra độ tương phản & mù màu trên nền tối #0f0a1f.
+Giao diện SÁNG (nền trắng). Bảng màu biểu đồ đã kiểm tra độ tương phản trên nền #ffffff.
 """
 import streamlit as st
 
 # ── Màu dùng chung ──
-INK = "#e8e4ff"          # chữ chính / đường giá
-MUTED = "#8b84a8"        # chữ phụ, trục
-GRID = "rgba(139,132,168,0.14)"
-UP, DOWN, WARN = "#22c55e", "#ef4444", "#f5a524"   # tăng / giảm / cảnh báo (kèm chữ, không dùng màu đơn lẻ)
-VOL = "#4b4370"          # cột khối lượng trung tính
+INK = "#1f1a33"          # chữ chính / đường giá
+MUTED = "#6b6585"        # chữ phụ, trục
+GRID = "rgba(31,26,51,0.08)"
+UP, DOWN, WARN = "#16a34a", "#dc2626", "#d97706"   # tăng / giảm / cảnh báo (kèm chữ, không dùng màu đơn lẻ)
+VOL = "#c9c3dd"          # cột khối lượng trung tính
 # ── Kích thước chuẩn cho MỌI tab (đổi ở đây là cả app đổi theo) ──
 PAGE_MAX_W = None                # None = full màn hình (đặt số px nếu muốn giới hạn)
 CHART_H = {"tall": 620,          # biểu đồ nhiều tầng (giá + vol + RSI)
@@ -34,16 +34,17 @@ _CSS = """
    icon: hiện chữ "arrow_right", "visibility" chồng lên nhãn).
    ═══════════════════════════════════════════════════════════════════ */
 :root{
-  --bg:#0f0a1f; --panel:#17112e; --card:#1a1436; --card-2:#12102a;
-  --line:#2c2151; --line-soft:#231a42;
-  --ink:#e8e4ff; --text:#cfc8ea; --muted:#8b84a8; --dim:#6d6690;
-  --accent:#8b5cf6; --accent-2:#a78bfa; --grad:linear-gradient(135deg,#5b21b6 0%,#7c3aed 55%,#8b5cf6 100%);
-  --up:#22c55e; --down:#ef4444; --warn:#f5a524;
+  --bg:#ffffff; --panel:#faf9fd; --card:#ffffff; --card-2:#f7f6fb;
+  --line:#e6e2f0; --line-soft:#efecf6;
+  --ink:#1f1a33; --text:#3b3552; --muted:#6b6585; --dim:#8e88a6;
+  --accent:#7c3aed; --accent-2:#6d28d9; --grad:linear-gradient(135deg,#5b21b6 0%,#7c3aed 55%,#8b5cf6 100%);
+  --up:#16a34a; --down:#dc2626; --warn:#d97706;
   --ease:cubic-bezier(.2,.7,.2,1);
 }
 
 /* ── Nền & khung ── */
-.stApp{ background: radial-gradient(1200px 600px at 85% -10%, rgba(124,58,237,.16), transparent 60%), var(--bg); }
+.stApp{ background: var(--bg); color: var(--ink); }
+section[data-testid="stSidebar"]{ background: var(--panel); }
 header[data-testid="stHeader"]{ background: transparent; }
 [data-testid="stDecoration"]{ display:none; }
 .block-container{ padding: 2.4rem 2rem 3rem !important; max-width: 100% !important; }
@@ -60,7 +61,7 @@ h1,h2,h3,h4,h5,h6{ color: var(--ink) !important; letter-spacing:-.01em; }
 h5,h6{ color: var(--accent-2) !important; }
 [data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] li{ color: var(--text); line-height:1.6; }
 [data-testid="stCaptionContainer"]{ color: var(--muted) !important; }
-[data-testid="stWidgetLabel"] p{ color: #b3aad6 !important; font-weight:600 !important; font-size:.82rem !important; }
+[data-testid="stWidgetLabel"] p{ color: var(--text) !important; font-weight:600 !important; font-size:.82rem !important; }
 .stApp, [data-testid="stMetricValue"], [data-testid="stDataFrame"]{ font-variant-numeric: tabular-nums; }
 
 /* ── Nút ── */
@@ -72,9 +73,11 @@ h5,h6{ color: var(--accent-2) !important; }
 .stButton > button:hover, .stDownloadButton > button:hover{ border-color: var(--accent); transform: translateY(-1px); }
 .stButton > button:active, .stDownloadButton > button:active{ transform: translateY(0); }
 .stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"]{
-  background: var(--grad); border: none; color:#fff; box-shadow: 0 6px 18px -8px rgba(139,92,246,.7);
+  background: var(--grad); border: none; color:#fff; box-shadow: 0 6px 18px -8px rgba(124,58,237,.35);
 }
-.stButton > button[kind="primary"]:hover{ box-shadow: 0 10px 24px -8px rgba(139,92,246,.85); }
+.stButton > button[kind="primary"] *, .stFormSubmitButton > button[kind="primary"] *,
+.stDownloadButton > button[kind="primary"] *{ color:#fff !important; }
+.stButton > button[kind="primary"]:hover{ box-shadow: 0 10px 24px -8px rgba(124,58,237,.45); }
 
 /* ── Thanh điều hướng trang ── */
 div[data-testid="stButtonGroup"]{ gap:6px !important; flex-wrap:wrap; margin: 2px 0 14px; }
@@ -87,7 +90,7 @@ div[data-testid="stButtonGroup"]{ gap:6px !important; flex-wrap:wrap; margin: 2p
 }
 div[data-testid="stButtonGroup"] button{
   border-radius: 999px !important; border:1px solid var(--line) !important;
-  background: rgba(26,20,54,.7) !important; color:#b3aad6 !important;
+  background: #fff !important; color: var(--text) !important;
   font-weight:600 !important; padding: 6px 15px !important;
   transition: background .2s var(--ease), color .2s, border-color .2s;
 }
@@ -95,8 +98,10 @@ div[data-testid="stButtonGroup"] button:hover{ border-color: var(--accent) !impo
 div[data-testid="stButtonGroup"] button[kind$="Active"],
 div[data-testid="stButtonGroup"] button[aria-checked="true"]{
   background: var(--grad) !important; color:#fff !important; border-color: transparent !important;
-  box-shadow: 0 6px 16px -8px rgba(139,92,246,.8);
+  box-shadow: 0 6px 16px -8px rgba(124,58,237,.35);
 }
+div[data-testid="stButtonGroup"] button[kind$="Active"] *,
+div[data-testid="stButtonGroup"] button[aria-checked="true"] *{ color:#fff !important; }
 
 /* ── Tab con ── */
 .stTabs [data-baseweb="tab-list"]{ gap:4px; border-bottom:1px solid var(--line); }
@@ -108,11 +113,11 @@ div[data-testid="stButtonGroup"] button[aria-checked="true"]{
 
 /* ── Thẻ số liệu ── */
 div[data-testid="stMetric"]{
-  background: linear-gradient(180deg, var(--card), #161031);
+  background: var(--card); box-shadow: 0 1px 2px rgba(31,26,51,.04);
   border:1px solid var(--line); border-radius:14px; padding: 14px 16px;
   transition: border-color .2s, transform .2s var(--ease);
 }
-div[data-testid="stMetric"]:hover{ border-color:#3d2e70; }
+div[data-testid="stMetric"]:hover{ border-color:#cfc6ee; }
 [data-testid="stMetricLabel"] p, [data-testid="stMetricLabel"] div{
   white-space: normal !important; overflow: visible !important; text-overflow: clip !important;
   color: var(--muted) !important; font-size: .8rem !important; font-weight:600 !important;
@@ -121,7 +126,7 @@ div[data-testid="stMetric"]:hover{ border-color:#3d2e70; }
 
 /* ── Khung viền, expander, bảng, cảnh báo ── */
 [data-testid="stVerticalBlockBorderWrapper"]{ border-radius:16px; }
-div[data-testid="stExpander"] details{ border-radius:12px; border-color: var(--line); background: rgba(23,17,46,.55); }
+div[data-testid="stExpander"] details{ border-radius:12px; border-color: var(--line); background: var(--card); }
 div[data-testid="stExpander"] summary:hover{ color: var(--ink); }
 [data-testid="stDataFrame"], [data-testid="stTable"]{ border-radius:12px; overflow:hidden; }
 [data-testid="stAlert"]{ border-radius:12px; }
@@ -131,7 +136,7 @@ div[data-testid="stExpander"] summary:hover{ color: var(--ink); }
 section[data-testid="stSidebar"]{ border-right:1px solid var(--line); }
 .side-brand{ display:flex; align-items:center; gap:10px; margin: 0 0 4px; }
 .side-brand .logo{ width:38px; height:38px; border-radius:11px; display:grid; place-items:center;
-  background: var(--grad); font-size:20px; box-shadow: 0 6px 16px -8px rgba(139,92,246,.9); }
+  background: var(--grad); font-size:20px; box-shadow: 0 6px 16px -8px rgba(124,58,237,.4); }
 .side-brand .t{ font-weight:800; font-size:1.05rem; color:var(--ink); letter-spacing:.02em; line-height:1.15; }
 .side-brand .s{ font-size:.72rem; color:var(--muted); }
 .side-sec{ font-size:.7rem; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--dim);
@@ -143,20 +148,20 @@ section[data-testid="stSidebar"]{ border-right:1px solid var(--line); }
 .app-title .tag{ font-size:.8rem; color:var(--muted); }
 .sb-header{
   position:relative; overflow:hidden;
-  background: linear-gradient(135deg, rgba(91,33,182,.28), rgba(23,17,46,.9) 55%);
+  background: linear-gradient(135deg, rgba(124,58,237,.10), #ffffff 60%);
   border:1px solid var(--line); border-radius:16px; padding: 16px 20px; margin-bottom: 18px;
 }
 .sb-header::after{ content:""; position:absolute; right:-40px; top:-60px; width:180px; height:180px;
-  border-radius:50%; background: radial-gradient(circle, rgba(167,139,250,.22), transparent 70%); }
+  border-radius:50%; background: radial-gradient(circle, rgba(167,139,250,.18), transparent 70%); }
 .sb-title{ font-size:1.3rem; font-weight:800; color:var(--ink); position:relative; z-index:1; }
 .sb-sub{ font-size:.8rem; color:var(--muted); margin-top:3px; position:relative; z-index:1; }
 .sb-note{
-  background: rgba(26,20,54,.7); border:1px solid var(--line-soft); border-left:3px solid var(--accent-2);
+  background: var(--card-2); border:1px solid var(--line-soft); border-left:3px solid var(--accent-2);
   padding: 11px 14px; border-radius: 0 10px 10px 0; font-size:.85rem; color: var(--text); margin-bottom:14px;
 }
 
 /* ── Thẻ tra cứu (Sức Bật, Khuyến nghị, Danh mục) ── */
-.lk-card{ background: var(--card); border:1px solid var(--line); border-radius:16px; padding: 20px 22px; margin-bottom:16px; }
+.lk-card{ background: var(--card); border:1px solid var(--line); box-shadow: 0 1px 3px rgba(31,26,51,.05); border-radius:16px; padding: 20px 22px; margin-bottom:16px; }
 .lk-ticker{ font-size:1.75rem; font-weight:800; color: var(--accent-2); letter-spacing:.06em; }
 .lk-company{ font-size:.85rem; color: var(--muted); margin: 2px 0 16px; }
 .lk-grid{ display:grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:14px; }
@@ -172,10 +177,10 @@ section[data-testid="stSidebar"]{ border-right:1px solid var(--line); }
 .sr-table th{ color: var(--muted); font-weight:600; text-align:left; padding: 6px 8px; font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; }
 .sr-table td{ padding: 7px 8px; border-bottom:1px solid var(--line-soft); color: var(--text); font-variant-numeric: tabular-nums; }
 .sr-table tr:last-child td{ border-bottom:none; }
-.sr-table tr:hover td{ background: rgba(139,92,246,.06); }
+.sr-table tr:hover td{ background: rgba(124,58,237,.05); }
 .formula-note{ background: var(--card-2); border-left:3px solid var(--accent-2); padding: 10px 14px;
   border-radius: 0 10px 10px 0; font-size:.8rem; color: var(--muted); margin-top:12px; line-height:1.7; }
-.warn-box{ background: rgba(245,165,36,.08); border:1px solid rgba(245,165,36,.3); border-radius:12px; padding:10px 14px; color:#f3d9a6; }
+.warn-box{ background: rgba(245,165,36,.08); border:1px solid rgba(245,165,36,.3); border-radius:12px; padding:10px 14px; color:#92400e; }
 
 /* ── Dải chỉ số tóm tắt ── */
 .sb-stat-row{ display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
@@ -186,29 +191,29 @@ section[data-testid="stSidebar"]{ border-right:1px solid var(--line); }
 /* ── Nhãn ── */
 .badge-r,.badge-s,.badge-fib,.badge-hold,.badge-sell25,.badge-sellall,.badge-buy,.badge-wait,.src-badge{
   display:inline-block; padding: 2px 9px; border-radius:999px; font-size:.7rem; font-weight:700; letter-spacing:.02em; }
-.badge-r,.badge-sellall{ background: rgba(239,68,68,.14); color:#f87171; }
-.badge-s,.badge-buy{ background: rgba(34,197,94,.14); color:#4ade80; }
-.badge-hold{ background: rgba(245,165,36,.14); color:#fbbf24; }
-.badge-sell25{ background: rgba(249,115,22,.14); color:#fb923c; }
-.badge-wait{ background: rgba(139,132,168,.16); color:#b3aad6; }
-.badge-fib{ background: rgba(57,135,229,.14); color:#7cb0f5; }
+.badge-r,.badge-sellall{ background: rgba(220,38,38,.10); color:#b91c1c; }
+.badge-s,.badge-buy{ background: rgba(22,163,74,.10); color:#15803d; }
+.badge-hold{ background: rgba(217,119,6,.10); color:#b45309; }
+.badge-sell25{ background: rgba(234,88,12,.10); color:#c2410c; }
+.badge-wait{ background: rgba(107,101,133,.10); color: var(--muted); }
+.badge-fib{ background: rgba(37,99,235,.10); color:#1d4ed8; }
 .src-badge{ margin-left:6px; font-size:.62rem; }
-.src-vci{ background: rgba(57,135,229,.14); color:#7cb0f5; }
-.src-fireant{ background: rgba(34,197,94,.12); color:#4ade80; }
-.src-yahoo{ background: rgba(139,92,246,.14); color: var(--accent-2); }
+.src-vci{ background: rgba(37,99,235,.10); color:#1d4ed8; }
+.src-fireant{ background: rgba(22,163,74,.10); color:#15803d; }
+.src-yahoo{ background: rgba(124,58,237,.10); color: var(--accent-2); }
 
 /* ── Danh mục: ô slot ── */
 .slot-card{ background: var(--card); border:1px solid var(--line); border-radius:16px; padding: 18px 10px 14px;
   text-align:center; min-height:108px; transition: border-color .2s, transform .2s var(--ease); }
-.slot-card:hover{ border-color:#3d2e70; transform: translateY(-1px); }
-.slot-card.empty{ background: rgba(23,17,46,.5); border:2px dashed #3a2f66; display:flex; flex-direction:column;
+.slot-card:hover{ border-color:#cfc6ee; transform: translateY(-1px); }
+.slot-card.empty{ background: var(--card-2); border:2px dashed #d6cff0; display:flex; flex-direction:column;
   align-items:center; justify-content:center; }
 .slot-empty-plus{ color:#6b5aa6; font-size:1.8rem; line-height:1; }
 .slot-empty-label{ color:#6b5aa6; font-size:.75rem; margin-top:4px; }
 .slot-ticker{ font-weight:800; font-size:1.15rem; color: var(--ink); letter-spacing:.04em; }
 .slot-pct{ font-size:.72rem; color: var(--muted); margin-top:2px; }
 .slot-action-wrap{ margin-top:10px; }
-.buy-confirm-card{ background: var(--card-2); border:1px solid rgba(34,197,94,.3); border-radius:12px; padding: 12px 10px; text-align:center; }
+.buy-confirm-card{ background: var(--card-2); border:1px solid rgba(22,163,74,.3); border-radius:12px; padding: 12px 10px; text-align:center; }
 .buy-confirm-ticker{ font-weight:700; font-size:1rem; color: var(--ink); }
 .buy-confirm-note{ font-size:.75rem; color: var(--up); margin-top:4px; }
 
@@ -257,7 +262,7 @@ def style_fig(fig, height=420, dates=True, legend=True):
         font=dict(family="Sora, sans-serif", size=12, color=MUTED),
         showlegend=legend,
         legend=dict(orientation="h", yanchor="bottom", y=1.01, x=0, font=dict(color=INK)),
-        hovermode="x unified", hoverlabel=dict(bgcolor="#1a1436", font_color=INK),
+        hovermode="x unified", hoverlabel=dict(bgcolor="#ffffff", font_color=INK, bordercolor="#e6e2f0"),
         xaxis_rangeslider_visible=False, dragmode="pan",
     )
     fig.update_xaxes(gridcolor=GRID, zeroline=False, showline=False)

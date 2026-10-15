@@ -256,8 +256,8 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
         )
 
     # ── Panel khuyến nghị (dùng lk-card class đồng bộ CSS) ──────────────────
-    tone = [("MUA MẠNH", ui_kit.UP), ("MUA THĂM DÒ", "#60a5fa"), ("MUA", ui_kit.UP), ("BẮT ĐÁY", ui_kit.WARN),
-            ("BÁN MỘT PHẦN", "#f97316"), ("BÁN", ui_kit.DOWN), ("TRÁNH", ui_kit.DOWN),
+    tone = [("MUA MẠNH", ui_kit.UP), ("MUA THĂM DÒ", "#2563eb"), ("MUA", ui_kit.UP), ("BẮT ĐÁY", ui_kit.WARN),
+            ("BÁN MỘT PHẦN", "#ea580c"), ("BÁN", ui_kit.DOWN), ("TRÁNH", ui_kit.DOWN),
             ("GIỮ", ui_kit.MUTED), ("CHỜ", ui_kit.MUTED)]
     kn_color = next((c for k, c in tone if k in khuyen_nghi.upper()), ui_kit.MUTED)
 
@@ -265,7 +265,7 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
     <div class="lk-card" style="border-left:4px solid {kn_color};">
         <div class="lk-label">Khuyến nghị cho {ticker} · giá {close:,.2f}</div>
         <div style="font-size:1.6rem;font-weight:800;color:{kn_color};margin-top:4px;">{khuyen_nghi}</div>
-        <div style="font-size:0.92rem;color:#dcd6ec;margin-top:6px;">{mo_ta}</div>
+        <div style="font-size:0.92rem;color:var(--text);margin-top:6px;">{mo_ta}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -336,12 +336,12 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
 
     fig.add_trace(go.Scatter(
         x=plot_df.index, y=plot_df['senkou_a'],
-        line=dict(color='rgba(0,200,83,0.3)', width=1), name='Senkou A', showlegend=False
+        line=dict(color='rgba(22,163,74,0.45)', width=1), name='Senkou A', showlegend=False
     ), row=1, col=1)
     fig.add_trace(go.Scatter(
         x=plot_df.index, y=plot_df['senkou_b'],
-        line=dict(color='rgba(255,23,68,0.3)', width=1),
-        fill='tonexty', fillcolor='rgba(128,128,128,0.1)', name='Mây Kumo', showlegend=True
+        line=dict(color='rgba(220,38,38,0.45)', width=1),
+        fill='tonexty', fillcolor='rgba(124,58,237,0.07)', name='Mây Kumo', showlegend=True
     ), row=1, col=1)
 
     fig.add_trace(go.Scatter(
@@ -357,7 +357,7 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
         line=dict(color=ui_kit.SERIES[4], width=2.5), name='Knife129 ★'
     ), row=1, col=1)
 
-    vol_colors = ['rgba(34,197,94,.6)' if plot_df['close'].iloc[i] >= plot_df['open'].iloc[i] else 'rgba(239,68,68,.6)'
+    vol_colors = ['rgba(22,163,74,.55)' if plot_df['close'].iloc[i] >= plot_df['open'].iloc[i] else 'rgba(220,38,38,.55)'
                   for i in range(len(plot_df))]
     fig.add_trace(go.Bar(
         x=plot_df.index, y=plot_df['volume'],
@@ -369,7 +369,7 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
     ), row=2, col=1)
     fig.add_trace(go.Scatter(
         x=plot_df.index, y=plot_df['vol_ma20'] * KIET_CUNG_RATIO,
-        line=dict(color='rgba(255,255,255,0.4)', width=1, dash='dot'),
+        line=dict(color='rgba(31,26,51,0.35)', width=1, dash='dot'),
         name=f'{KIET_CUNG_RATIO:.0%} MA20 (Kiệt cung)'
     ), row=2, col=1)
 
@@ -377,9 +377,9 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
         x=plot_df.index, y=plot_df['rsi14'],
         line=dict(color=ui_kit.SERIES[5], width=1.5), name='RSI14'
     ), row=3, col=1)
-    fig.add_hline(y=70, line_dash="dash", line_color="rgba(255,68,68,0.5)", row=3, col=1)
-    fig.add_hline(y=30, line_dash="dash", line_color="rgba(0,200,83,0.5)", row=3, col=1)
-    fig.add_hrect(y0=30, y1=70, fillcolor="rgba(200,200,200,0.05)", row=3, col=1)
+    fig.add_hline(y=70, line_dash="dash", line_color="rgba(220,38,38,0.5)", row=3, col=1)
+    fig.add_hline(y=30, line_dash="dash", line_color="rgba(22,163,74,0.5)", row=3, col=1)
+    fig.add_hrect(y0=30, y1=70, fillcolor="rgba(124,58,237,0.04)", row=3, col=1)
 
     ui_kit.style_fig(fig, ui_kit.CHART_H["tall"], dates=False)
     fig.update_xaxes(type="category", nticks=8)

@@ -32,7 +32,7 @@ _CSS = """
 .pk-bar{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin: 2px 0 12px; }
 .pk-h{ font-weight:800; color:var(--ink); font-size:1.02rem; }
 .pk-t{ font-size:.78rem; color:var(--muted); }
-.pk-empty{ border:1px dashed #3a2f66; border-radius:16px; padding:22px; text-align:center; color:var(--muted); font-size:.88rem; }
+.pk-empty{ border:1px dashed #d6cff0; border-radius:16px; padding:22px; text-align:center; color:var(--muted); font-size:.88rem; }
 iframe[title="st.iframe"], [data-testid="stIFrame"]{ border:0; }
 </style>
 """

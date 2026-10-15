@@ -3,8 +3,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <style>
-:root{ --bg:#0f0a1f; --card:#1a1436; --card2:#12102a; --line:#2c2151; --ink:#e8e4ff; --text:#cfc8ea; --muted:#8b84a8;
-  --up:#22c55e; --down:#ef4444; --warn:#f5a524; --blue:#60a5fa; --acc:#8b5cf6;
+:root{ --bg:#ffffff; --card:#ffffff; --card2:#f7f6fb; --line:#e6e2f0; --ink:#1f1a33; --text:#3b3552; --muted:#6b6585;
+  --up:#16a34a; --down:#dc2626; --warn:#d97706; --blue:#2563eb; --acc:#7c3aed;
   --grad:linear-gradient(135deg,#5b21b6 0%,#7c3aed 55%,#8b5cf6 100%); --ease:cubic-bezier(.2,.7,.2,1); }
 *{ box-sizing:border-box; }
 html,body{ margin:0; overflow:hidden; background:transparent; color:var(--text); font-family:Sora,system-ui,sans-serif; font-size:14px; }
@@ -14,16 +14,16 @@ html,body{ margin:0; overflow:hidden; background:transparent; color:var(--text);
   background:var(--card); border:1px solid var(--line); border-radius:14px; padding:11px 14px; position:relative; overflow:hidden;
   transition: transform .16s var(--ease), border-color .16s, background .16s; user-select:none; }
 .pk::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--c); }
-.pk:hover{ transform: translateX(3px); border-color:#3d2e70; }
-.pk.on{ background: linear-gradient(90deg, rgba(139,92,246,.22), var(--card) 70%); border-color: var(--acc); }
+.pk:hover{ transform: translateX(3px); border-color:#cfc6ee; }
+.pk.on{ background: linear-gradient(90deg, rgba(124,58,237,.10), var(--card) 70%); border-color: var(--acc); }
 .rk{ width:32px; height:32px; border-radius:50%; display:grid; place-items:center; font-weight:800; color:var(--ink);
-  background: rgba(139,92,246,.16); border:1px solid rgba(139,92,246,.35); font-size:.85rem; }
-.pk.on .rk{ background:var(--grad); border-color:transparent; }
+  background: rgba(124,58,237,.08); border:1px solid rgba(124,58,237,.25); font-size:.85rem; }
+.pk.on .rk{ background:var(--grad); border-color:transparent; color:#fff; }
 .tk{ white-space:nowrap; font-weight:800; font-size:1.08rem; letter-spacing:.05em; color:var(--ink); }
 .sub{ font-size:.72rem; color:var(--muted); margin-top:2px; font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .chip{ font-size:.62rem; font-weight:700; padding:1px 7px; border-radius:999px; margin-left:6px; vertical-align:2px; }
-.chip.up{ background:rgba(34,197,94,.14); color:#4ade80; } .chip.side{ background:rgba(245,165,36,.14); color:#fbbf24; }
-.chip.down{ background:rgba(239,68,68,.14); color:#f87171; }
+.chip.up{ background:rgba(22,163,74,.10); color:#15803d; } .chip.side{ background:rgba(217,119,6,.10); color:#b45309; }
+.chip.down{ background:rgba(220,38,38,.10); color:#b91c1c; }
 .act{ text-align:right; white-space:nowrap; }
 .pct{ font-size:1.25rem; font-weight:800; color:var(--c); line-height:1; font-variant-numeric:tabular-nums; }
 .lbl{ font-size:.62rem; color:var(--muted); margin-top:3px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; }
@@ -80,17 +80,17 @@ function initChart(){
   const box = document.getElementById("chart");
   chart = LightweightCharts.createChart(box, {
     width: box.clientWidth, height: box.clientHeight,
-    layout: { background:{type:"solid", color:"transparent"}, textColor:"#8b84a8", fontFamily:"Sora, sans-serif", fontSize:11 },
-    grid: { vertLines:{color:"rgba(139,132,168,.08)"}, horzLines:{color:"rgba(139,132,168,.08)"} },
+    layout: { background:{type:"solid", color:"transparent"}, textColor:"#6b6585", fontFamily:"Sora, sans-serif", fontSize:11 },
+    grid: { vertLines:{color:"rgba(31,26,51,.06)"}, horzLines:{color:"rgba(31,26,51,.06)"} },
     rightPriceScale: { borderVisible:false, scaleMargins:{top:.08, bottom:.26} },
     timeScale: { borderVisible:false, rightOffset:3 },
     crosshair: { mode: 0 },
     localization: { locale: "vi-VN" },
     handleScroll: true, handleScale: true,
   });
-  sC = chart.addCandlestickSeries({ upColor:"#22c55e", downColor:"#ef4444", borderVisible:false,
-                                    wickUpColor:"#22c55e", wickDownColor:"#ef4444", priceLineVisible:false });
-  s129 = chart.addLineSeries({ color:"#f5a524", lineWidth:3, priceLineVisible:false, lastValueVisible:false });
+  sC = chart.addCandlestickSeries({ upColor:"#16a34a", downColor:"#dc2626", borderVisible:false,
+                                    wickUpColor:"#16a34a", wickDownColor:"#dc2626", priceLineVisible:false });
+  s129 = chart.addLineSeries({ color:"#d97706", lineWidth:3, priceLineVisible:false, lastValueVisible:false });
   s65  = chart.addLineSeries({ color:"#3987e5", lineWidth:2, priceLineVisible:false, lastValueVisible:false });
   s17  = chart.addLineSeries({ color:"#d55181", lineWidth:1, lineStyle:2, priceLineVisible:false, lastValueVisible:false });
   sV = chart.addHistogramSeries({ priceScaleId:"v", priceFormat:{type:"volume"}, priceLineVisible:false, lastValueVisible:false });
@@ -108,7 +108,7 @@ function legend(b){
   const o = b ? b.open : S.o[j], h = b ? b.high : S.h[j], l = b ? b.low : S.l[j], c = b ? b.close : S.c[j];
   document.getElementById("leg").innerHTML =
     `<span>O ${fmt(o)} · H ${fmt(h)} · L ${fmt(l)} · C <b style="color:var(--ink)">${fmt(c)}</b></span>
-     <span><i style="background:#f5a524"></i>Knife129</span><span><i style="background:#3987e5"></i>Knife65</span>
+     <span><i style="background:#d97706"></i>Knife129</span><span><i style="background:#3987e5"></i>Knife65</span>
      <span><i style="background:#d55181"></i>Kijun17</span>`;
 }
 function show(i){
@@ -122,13 +122,13 @@ function show(i){
     `<b style="color:var(--ink)">${esc(r.mo_ta)}</b>` + (r.ly_do.length ? "<br>" + r.ly_do.map(esc).join(" · ") : "");
   sC.setData(S.t.map((t, j) => ({time:t, open:S.o[j], high:S.h[j], low:S.l[j], close:S.c[j]})));
   sV.setData(S.t.map((t, j) => ({time:t, value:S.v[j],
-    color: S.c[j] >= S.o[j] ? "rgba(34,197,94,.35)" : "rgba(239,68,68,.35)"})));
+    color: S.c[j] >= S.o[j] ? "rgba(22,163,74,.35)" : "rgba(220,38,38,.35)"})));
   s129.setData(line(S, "k129")); s65.setData(line(S, "k65")); s17.setData(line(S, "k17"));
   chart.timeScale().fitContent();
   legend(null);
   panel.classList.remove("fade"); void panel.offsetWidth; panel.classList.add("fade");
 }
 if (window.LightweightCharts && D.length){ initChart(); show(0); }
-else if (D.length){ document.getElementById("chart").innerHTML = '<div style="padding:20px;color:#8b84a8">Không tải được thư viện biểu đồ.</div>'; }
+else if (D.length){ document.getElementById("chart").innerHTML = '<div style="padding:20px;color:#6b6585">Không tải được thư viện biểu đồ.</div>'; }
 </script>
 </body></html>

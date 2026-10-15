@@ -23,7 +23,7 @@ from data_loader import get_index_data, get_intraday_vnindex
 from market_breadth import _fetch_breadth_raw, breadth_freshness, get_market_breadth
 from market_fallback import fetch_tcbs_vnindex
 
-# ── Bảng màu biểu đồ (đã kiểm tra tương phản + mù màu trên nền tối #0f0a1f) ──
+# ── Bảng màu biểu đồ (đã kiểm tra tương phản + mù màu trên nền trắng #ffffff) ──
 INK, MUTED, GRID, VOL = ui_kit.INK, ui_kit.MUTED, ui_kit.GRID, ui_kit.VOL
 MA_STYLE = {"ma20": (ui_kit.SERIES[0], "dot"), "ma50": (ui_kit.SERIES[1], "dash"), "ma200": (ui_kit.SERIES[2], "solid")}
 GOOD, BAD = ui_kit.UP, ui_kit.DOWN
