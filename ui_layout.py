@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 
+import ui_kit
+
 
 def render_sidebar():
     with st.sidebar:
@@ -124,7 +126,7 @@ def render_screener_results(results_df, signal_filter):
         with tab:
             cols = groups[label]
             if cols:
-                show_table(df[cols], height=min(38 + 35 * len(df), 620))
+                show_table(df[cols], height=min(38 + 35 * len(df), ui_kit.TABLE_H))
             else:
                 st.caption("Không có cột dữ liệu phù hợp cho nhóm này.")
 
@@ -144,6 +146,6 @@ def render_screener_signals(results_df, signal_filter):
         "Tín Hiệu Bắt Đáy", "RSI14", "MFI14", "Tín Hiệu Sideway (MFI/RSI)",
     ] if c in df.columns]
     if cols:
-        show_table(df[cols], height=min(38 + 35 * len(df), 620))
+        show_table(df[cols], height=min(38 + 35 * len(df), ui_kit.TABLE_H))
     else:
         st.info("Không có cột tín hiệu phù hợp trong dữ liệu hiện tại.")

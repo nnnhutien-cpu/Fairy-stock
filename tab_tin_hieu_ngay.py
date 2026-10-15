@@ -204,7 +204,7 @@ def build_chart(res, n_bars=110):
             fig.add_shape(type="line", x0=x.iloc[k0], x1=x.iloc[-1], y0=lvl, y1=lvl,
                           line=dict(color=col, width=1.4, dash=dash), row=1, col=1)
 
-    ui_kit.style_fig(fig, 520, dates=False)
+    ui_kit.style_fig(fig, ui_kit.CHART_H["main"], dates=False)
     fig.update_xaxes(type="category", nticks=8, showgrid=False)
     return fig
 
@@ -223,9 +223,9 @@ def render_card(ticker, res):
         st.markdown(f"""
 <div class="lk-card">
   <div><span class="badge-fib">KHUNG NGÀY</span>
-       &nbsp;<span class="lk-ticker" style="font-size:22px">{ticker}</span>
-       &nbsp;<span class="val-up" style="font-size:20px;font-weight:800">🟢 ĐANG BUY</span>
-       <span style="color:#aaa"> @ {_fmt(res['last_close'])}</span></div>
+       &nbsp;<span class="lk-ticker">{ticker}</span>
+       &nbsp;<span class="val-up lk-status">🟢 ĐANG BUY</span>
+       <span style="color:var(--muted)"> @ {_fmt(res['last_close'])}</span></div>
   <div class="lk-company">Vào từ {res['entry_date']:%d/%m/%Y} @ {_fmt(res['entry_price'])}
        · lãi mở <b class="{pnl_cls}">{res['pnl_pct']:+.2f}%</b> · giữ {res['sessions']} phiên
        · còn giữ {left}% vị thế</div>
@@ -247,9 +247,9 @@ def render_card(ticker, res):
         st.markdown(f"""
 <div class="lk-card">
   <div><span class="badge-fib">KHUNG NGÀY</span>
-       &nbsp;<span class="lk-ticker" style="font-size:22px">{ticker}</span>
-       &nbsp;<span class="val-warn" style="font-size:18px;font-weight:800">⚪ CHỜ TÍN HIỆU</span>
-       <span style="color:#aaa"> @ {_fmt(res['last_close'])}</span></div>
+       &nbsp;<span class="lk-ticker">{ticker}</span>
+       &nbsp;<span class="val-warn lk-status">⚪ CHỜ TÍN HIỆU</span>
+       <span style="color:var(--muted)"> @ {_fmt(res['last_close'])}</span></div>
   <div class="lk-company">Chưa có lệnh mở. Đường 129 hiện tại: <b>{_fmt(res['lvl3'])}</b>.{extra}</div>
 </div>""", unsafe_allow_html=True)
 

@@ -16,6 +16,13 @@ MUTED = "#8b84a8"        # chữ phụ, trục
 GRID = "rgba(139,132,168,0.14)"
 UP, DOWN, WARN = "#22c55e", "#ef4444", "#f5a524"   # tăng / giảm / cảnh báo (kèm chữ, không dùng màu đơn lẻ)
 VOL = "#4b4370"          # cột khối lượng trung tính
+# ── Kích thước chuẩn cho MỌI tab (đổi ở đây là cả app đổi theo) ──
+PAGE_MAX_W = None                # None = full màn hình (đặt số px nếu muốn giới hạn)
+CHART_H = {"tall": 620,          # biểu đồ nhiều tầng (giá + vol + RSI)
+           "main": 460,          # biểu đồ chính 1 tầng
+           "mid": 340,           # biểu đồ phụ
+           "small": 280}         # biểu đồ nhỏ, cạnh bảng
+TABLE_H = 520                    # px — chiều cao tối đa bảng dữ liệu (cuộn bên trong)
 SERIES = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9"]  # thứ tự cố định, không xoay vòng
 
 _CSS = """
@@ -39,7 +46,7 @@ _CSS = """
 .stApp{ background: radial-gradient(1200px 600px at 85% -10%, rgba(124,58,237,.16), transparent 60%), var(--bg); }
 header[data-testid="stHeader"]{ background: transparent; }
 [data-testid="stDecoration"]{ display:none; }
-.block-container{ padding: 2.6rem 2.2rem 3rem !important; max-width: 1480px !important; }
+.block-container{ padding: 2.4rem 2rem 3rem !important; max-width: 100% !important; }
 section[data-testid="stSidebar"] .block-container{ padding: 1.6rem 1.1rem !important; }
 
 /* ── Mượt: không làm mờ cả trang mỗi lần chạy lại, chỉ hiện vào nhẹ ── */
@@ -71,6 +78,13 @@ h5,h6{ color: var(--accent-2) !important; }
 
 /* ── Thanh điều hướng trang ── */
 div[data-testid="stButtonGroup"]{ gap:6px !important; flex-wrap:wrap; margin: 2px 0 14px; }
+/* Thanh 7 trang: 1 hàng ngang, chia đều hết chiều rộng màn hình máy tính */
+@media (min-width: 900px){
+  .st-key-ct_nav [data-testid="stElementContainer"],
+  .st-key-ct_nav [data-testid="stButtonGroup"]{ width:100% !important; }
+  .st-key-ct_nav [data-testid="stButtonGroup"] > div{ width:100% !important; max-width:none !important; display:flex; gap:6px; flex-wrap:nowrap; }
+  .st-key-ct_nav [data-testid="stButtonGroup"] button{ flex:1 1 0 !important; max-width:none !important; justify-content:center; min-height:2.7rem; }
+}
 div[data-testid="stButtonGroup"] button{
   border-radius: 999px !important; border:1px solid var(--line) !important;
   background: rgba(26,20,54,.7) !important; color:#b3aad6 !important;
@@ -150,6 +164,7 @@ section[data-testid="stSidebar"]{ border-right:1px solid var(--line); }
 .lk-label{ font-size:.68rem; color: var(--muted); text-transform:uppercase; letter-spacing:.06em; font-weight:600; }
 .lk-value{ font-size:1.35rem; font-weight:700; color: var(--ink); margin-top:4px; font-variant-numeric: tabular-nums; }
 .lk-sub{ font-size:.7rem; color: var(--dim); margin-top:2px; }
+.lk-status{ font-size:1.1rem; font-weight:800; }
 .val-up{ color: var(--up) !important; } .val-down{ color: var(--down) !important; } .val-warn{ color: var(--warn) !important; }
 .lk-section{ font-size:.72rem; font-weight:700; color: var(--accent-2); text-transform:uppercase; letter-spacing:.08em;
   margin: 16px 0 8px; padding-bottom:6px; border-bottom:1px solid var(--line); }
@@ -203,6 +218,8 @@ section[data-testid="stSidebar"]{ border-right:1px solid var(--line); }
   .lk-grid{ grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
   .app-title .tag{ display:none; }
   .sb-title{ font-size:1.1rem; }
+  .lk-ticker{ font-size:1.4rem; }
+  [data-testid="stMetricValue"]{ font-size:1.15rem !important; }
   div[data-testid="stButtonGroup"] button{ padding: 5px 11px !important; }
 }
 </style>

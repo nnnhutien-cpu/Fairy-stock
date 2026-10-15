@@ -24,100 +24,7 @@ import ui_kit
 # 0. CSS DÙNG CHUNG (tham khảo tab Sức Bật)
 # ══════════════════════════════════════════════
 
-SB_CSS = """
-<style>
-.sb-header {
-    background: linear-gradient(135deg,#1a1a2e,#16213e);
-    border-radius: 12px; padding: 16px 20px; margin-bottom: 18px;
-}
-.sb-title { font-size: 22px; font-weight: 800; color: #e0e0ff; }
-.sb-sub   { font-size: 12px; color: #888; margin-top: 2px; }
-.sb-note {
-    background: #1a1a2e; border-left: 3px solid #8b7fb5;
-    padding: 10px 14px; border-radius: 0 8px 8px 0;
-    font-size: 12px; color: #aaa; margin-bottom: 14px;
-}
-/* Card tra cứu */
-.lk-card {
-    background: #1e1e2e; border: 1px solid #2c2151;
-    border-radius: 14px; padding: 20px 24px; margin-bottom: 16px;
-}
-.lk-ticker { font-size: 28px; font-weight: 800; color: #a78bfa; letter-spacing: 2px; }
-.lk-company { font-size: 13px; color: #888; margin-top: 2px; margin-bottom: 16px; }
-.lk-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 14px; }
-.lk-metric { background: #12102a; border-radius: 10px; padding: 12px 14px; }
-.lk-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: .5px; }
-.lk-value { font-size: 22px; font-weight: 700; color: #e0e0ff; margin-top: 3px; }
-.lk-sub   { font-size: 10px; color: #555; margin-top: 2px; }
-.val-up   { color: #00e676 !important; }
-.val-down { color: #ff5252 !important; }
-.val-warn { color: #ffd740 !important; }
-.lk-section { font-size: 11px; color: #8b7fb5; text-transform: uppercase;
-               letter-spacing: .6px; margin: 14px 0 8px;
-               border-bottom: 1px solid #2c2151; padding-bottom: 4px; }
-.sr-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.sr-table th { color: #666; font-weight: 400; text-align: left;
-               padding: 4px 8px; font-size: 11px; text-transform: uppercase; }
-.sr-table td { padding: 5px 8px; border-bottom: 1px solid #1e1a33; color: #ccc; }
-.sr-table tr:last-child td { border-bottom: none; }
-.badge-r { background:#3a1a1a; color:#ff5252; padding:2px 8px;
-           border-radius:4px; font-size:11px; font-weight:600; }
-.badge-s { background:#1a3a1a; color:#00e676; padding:2px 8px;
-           border-radius:4px; font-size:11px; font-weight:600; }
-.badge-fib { background:#1a1a3a; color:#7c9ef5; padding:2px 6px;
-             border-radius:4px; font-size:10px; }
-.formula-note {
-    background: #12102a; border-left: 3px solid #a78bfa;
-    padding: 10px 14px; border-radius: 0 8px 8px 0;
-    font-size: 12px; color: #999; margin-top: 12px; line-height: 1.7;
-}
-/* scan section */
-.sb-stat-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-.sb-stat { background: #1e1e2e; border-radius: 10px; padding: 10px 16px;
-           flex: 1; min-width: 130px; }
-.sb-stat-label { font-size: 11px; color: #888; text-transform: uppercase; }
-.sb-stat-value { font-size: 20px; font-weight: 800; color: #e0e0ff; margin-top: 2px; }
-.src-badge { display:inline-block; padding:1px 7px; border-radius:10px;
-             font-size:10px; font-weight:600; margin-left:6px; }
-.src-vci     { background:#1a2a3a; color:#5b9bd5; }
-.src-fireant { background:#1a2e1a; color:#4caf50; }
-.src-yahoo   { background:#1a1a3a; color:#8b7fb5; }
-
-/* ── Mở rộng riêng cho tab Portfolio v2 ── */
-.badge-hold    { background:#3a2f14; color:#ffd740; padding:2px 8px;
-                 border-radius:4px; font-size:11px; font-weight:600; }
-.badge-sell25  { background:#3a2414; color:#ffab40; padding:2px 8px;
-                 border-radius:4px; font-size:11px; font-weight:600; }
-.badge-sellall { background:#3a1a1a; color:#ff5252; padding:2px 8px;
-                 border-radius:4px; font-size:11px; font-weight:600; }
-.badge-buy     { background:#1a3a1a; color:#00e676; padding:2px 8px;
-                 border-radius:4px; font-size:11px; font-weight:600; }
-.badge-wait    { background:#1e1a33; color:#8b7fb5; padding:2px 8px;
-                 border-radius:4px; font-size:11px; font-weight:600; }
-
-.slot-card {
-    background: #1e1e2e; border: 1px solid #2c2151;
-    border-radius: 14px; padding: 18px 10px 14px 10px;
-    text-align: center; min-height: 108px;
-}
-.slot-card.empty {
-    background: #16162a; border: 2px dashed #3a2f66;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-}
-.slot-empty-plus { color: #5a4a8a; font-size: 1.8rem; line-height: 1; }
-.slot-empty-label { color: #5a4a8a; font-size: .75rem; margin-top: 4px; }
-.slot-ticker { font-weight: 800; font-size: 1.15rem; color: #e0e0ff; letter-spacing: .5px; }
-.slot-pct { font-size: .72rem; color: #888; margin-top: 2px; }
-.slot-action-wrap { margin-top: 10px; }
-
-.buy-confirm-card {
-    background: #12102a; border: 1px solid #1a3a1a;
-    border-radius: 10px; padding: 12px 10px; text-align: center;
-}
-.buy-confirm-ticker { font-weight: 700; font-size: 1rem; color: #e0e0ff; }
-.buy-confirm-note { font-size: .75rem; color: #00e676; margin-top: 4px; }
-</style>
-"""
+# CSS của tab này nằm trong ui_kit.py (dùng chung toàn app).
 
 
 def _inject_css():
@@ -136,7 +43,7 @@ SLOT_PCT   = 25  # % mỗi mã
 
 ACTIONS = ["GIỮ CP", "BÁN 25%", "BÁN HẾT", "MUA", "CHỜ"]
 
-# Badge class + màu dùng cho từng trạng thái (đồng bộ với SB_CSS ở trên)
+# Badge class + màu dùng cho từng trạng thái (lớp CSS trong ui_kit.py)
 ACTION_BADGE = {
     "GIỮ CP":  {"class": "badge-hold",    "color": ui_kit.WARN},
     "BÁN 25%": {"class": "badge-sell25",  "color": "#f97316"},

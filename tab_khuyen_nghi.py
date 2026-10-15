@@ -381,7 +381,7 @@ def render_recommendation_tab(get_stock_data_fn, p_tenkan=9, p_kijun=26, p_senko
     fig.add_hline(y=30, line_dash="dash", line_color="rgba(0,200,83,0.5)", row=3, col=1)
     fig.add_hrect(y0=30, y1=70, fillcolor="rgba(200,200,200,0.05)", row=3, col=1)
 
-    ui_kit.style_fig(fig, 720, dates=False)
+    ui_kit.style_fig(fig, ui_kit.CHART_H["tall"], dates=False)
     fig.update_xaxes(type="category", nticks=8)
     ui_kit.plot(fig)
 

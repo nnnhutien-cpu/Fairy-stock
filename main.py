@@ -108,7 +108,7 @@ def load_screener_cache():
 
 
 @st.cache_data(show_spinner=False)
-def _read_screener_cache(_mtime):
+def _read_screener_cache(mtime):
     """Đọc Excel 1 lần cho mỗi phiên bản file (khoá cache = thời điểm sửa file)."""
     try:
         cached_df = pd.read_excel(SCREENER_CACHE_FILE, sheet_name="scan")
@@ -360,6 +360,18 @@ def render_tab_intraday():
 # quét 60 mã, tab Thị Trường tải 4 chỉ số...) dù người dùng chỉ xem 1 tab. Thanh điều hướng
 # bên dưới chỉ chạy trang được chọn -> mở app và chuyển trang nhanh hơn nhiều lần.
 # ==========================================
+from tab_watchlist import render_watchlist
+
+
+def render_danh_muc():
+    ui_kit.page_header("💼 Danh mục", "Bộ lọc 3–5 mã tiềm năng · danh mục 4 mã × 25%")
+    t1, t2 = st.tabs(["✨ Mã tiềm năng", "🧺 Danh mục 4 mã × 25%"])
+    with t1:
+        render_watchlist(PRIORITY_TICKERS, p_tenkan, p_kijun, p_senkou_b, p_shift)
+    with t2:
+        render_portfolio_v2_tab(PRIORITY_TICKERS)
+
+
 PAGES = {
     "🌟 Thị Trường": ("thi-truong", render_market),
     "🔍 Lọc Cuối Ngày": ("loc-cuoi-ngay", render_tab_eod),
@@ -367,7 +379,7 @@ PAGES = {
     "💡 Khuyến Nghị": ("khuyen-nghi",
                       lambda: render_recommendation_tab(get_stock_data, p_tenkan, p_kijun, p_senkou_b, p_shift)),
     "🚀 Sức Bật": ("suc-bat", render_suc_bat_tab),
-    "💼 Danh mục": ("danh-muc", lambda: render_portfolio_v2_tab(PRIORITY_TICKERS)),
+    "💼 Danh mục": ("danh-muc", lambda: render_danh_muc()),
     "🕯️ Tín Hiệu Ngày": ("tin-hieu-ngay", lambda: render_tin_hieu_ngay_tab(PRIORITY_TICKERS)),
 }
 _slug_to_name = {slug: name for name, (slug, _) in PAGES.items()}
@@ -375,8 +387,9 @@ if "nav_page" not in st.session_state:
     # mở đúng trang theo link chia sẻ ?trang=khuyen-nghi
     st.session_state["nav_page"] = _slug_to_name.get(st.query_params.get("trang", ""), "🌟 Thị Trường")
 
-page = st.segmented_control("Trang", list(PAGES), key="nav_page", selection_mode="single",
-                            label_visibility="collapsed")
+with st.container(key="ct_nav"):
+    page = st.segmented_control("Trang", list(PAGES), key="nav_page", selection_mode="single",
+                                label_visibility="collapsed")
 if page is None:  # bấm lại vào trang đang chọn sẽ bỏ chọn -> giữ trang cũ
     page = st.session_state.get("_nav_last", "🌟 Thị Trường")
 st.session_state["_nav_last"] = page

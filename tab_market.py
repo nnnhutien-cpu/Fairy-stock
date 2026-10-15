@@ -169,7 +169,7 @@ def _render_trend(m):
         f = m["ftd"]
         fig.add_annotation(x=f["date"], y=float(ch.loc[ch["time"] == f["date"], "close"].iloc[0]),
                            text="FTD", showarrow=True, arrowhead=2, font=dict(color=GOOD), row=1, col=1)
-    _layout(fig, 460)
+    _layout(fig, ui_kit.CHART_H["main"])
     fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
     fig.update_yaxes(title_text="KL (M)", title_font=dict(size=10), row=2, col=1)
     ui_kit.plot(fig)
@@ -252,7 +252,7 @@ def _render_intraday_body(ref_close):
                                  line=dict(color=MUTED, width=1.6, dash="dot")))
     fig.add_trace(go.Scatter(x=today["hm"], y=today["cum"] / 1e6, name=f"Hôm nay (đến {last_hm})",
                              line=dict(color=INK, width=2.2)))
-    _layout(fig, 300)
+    _layout(fig, ui_kit.CHART_H["mid"])
     fig.update_xaxes(type="category", nticks=10)
     fig.update_yaxes(title_text="KL lũy kế (triệu CP)", title_font=dict(size=10))
     ui_kit.plot(fig)
@@ -301,7 +301,7 @@ def _render_breadth(breadth, bview):
                              hovertemplate="%{customdata} mã giảm<extra></extra>"), row=1, col=1)
         fig.add_trace(go.Scatter(x=h["date"], y=h["ad_line"], name="Đường A/D tích luỹ",
                                  line=dict(color=INK, width=2)), row=2, col=1)
-        _layout(fig, 360)
+        _layout(fig, ui_kit.CHART_H["mid"])
         fig.update_layout(barmode="relative", bargap=0.25)
         fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
         ui_kit.plot(fig)
@@ -344,7 +344,7 @@ def _render_groups(vni_df):
                                  name=mi.INDEX_LABELS.get(sym, sym),
                                  line=dict(color=IDX_COLORS.get(sym, MUTED), width=2.2 if sym == "VNINDEX" else 1.8)))
     fig.add_hline(y=100, line=dict(color=MUTED, width=1, dash="dot"))
-    _layout(fig, 320)
+    _layout(fig, ui_kit.CHART_H["mid"])
     fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
     fig.update_yaxes(title_text="Quy về 100 (60 phiên trước)", title_font=dict(size=10))
     ui_kit.plot(fig)
@@ -380,7 +380,7 @@ def _render_valuation(pe, pe_hist, pe_src):
             fig.add_hline(y=pe["mean"], line=dict(color=MUTED, width=1, dash="dot"),
                           annotation_text=f"TB {pe['mean']:.1f}x", annotation_position="bottom right",
                           annotation_font_color=MUTED)
-        _layout(fig, 280)
+        _layout(fig, ui_kit.CHART_H["small"])
         fig.update_layout(showlegend=False)
         ui_kit.plot(fig)
     if pe_src:

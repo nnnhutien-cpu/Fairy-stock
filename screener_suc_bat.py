@@ -73,11 +73,11 @@ _CSS = """
 .sr-table td { padding: 5px 8px; border-bottom: 1px solid #1e1a33; color: #ccc; }
 .sr-table tr:last-child td { border-bottom: none; }
 .badge-r { background:#3a1a1a; color:#ef4444; padding:2px 8px;
-           border-radius:4px; font-size:11px; font-weight:600; }
+           border-radius:4px; font-size:.72rem; font-weight:600; }
 .badge-s { background:#1a3a1a; color:#22c55e; padding:2px 8px;
-           border-radius:4px; font-size:11px; font-weight:600; }
+           border-radius:4px; font-size:.72rem; font-weight:600; }
 .badge-fib { background:#1a1a3a; color:#7c9ef5; padding:2px 6px;
-             border-radius:4px; font-size:10px; }
+             border-radius:4px; font-size:.68rem; }
 
 .formula-note {
     background: #12102a; border-left: 3px solid #a78bfa;
@@ -93,7 +93,7 @@ _CSS = """
 .sb-stat-value { font-size: 20px; font-weight: 800; color: #e0e0ff; margin-top: 2px; }
 
 .src-badge { display:inline-block; padding:1px 7px; border-radius:10px;
-             font-size:10px; font-weight:600; margin-left:6px; }
+             font-size:.68rem; font-weight:600; margin-left:6px; }
 .src-vci     { background:#1a2a3a; color:#5b9bd5; }
 .src-fireant { background:#1a2e1a; color:#4caf50; }
 .src-yahoo   { background:#1a1a3a; color:#8b7fb5; }
@@ -479,7 +479,7 @@ def _render_fib_table(m: dict):
         # (đây chính là nguyên nhân các thẻ </td> bị in ra thành chữ thô trước đó).
         row = (
             f'<tr style="{row_style}">'
-            f'<td style="color:#8b7fb5;font-size:11px;padding:5px 8px;">{f["label"]}</td>'
+            f'<td style="color:var(--accent-2);font-size:.72rem;padding:5px 8px;">{f["label"]}</td>'
             f'<td style="padding:5px 8px;">'
             f'<span style="color:{kc_color};font-weight:700;{kc_strike}">{kc:,.2f}</span>{kc_badge}'
             f'</td>'
@@ -494,14 +494,14 @@ def _render_fib_table(m: dict):
         '<div class="lk-section">📐 Fibonacci Retracement (đỉnh pha → đáy pha)</div>'
         '<table class="sr-table" style="width:100%;border-collapse:collapse;">'
         '<thead><tr>'
-        '<th style="color:#555;font-size:11px;padding:4px 8px;text-align:left;">Mức Fibo</th>'
-        '<th style="color:#ef4444;font-size:11px;padding:4px 8px;text-align:left;font-weight:700;">🔴 KHÁNG CỰ</th>'
-        '<th style="color:#22c55e;font-size:11px;padding:4px 8px;text-align:left;font-weight:700;">🟢 HỖ TRỢ</th>'
+        '<th style="color:var(--dim);font-size:.72rem;padding:4px 8px;text-align:left;">Mức Fibo</th>'
+        '<th style="color:#ef4444;font-size:.72rem;padding:4px 8px;text-align:left;font-weight:700;">🔴 KHÁNG CỰ</th>'
+        '<th style="color:#22c55e;font-size:.72rem;padding:4px 8px;text-align:left;font-weight:700;">🟢 HỖ TRỢ</th>'
         '</tr></thead>'
         f'<tbody>{rows_html}</tbody>'
         '</table>'
-        '<div style="font-size:10px;color:#555;margin-top:6px;padding:0 8px;">'
-        f'Giá hiện tại: <b style="color:#e0e0ff;">{price_now:,.2f}</b> &nbsp;|&nbsp; '
+        '<div style="font-size:.68rem;color:var(--dim);margin-top:6px;padding:0 8px;">'
+        f'Giá hiện tại: <b style="color:var(--ink);">{price_now:,.2f}</b> &nbsp;|&nbsp; '
         f'Đỉnh pha: <b style="color:#ef4444;">{m["phase_high"]:,.2f}</b> &nbsp;|&nbsp; '
         f'Đáy pha: <b style="color:#22c55e;">{m["phase_low"]:,.2f}</b>'
         '</div>'
@@ -963,7 +963,7 @@ def render_scan_section():
         "Hồi%":       "+{:.1f}%",
         "⭐ Score":    "{:.0f}",
     })
-    st.dataframe(styled, width="stretch", hide_index=True, height=500)
+    st.dataframe(styled, width="stretch", hide_index=True, height=ui_kit.TABLE_H)
 
     # Chi tiết KC/HT
     # Chỉ hiện khi có dữ liệu KC/HT (bản quét hiện chưa tính volume profile -> ẩn thay vì báo "không có dữ liệu")
